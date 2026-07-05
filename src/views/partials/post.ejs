@@ -9,7 +9,16 @@
   <header class="post-head">
     <a class="post-avatar" href="/u/<%= item.authorUsername %>"><%= (item.authorName || '?').slice(0,1).toUpperCase() %></a>
     <div>
-      <a href="/u/<%= item.authorUsername %>" class="post-name"><%= item.authorName %></a>
+      <div style="display:flex;align-items:center;gap:4px">
+        <a href="/u/<%= item.authorUsername %>" class="post-name"><%= item.authorName %></a>
+        <% if (u && !item.isOwn) { %>
+          <% if (item.mutual) { %>
+            <a href="/chats/<%= item.authorUsername %>" class="chat-icon" title="Send message">💬</a>
+          <% } else { %>
+            <span class="chat-icon locked" title="Follow each other to chat">💬</span>
+          <% } %>
+        <% } %>
+      </div>
       <span class="post-handle">@<%= item.authorUsername %></span>
       <span class="post-time">· <%= time(item.createdAt) %></span>
     </div>

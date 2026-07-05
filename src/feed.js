@@ -1,7 +1,7 @@
 'use strict';
 
 const { db } = require('./db');
-const { getDisplayPost, getUserById, commentsForPost, hasLiked, hasShared } = require('./db');
+const { getDisplayPost, getUserById, commentsForPost, hasLiked, hasShared, areMutualFollowers } = require('./db');
 
 // ---------------------------------------------------------------------------
 // Extrovert feed algorithm
@@ -169,6 +169,7 @@ function hydrateItem(row, viewerId, score) {
     liked: hasLiked(viewerId, interactId),
     shared: hasShared(viewerId, interactId),
     followingAuthor: require('./db').isFollowing(viewerId, author.id),
+    mutual: author.id !== viewerId && areMutualFollowers(viewerId, author.id),
     isOwn: author.id === viewerId,
     comments,
     score,

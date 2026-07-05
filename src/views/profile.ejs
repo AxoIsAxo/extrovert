@@ -13,7 +13,16 @@
     <div class="profile-header">
       <div class="avatar"><%= (profileUser.display_name || profileUser.username).slice(0,1).toUpperCase() %></div>
       <div>
-        <h1><%= profileUser.display_name %></h1>
+        <div style="display:flex;align-items:center;gap:8px">
+          <h1 style="margin:0"><%= profileUser.display_name %></h1>
+          <% if (locals.currentUser && !isOwn) { %>
+            <% if (mutual) { %>
+              <a href="/chats/<%= profileUser.username %>" class="chat-icon" title="Send message">💬</a>
+            <% } else { %>
+              <span class="chat-icon locked" title="Follow each other to chat">💬</span>
+            <% } %>
+          <% } %>
+        </div>
         <div class="handle">@<%= profileUser.username %></div>
         <% if (profileUser.bio) { %><p class="bio"><%= profileUser.bio %></p><% } %>
         <small class="muted">

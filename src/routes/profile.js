@@ -5,7 +5,7 @@ const {
   getUserByUsername, getCustomization, setCustomization, updateUserProfile,
   getDisplayPost, getUserById, postsByUser, hasLiked, hasShared,
   commentsForPost, isFollowing, countFollowers, countFollowing,
-  getFollowers, getFollowing,
+  getFollowers, getFollowing, areMutualFollowers,
 } = require('../db');
 const { canView } = require('../network');
 const { sanitizeProfileHTML, sanitizeCSS } = require('../sanitize');
@@ -65,6 +65,7 @@ function hydrateProfilePosts(userId, viewerId) {
       liked: hasLiked(viewerId, content.id),
       shared: hasShared(viewerId, content.id),
       followingAuthor: isFollowing(viewerId, author.id),
+      mutual: author.id !== viewerId && areMutualFollowers(viewerId, author.id),
       isOwn: author.id === viewerId,
       comments,
     };
@@ -121,6 +122,7 @@ router.get('/:username', (req, res) => {
       profileUser, finalHtml, css, isOwn, following, canSeePosts,
       followerCount: countFollowers(profileUser.id),
       followingCount: countFollowing(profileUser.id),
+      mutual: viewer && viewer.id !== profileUser.id && areMutualFollowers(viewer.id, profileUser.id),
     });
   }
 });
@@ -167,6 +169,7 @@ router.get('/:username/followers', (req, res) => {
   if (!target) return res.status(404).render('404', { thing: 'user' });
   const list = getFollowers(target.id).map(u => ({
     ...u, following: isFollowing(user.id, u.id),
+    mutual: u.id !== user.id && areMutualFollowers(user.id, u.id),
   }));
   res.render('user-list', {
     title: 'Followers', targetUser: target, list, emptyMsg: 'No followers yet.',
@@ -181,6 +184,7 @@ router.get('/:username/following', (req, res) => {
   if (!target) return res.status(404).render('404', { thing: 'user' });
   const list = getFollowing(target.id).map(u => ({
     ...u, following: isFollowing(user.id, u.id),
+    mutual: u.id !== user.id && areMutualFollowers(user.id, u.id),
   }));
   res.render('user-list', {
     title: 'Following', targetUser: target, list, emptyMsg: 'Not following anyone yet.',

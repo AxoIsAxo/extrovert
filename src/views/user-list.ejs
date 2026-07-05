@@ -15,7 +15,16 @@
       <div class="card user-row">
         <div class="avatar"><%= (u.display_name || '?').slice(0,1).toUpperCase() %></div>
         <div class="info">
-          <a href="/u/<%= u.username %>" class="post-name"><%= u.display_name %></a>
+          <div style="display:flex;align-items:center;gap:6px">
+            <a href="/u/<%= u.username %>" class="post-name"><%= u.display_name %></a>
+            <% if (locals.currentUser && u.id !== currentUser.id) { %>
+              <% if (u.mutual) { %>
+                <a href="/chats/<%= u.username %>" class="chat-icon" title="Send message">💬</a>
+              <% } else { %>
+                <span class="chat-icon locked" title="Follow each other to chat">💬</span>
+              <% } %>
+            <% } %>
+          </div>
           <small>@<%= u.username %></small>
           <% if (u.bio) { %><div class="muted" style="font-size:0.85rem;margin-top:2px"><%= u.bio %></div><% } %>
         </div>
