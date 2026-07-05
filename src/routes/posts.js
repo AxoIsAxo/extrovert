@@ -8,7 +8,7 @@ const {
   db, createPost, getPostById, getDisplayPost, getUserById,
   toggleLike, addComment, commentsForPost, hasLiked, hasShared,
   sharePost, hasReposted, recordFollowFromPost, isFollowing,
-  createNotification,
+  createNotification, deletePost,
 } = require('../db');
 const { canView } = require('../network');
 
@@ -174,6 +174,24 @@ router.post('/:id/follow-from', (req, res) => {
     recordFollowFromPost(ctx.user.id, ctx.content.user_id, ctx.content.id);
   }
   res.redirect(back(req, '/'));
+});
+
+// Delete post — owner only.
+router.get('/:id/delete', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.redirect('/login');
+  const post = getPostById(Number(req.params.id));
+  if (!post) return res.status(404).render('404', { thing: 'post' });
+  if (post.user_id !== user.id) return res.status(403).send('You can only delete your own posts.');
+  res.render('confirm-delete', { post, back: back(req, '/') });
+});
+
+router.post('/:id/delete', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.redirect('/login');
+  const deleted = deletePost(Number(req.params.id), user.id);
+  if (!deleted) return res.status(404).send('Post not found or not yours.');
+  res.redirect('/u/' + user.username);
 });
 
 module.exports = router;

@@ -218,6 +218,24 @@ function postsByUser(userId) {
   ).all(userId);
 }
 
+// ---------- post deletion ----------
+function deletePost(postId, userId) {
+  const post = db.prepare(`SELECT * FROM posts WHERE id = ? AND user_id = ?`).get(postId, userId);
+  if (!post) return false;
+  // Cascade: remove related data for the effective (original) content.
+  const effId = post.type === 'repost' && post.repost_of_id ? post.repost_of_id : post.id;
+  db.prepare(`DELETE FROM likes WHERE post_id = ?`).run(effId);
+  db.prepare(`DELETE FROM comments WHERE post_id = ?`).run(effId);
+  db.prepare(`DELETE FROM shares WHERE post_id = ?`).run(effId);
+  db.prepare(`DELETE FROM follows_from_post WHERE post_id = ?`).run(effId);
+  db.prepare(`DELETE FROM notifications WHERE post_id = ?`).run(effId);
+  // Delete reposts that point to this post.
+  db.prepare(`DELETE FROM posts WHERE repost_of_id = ?`).run(post.id);
+  // Delete the post itself.
+  db.prepare(`DELETE FROM posts WHERE id = ?`).run(post.id);
+  return true;
+}
+
 // ---------- likes ----------
 function toggleLike(userId, postId) {
   const existing = db.prepare(
@@ -442,7 +460,7 @@ module.exports = {
   // follows
   follow, unfollow, isFollowing, followingIds, countFollowers, countFollowing, recordFollowFromPost,
   // posts
-  createPost, getPostById, getDisplayPost, postsByUser,
+  createPost, getPostById, getDisplayPost, postsByUser, deletePost,
   // likes
   toggleLike, hasLiked,
   // comments

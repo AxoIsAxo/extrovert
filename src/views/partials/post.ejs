@@ -58,6 +58,9 @@
         <button class="boost-btn">⭐ Follow from post</button>
       </form>
     <% } %>
+    <% if (item.isOwn) { %>
+      <a class="btn ghost" href="/posts/<%= item.interactId %>/delete" style="margin-left:auto;color:#c33">Delete</a>
+    <% } %>
   </div>
 
   <div class="post-comments">

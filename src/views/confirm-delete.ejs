@@ -1,0 +1,23 @@
+<%- include('partials/header') %>
+  <div class="card" style="max-width:500px;margin:0 auto;text-align:center">
+    <h2 style="margin-top:0">Delete post?</h2>
+    <p style="margin-bottom:24px">This will permanently delete this post and all its likes, comments, shares, and reposts. This cannot be undone.</p>
+
+    <blockquote style="background:var(--surface2);padding:16px;border-radius:12px;margin-bottom:24px;text-align:left">
+      <% if (post.body) { %><p><%= post.body.slice(0, 200) %></p><% } %>
+      <small class="muted">
+        <% if (post.type === 'photo') { %>📷 Photo<% }
+           else if (post.type === 'video') { %>🎬 Video<% }
+           else if (post.type === 'repost') { %>🔁 Repost<% }
+           else { %>📝 Text<% } %>
+        · <%= new Date(post.created_at).toLocaleString() %>
+      </small>
+    </blockquote>
+
+    <form method="post" action="/posts/<%= post.id %>/delete" style="display:inline">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <button class="btn" style="background:#c33;color:#fff">Yes, delete permanently</button>
+    </form>
+    <a class="btn ghost" href="<%= back || '/' %>" style="margin-left:8px">Cancel</a>
+  </div>
+<%- include('partials/footer') %>
