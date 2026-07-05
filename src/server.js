@@ -5,6 +5,7 @@ const session = require('express-session');
 const path = require('node:path');
 const fs = require('node:fs');
 
+const SqliteStore = require('./session-store');
 const { optionalAuth, requireAuth } = require('./auth');
 
 const app = express();
@@ -22,6 +23,7 @@ app.set('views', path.join(__dirname, 'views'));
 app.use(express.urlencoded({ extended: true, limit: '70mb' }));
 app.use(express.json());
 app.use(session({
+  store: new SqliteStore(),
   secret: process.env.SESSION_SECRET || 'extrovert-dev-secret-change-me',
   resave: false,
   saveUninitialized: false,
