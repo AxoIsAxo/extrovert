@@ -16,6 +16,7 @@
           <% if (n.type === 'comment') { %>💬<% } %>
           <% if (n.type === 'share') { %>🔗<% } %>
           <% if (n.type === 'repost') { %>🔁<% } %>
+          <% if (n.type === 'message') { %>💬<% } %>
         </div>
         <div class="notif-body">
           <a href="/u/<%= n.actor_username %>"><b><%= n.actor_name %></b></a>
@@ -24,6 +25,7 @@
           <% if (n.type === 'comment') { %>commented on your <a href="/posts/<%= n.post_id %>">post</a><% } %>
           <% if (n.type === 'share') { %>shared your <a href="/posts/<%= n.post_id %>">post</a><% } %>
           <% if (n.type === 'repost') { %>reposted your <a href="/posts/<%= n.post_id %>">post</a><% } %>
+          <% if (n.type === 'message') { %>sent you a <a href="/chats/<%= n.actor_username %>">message</a><% } %>
           <div class="muted" style="font-size:0.8rem"><%= locals.relTime(n.created_at) %></div>
         </div>
       </div>

@@ -4,6 +4,7 @@ const express = require('express');
 const {
   getUserByUsername, getUserById, areMutualFollowers,
   sendMessage, getConversations, getMessages, markConversationRead,
+  createNotification,
 } = require('../db');
 
 const router = express.Router();
@@ -44,7 +45,10 @@ router.post('/:username/send', (req, res) => {
     return res.redirect(back(req, '/chats'));
   }
   const body = String(req.body.body || '').trim().slice(0, 2000);
-  if (body) sendMessage(user.id, other.id, body);
+  if (body) {
+    sendMessage(user.id, other.id, body);
+    createNotification({ userId: other.id, type: 'message', actorId: user.id });
+  }
   res.redirect('/chats/' + other.username);
 });
 
