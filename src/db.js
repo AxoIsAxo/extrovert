@@ -105,6 +105,10 @@ function init() {
 
 init();
 
+// Migrations.
+try { db.exec(`ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'default'`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''`); } catch {}
+
 // ---------- users ----------
 function createUser({ username, passwordHash, displayName }) {
   const now = Date.now();
@@ -395,6 +399,16 @@ function markConversationRead(userId, otherId) {
   ).run(userId, otherId);
 }
 
+// ---------- theme ----------
+function getUserTheme(userId) {
+  const row = db.prepare(`SELECT theme FROM users WHERE id = ?`).get(userId);
+  return row ? row.theme : 'default';
+}
+
+function setUserTheme(userId, theme) {
+  db.prepare(`UPDATE users SET theme = ? WHERE id = ?`).run(theme, userId);
+}
+
 module.exports = {
   db,
   // users
@@ -419,4 +433,6 @@ module.exports = {
   areMutualFollowers,
   // messages
   sendMessage, getConversations, getMessages, countUnreadMessages, markConversationRead,
+  // theme
+  getUserTheme, setUserTheme,
 };

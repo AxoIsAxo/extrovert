@@ -6,7 +6,8 @@
     <a href="/compose">Post</a>
     <a href="/chats">Chats<% if (locals.unreadMessages > 0) { %><sup class="badge"><%= unreadMessages %></sup><% } %></a>
     <a href="/inbox">Inbox<% if (locals.unreadCount > 0) { %><sup class="badge"><%= unreadCount %></sup><% } %></a>
-    <a href="/u/<%= currentUser.username %>">My Profile</a>
+    <a href="/u/<%= currentUser.username %>">Profile</a>
+    <a href="/settings">Settings</a>
     <span class="spacer"></span>
     <form method="post" action="/logout" style="margin:0"><button>Log out</button></form>
   <% } else { %>

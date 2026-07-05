@@ -44,12 +44,13 @@ app.locals.relTime = function relTime(ts) {
 
 app.use(optionalAuth);
 
-// Expose unread counts to all templates.
+// Expose user data to all templates.
 app.use((req, res, next) => {
   if (res.locals.currentUser) {
-    const { countUnreadNotifications, countUnreadMessages } = require('./db');
+    const { countUnreadNotifications, countUnreadMessages, getUserTheme } = require('./db');
     res.locals.unreadCount = countUnreadNotifications(res.locals.currentUser.id);
     res.locals.unreadMessages = countUnreadMessages(res.locals.currentUser.id);
+    res.locals.theme = getUserTheme(res.locals.currentUser.id);
   }
   next();
 });
@@ -62,6 +63,7 @@ app.use('/u', require('./routes/profile'));   // profile view + edit
 app.use('/', require('./routes/social'));     // follow/unfollow
 app.use('/inbox', require('./routes/notifications'));
 app.use('/chats', require('./routes/chats'));
+app.use('/settings', require('./routes/settings'));
 
 app.use((req, res) => res.status(404).render('404', { thing: 'page' }));
 
