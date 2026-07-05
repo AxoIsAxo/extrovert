@@ -195,3 +195,16 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 14px 0 7px
 .err { background: var(--danger-soft); color: #fecaca; border-color: var(--danger); }
 
 h2, h3 { letter-spacing: -0.3px; }
+
+.badge {
+  background: var(--accent); color: #fff; font-size: 0.7rem;
+  padding: 1px 6px; border-radius: 10px; margin-left: 3px; vertical-align: super;
+}
+
+.notif {
+  display: flex; gap: 12px; align-items: flex-start;
+}
+.notif.unread { border-left: 3px solid var(--accent); }
+.notif-icon { font-size: 1.2rem; min-width: 28px; text-align: center; }
+.notif-body { flex: 1; }
+.notif-body a { color: var(--accent); }

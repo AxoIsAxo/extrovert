@@ -4,7 +4,7 @@ const express = require('express');
 const {
   getUserByUsername, getCustomization, setCustomization, updateUserProfile,
   getDisplayPost, getUserById, postsByUser, hasLiked, hasShared,
-  commentsForPost, isFollowing, countFollowers,
+  commentsForPost, isFollowing, countFollowers, countFollowing,
 } = require('../db');
 const { canView } = require('../network');
 const { sanitizeProfileHTML, sanitizeCSS } = require('../sanitize');
@@ -119,6 +119,7 @@ router.get('/:username', (req, res) => {
     res.render('profile', {
       profileUser, finalHtml, css, isOwn, following, canSeePosts,
       followerCount: countFollowers(profileUser.id),
+      followingCount: countFollowing(profileUser.id),
     });
   }
 });

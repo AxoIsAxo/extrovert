@@ -78,6 +78,17 @@ function init() {
       html    TEXT NOT NULL DEFAULT '',
       css     TEXT NOT NULL DEFAULT ''
     );
+
+    CREATE TABLE IF NOT EXISTS notifications (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id    INTEGER NOT NULL REFERENCES users(id),
+      type       TEXT NOT NULL,
+      actor_id   INTEGER NOT NULL REFERENCES users(id),
+      post_id    INTEGER REFERENCES posts(id),
+      read       INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, read, created_at);
   `);
 }
 
@@ -255,6 +266,57 @@ function setCustomization(userId, html, css) {
   ).run(userId, html, css);
 }
 
+// ---------- notifications ----------
+function createNotification({ userId, type, actorId, postId }) {
+  if (userId === actorId) return;
+  db.prepare(
+    `INSERT INTO notifications (user_id, type, actor_id, post_id, created_at) VALUES (?,?,?,?,?)`
+  ).run(userId, type, actorId, postId || null, Date.now());
+}
+
+function getNotifications(userId, limit = 50) {
+  return db.prepare(`
+    SELECT n.*, u.username AS actor_username, u.display_name AS actor_name
+    FROM notifications n
+    JOIN users u ON u.id = n.actor_id
+    WHERE n.user_id = ?
+    ORDER BY n.created_at DESC
+    LIMIT ?
+  `).all(userId, limit);
+}
+
+function countUnreadNotifications(userId) {
+  const row = db.prepare(
+    `SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read = 0`
+  ).get(userId);
+  return row.n;
+}
+
+function markNotificationsRead(userId) {
+  db.prepare(`UPDATE notifications SET read = 1 WHERE user_id = ? AND read = 0`).run(userId);
+}
+
+// ---------- user lists ----------
+function getFollowers(userId) {
+  return db.prepare(`
+    SELECT u.id, u.username, u.display_name, u.bio, f.created_at AS followed_at
+    FROM follows f
+    JOIN users u ON u.id = f.follower_id
+    WHERE f.followee_id = ?
+    ORDER BY f.created_at DESC
+  `).all(userId);
+}
+
+function getFollowing(userId) {
+  return db.prepare(`
+    SELECT u.id, u.username, u.display_name, u.bio, f.created_at AS followed_at
+    FROM follows f
+    JOIN users u ON u.id = f.followee_id
+    WHERE f.follower_id = ?
+    ORDER BY f.created_at DESC
+  `).all(userId);
+}
+
 module.exports = {
   db,
   // users
@@ -271,4 +333,8 @@ module.exports = {
   sharePost, hasShared, hasReposted,
   // customization
   getCustomization, setCustomization,
+  // notifications
+  createNotification, getNotifications, countUnreadNotifications, markNotificationsRead,
+  // user lists
+  getFollowers, getFollowing,
 };

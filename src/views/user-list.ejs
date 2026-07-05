@@ -1,0 +1,30 @@
+<%- include('partials/header') %>
+  <div class="card" style="display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <h2 style="margin:0"><%= title %></h2>
+      <small class="muted"><a href="/u/<%= targetUser.username %>">@<%= targetUser.username %></a></small>
+    </div>
+  </div>
+
+  <% if (list.length === 0) { %>
+    <div class="card center muted">
+      <p><%= emptyMsg %></p>
+    </div>
+  <% } else { %>
+    <% list.forEach(function(u){ %>
+      <div class="card user-row">
+        <div class="avatar"><%= (u.display_name || '?').slice(0,1).toUpperCase() %></div>
+        <div class="info">
+          <a href="/u/<%= u.username %>" class="post-name"><%= u.display_name %></a>
+          <small>@<%= u.username %></small>
+          <% if (u.bio) { %><div class="muted" style="font-size:0.85rem;margin-top:2px"><%= u.bio %></div><% } %>
+        </div>
+        <% if (locals.currentUser && u.id !== currentUser.id) { %>
+          <form method="post" action="<%= u.following ? '/unfollow' : '/follow' %>/<%= u.username %>">
+            <button class="btn <%= u.following ? 'ghost' : '' %>"><%= u.following ? 'Following' : 'Follow' %></button>
+          </form>
+        <% } %>
+      </div>
+    <% }) %>
+  <% } %>
+<%- include('partials/footer') %>

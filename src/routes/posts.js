@@ -8,6 +8,7 @@ const {
   db, createPost, getPostById, getDisplayPost, getUserById,
   toggleLike, addComment, commentsForPost, hasLiked, hasShared,
   sharePost, hasReposted, recordFollowFromPost, isFollowing,
+  createNotification,
 } = require('../db');
 const { canView } = require('../network');
 
@@ -81,7 +82,10 @@ function resolveVisibleContent(req, res) {
 router.post('/:id/like', (req, res) => {
   const ctx = resolveVisibleContent(req, res);
   if (!ctx) return res.redirect(back(req, '/'));
-  toggleLike(ctx.user.id, ctx.content.id);
+  const liked = toggleLike(ctx.user.id, ctx.content.id);
+  if (liked && ctx.content.user_id !== ctx.user.id) {
+    createNotification({ userId: ctx.content.user_id, type: 'like', actorId: ctx.user.id, postId: ctx.content.id });
+  }
   res.redirect(back(req, '/'));
 });
 
@@ -90,7 +94,12 @@ router.post('/:id/comment', (req, res) => {
   const ctx = resolveVisibleContent(req, res);
   if (!ctx) return res.redirect(back(req, '/'));
   const body = String(req.body.body || '').trim();
-  if (body) addComment(ctx.user.id, ctx.content.id, body.slice(0, 1000));
+  if (body) {
+    addComment(ctx.user.id, ctx.content.id, body.slice(0, 1000));
+    if (ctx.content.user_id !== ctx.user.id) {
+      createNotification({ userId: ctx.content.user_id, type: 'comment', actorId: ctx.user.id, postId: ctx.content.id });
+    }
+  }
   res.redirect(back(req, '/'));
 });
 
@@ -128,7 +137,10 @@ router.get('/:id', (req, res) => {
 router.post('/:id/share', (req, res) => {
   const ctx = resolveVisibleContent(req, res);
   if (!ctx) return res.redirect(back(req, '/'));
-  if (ctx.content.user_id !== ctx.user.id) sharePost(ctx.user.id, ctx.content.id);
+  if (ctx.content.user_id !== ctx.user.id) {
+    sharePost(ctx.user.id, ctx.content.id);
+    createNotification({ userId: ctx.content.user_id, type: 'share', actorId: ctx.user.id, postId: ctx.content.id });
+  }
   res.redirect('/posts/' + ctx.content.id);
 });
 

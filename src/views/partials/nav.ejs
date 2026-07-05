@@ -4,6 +4,7 @@
     <a href="/">Feed</a>
     <a href="/discover">Discover</a>
     <a href="/compose">Post</a>
+    <a href="/inbox">Inbox<% if (locals.unreadCount > 0) { %><sup class="badge"><%= unreadCount %></sup><% } %></a>
     <a href="/u/<%= currentUser.username %>">My Profile</a>
     <span class="spacer"></span>
     <form method="post" action="/logout" style="margin:0"><button>Log out</button></form>

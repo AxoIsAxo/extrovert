@@ -1,0 +1,32 @@
+<%- include('partials/header') %>
+  <div class="card" style="display:flex;justify-content:space-between;align-items:center">
+    <h2 style="margin:0">Inbox</h2>
+  </div>
+
+  <% if (notifications.length === 0) { %>
+    <div class="card center muted">
+      <p>No notifications yet.</p>
+    </div>
+  <% } else { %>
+    <% notifications.forEach(function(n){ %>
+      <div class="card notif <%= n.read ? '' : 'unread' %>">
+        <div class="notif-icon">
+          <% if (n.type === 'follow') { %>👤<% } %>
+          <% if (n.type === 'like') { %>❤️<% } %>
+          <% if (n.type === 'comment') { %>💬<% } %>
+          <% if (n.type === 'share') { %>🔗<% } %>
+          <% if (n.type === 'repost') { %>🔁<% } %>
+        </div>
+        <div class="notif-body">
+          <a href="/u/<%= n.actor_username %>"><b><%= n.actor_name %></b></a>
+          <% if (n.type === 'follow') { %>followed you<% } %>
+          <% if (n.type === 'like') { %>liked your <a href="/posts/<%= n.post_id %>">post</a><% } %>
+          <% if (n.type === 'comment') { %>commented on your <a href="/posts/<%= n.post_id %>">post</a><% } %>
+          <% if (n.type === 'share') { %>shared your <a href="/posts/<%= n.post_id %>">post</a><% } %>
+          <% if (n.type === 'repost') { %>reposted your <a href="/posts/<%= n.post_id %>">post</a><% } %>
+          <div class="muted" style="font-size:0.8rem"><%= locals.relTime(n.created_at) %></div>
+        </div>
+      </div>
+    <% }) %>
+  <% } %>
+<%- include('partials/footer') %>
