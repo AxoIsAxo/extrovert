@@ -268,4 +268,5 @@ a.conv-row:hover { border-color: var(--accent); }
   .post-stats { gap: 12px; font-size: 12px; }
   h2 { font-size: 18px; }
   select { font-size: 16px; }
+  input, textarea, select { font-size: 16px; }
 }

@@ -2,13 +2,13 @@
   <div class="card" style="max-width:380px;margin:40px auto">
     <h2 style="margin-top:0">Join Extrovert</h2>
     <% if (error) { %><div class="flash err"><%= error %></div><% } %>
-    <form method="post" action="/register">
-      <label for="username">Username</label>
-      <input type="text" id="username" name="username" autocomplete="username" required autofocus placeholder="3-20 chars, no spaces">
-      <label for="displayName">Display name</label>
-      <input type="text" id="displayName" name="displayName" autocomplete="name" placeholder="(optional)">
-      <label for="password">Password</label>
-      <input type="password" id="password" name="password" autocomplete="new-password" required>
+    <form method="post" action="/register" autocomplete="on">
+      <label for="reg-username">Username</label>
+      <input type="text" id="reg-username" name="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" required autofocus placeholder="3-20 chars, no spaces">
+      <label for="reg-displayName">Display name</label>
+      <input type="text" id="reg-displayName" name="displayName" placeholder="(optional)">
+      <label for="reg-password">Password</label>
+      <input type="password" id="reg-password" name="password" autocomplete="new-password" required>
       <div style="margin-top:16px"><button class="btn">Create account</button></div>
     </form>
     <p class="muted">Already have an account? <a href="/login">Log in</a></p>

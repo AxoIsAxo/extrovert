@@ -2,11 +2,11 @@
   <div class="card" style="max-width:380px;margin:40px auto">
     <h2 style="margin-top:0">Welcome back</h2>
     <% if (error) { %><div class="flash err"><%= error %></div><% } %>
-    <form method="post" action="/login<%= next ? '?next=' + encodeURIComponent(next) : '' %>">
-      <label for="username">Username</label>
-      <input type="text" id="username" name="username" autocomplete="username" required autofocus>
-      <label for="password">Password</label>
-      <input type="password" id="password" name="password" autocomplete="current-password" required>
+    <form method="post" action="/login<%= next ? '?next=' + encodeURIComponent(next) : '' %>" autocomplete="on">
+      <label for="login-username">Username</label>
+      <input type="text" id="login-username" name="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" required autofocus>
+      <label for="login-password">Password</label>
+      <input type="password" id="login-password" name="password" autocomplete="current-password" required>
       <input type="hidden" name="next" value="<%= next %>">
       <div style="margin-top:16px"><button class="btn">Log in</button></div>
     </form>
