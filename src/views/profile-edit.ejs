@@ -2,6 +2,7 @@
   <div class="card">
     <h2 style="margin-top:0">Edit your profile</h2>
     <form method="post" action="/u/<%= profileUser.username %>/edit">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <label>Display name</label>
       <input type="text" name="displayName" value="<%= displayName %>" maxlength="60">
 

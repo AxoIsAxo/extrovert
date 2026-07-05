@@ -2,6 +2,7 @@
   <div class="card" style="max-width:400px;margin:0 auto">
     <h2>Settings</h2>
     <form method="post">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <label style="display:block;margin-bottom:4px;font-weight:600">Theme</label>
       <select name="theme" style="width:100%;padding:10px;margin-bottom:14px">
         <option value="default" <%= theme === 'default' ? 'selected' : '' %>>Default (Dark)</option>

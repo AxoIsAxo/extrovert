@@ -35,9 +35,9 @@
         <% if (isOwn) { %>
           <a class="btn ghost" href="/u/<%= profileUser.username %>/edit">Edit page</a>
         <% } else if (following) { %>
-          <form method="post" action="/unfollow/<%= profileUser.username %>"><button class="btn ghost">Following ✓</button></form>
+          <form method="post" action="/unfollow/<%= profileUser.username %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost">Following ✓</button></form>
         <% } else { %>
-          <form method="post" action="/follow/<%= profileUser.username %>"><button class="btn">Follow</button></form>
+          <form method="post" action="/follow/<%= profileUser.username %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn">Follow</button></form>
         <% } %>
       <% } %>
     </div>

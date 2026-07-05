@@ -10,11 +10,12 @@ function sanitizeCSS(css) {
   let out = css;
   out = out.replace(/expression\s*\(/gi, 'expression-disabled(');
   out = out.replace(/url\s*\(\s*['"]?\s*javascript:[^)]*\)/gi, 'url()');
-  out = out.replace(/url\s*\(\s*['"]?\s*data:text\/html[^)]*\)/gi, 'url()');
+  out = out.replace(/url\s*\(\s*['"]?\s*data:[^)]*\)/gi, 'url()');
   out = out.replace(/-moz-binding\s*:/gi, 'disabled-binding:');
   out = out.replace(/behavior\s*:/gi, 'disabled-behavior:');
   out = out.replace(/@import[^;]+;/gi, '');
   out = out.replace(/<\/?script[^>]*>/gi, '');
+  out = out.replace(/url\s*\(\s*['"]?\s*https?:\/\/[^)]*\)/gi, 'url()');
   // Prevent breaking out of the <style> element.
   out = out.replace(/<\/style/gi, '<\\/style');
   return out;
@@ -46,7 +47,7 @@ function sanitizeProfileHTML(html) {
     allowedTags: ALLOWED_TAGS,
     allowedAttributes: ALLOWED_ATTRS,
     allowedSchemes: ['http', 'https', 'mailto'],
-    allowedSchemesByTag: { img: ['http', 'https', 'data'] },
+    allowedSchemesByTag: { img: ['http', 'https'] },
     // No <script>, no on* handlers, no javascript: URLs — enforce hard.
     disallowedTagsMode: 'discard',
   });

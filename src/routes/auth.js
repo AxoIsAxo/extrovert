@@ -19,11 +19,11 @@ router.post('/register', async (req, res) => {
   if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
     return res.render('register', { error: 'Username must be 3-20 letters, numbers, or underscores.' });
   }
-  if (password.length < 6) {
-    return res.render('register', { error: 'Password must be at least 6 characters.' });
+  if (password.length < 6 || password.length > 128) {
+    return res.render('register', { error: 'Password must be 6–128 characters.' });
   }
   if (getUserByUsername(username)) {
-    return res.render('register', { error: 'That username is taken.' });
+    return res.render('register', { error: 'Username unavailable.' });
   }
 
   const hash = bcrypt.hashSync(password, 10);
@@ -40,12 +40,15 @@ router.get('/login', (req, res) => {
 router.post('/login', (req, res) => {
   const username = String(req.body.username || '').trim();
   const password = String(req.body.password || '');
+  if (password.length > 128) {
+    return res.render('login', { error: 'Invalid username or password.', next: req.query.next || '' });
+  }
   const user = getUserByUsername(username);
   if (!user || !bcrypt.compareSync(password, user.password_hash)) {
     return res.render('login', { error: 'Invalid username or password.', next: req.query.next || '' });
   }
   req.session.userId = user.id;
-  res.redirect(req.body.next && req.body.next.startsWith('/') ? req.body.next : '/');
+  res.safeRedirect(req.body.next, '/');
 });
 
 router.post('/logout', (req, res) => {

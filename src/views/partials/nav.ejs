@@ -9,7 +9,7 @@
     <a href="/u/<%= currentUser.username %>">Profile</a>
     <a href="/settings">Settings</a>
     <span class="spacer"></span>
-    <form method="post" action="/logout" style="margin:0"><button>Log out</button></form>
+    <form method="post" action="/logout" style="margin:0"><input type="hidden" name="_csrf" value="<%= locals.csrfToken %>"><button>Log out</button></form>
   <% } else { %>
     <span class="spacer"></span>
     <a href="/login">Log in</a>

@@ -3,6 +3,7 @@
     <h2 style="margin-top:0">Welcome back</h2>
     <% if (error) { %><div class="flash err"><%= error %></div><% } %>
     <form method="post" action="/login<%= next ? '?next=' + encodeURIComponent(next) : '' %>" autocomplete="on">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <label for="login-username">Username</label>
       <input type="text" id="login-username" name="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" required autofocus>
       <label for="login-password">Password</label>

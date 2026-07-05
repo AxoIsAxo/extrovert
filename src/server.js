@@ -2,14 +2,23 @@
 
 const express = require('express');
 const session = require('express-session');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const path = require('node:path');
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 
 const SqliteStore = require('./session-store');
 const { optionalAuth, requireAuth } = require('./auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const IS_PROD = process.env.NODE_ENV === 'production';
+const SESSION_SECRET = process.env.SESSION_SECRET;
+if (!SESSION_SECRET) {
+  console.error('FATAL: SESSION_SECRET environment variable is required');
+  process.exit(1);
+}
 
 // Ensure data + upload directories exist.
 const DATA_DIR = path.join(__dirname, '..', 'data');
@@ -17,21 +26,103 @@ const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-app.set('view engine', 'ejs');
-app.set('views', path.join(__dirname, 'views'));
-
-app.use(express.urlencoded({ extended: true, limit: '70mb' }));
-app.use(express.json());
-app.use(session({
-  store: new SqliteStore(),
-  secret: process.env.SESSION_SECRET || 'extrovert-dev-secret-change-me',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { httpOnly: true, maxAge: 1000 * 60 * 60 * 24 * 30 },
+// Security headers.
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "http:", "https:"],
+      mediaSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      connectSrc: ["'self'"],
+      frameAncestors: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
 }));
 
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(express.json({ limit: '1mb' }));
+
+// Session with secure defaults.
+app.use(session({
+  store: new SqliteStore(),
+  secret: SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    secure: IS_PROD,
+    sameSite: 'lax',
+    maxAge: 1000 * 60 * 60 * 24 * 30,
+  },
+}));
+
+// Auth rate limiter (login + register).
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many authentication attempts, please try again later.',
+});
+app.use('/login', authLimiter);
+app.use('/register', authLimiter);
+
+// General action rate limiter (lower limit than auth).
+const actionLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many requests, please slow down.',
+});
+app.use((req, res, next) => {
+  if (req.method === 'POST') return actionLimiter(req, res, next);
+  next();
+});
+
+// CSRF middleware — generates and validates tokens per session.
+app.use((req, res, next) => {
+  if (!req.session.csrfToken) {
+    req.session.csrfToken = crypto.randomBytes(32).toString('hex');
+  }
+  res.locals.csrfToken = req.session.csrfToken;
+
+  if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH' || req.method === 'DELETE') {
+    const token = req.body._csrf || req.headers['x-csrf-token'];
+    if (!token || token !== req.session.csrfToken) {
+      return res.status(403).send('CSRF validation failed');
+    }
+  }
+  next();
+});
+
+// Safely resolve redirect targets — only same-origin relative URLs allowed.
+app.use((req, res, next) => {
+  res.safeRedirect = function safeRedirect(url, fallback = '/') {
+    if (typeof url === 'string' && url.startsWith('/') && !url.startsWith('//')) {
+      return res.redirect(url);
+    }
+    res.redirect(fallback);
+  };
+  res.locals.safeUrl = function safeUrl(url, fallback = '/') {
+    if (typeof url === 'string' && url.startsWith('/') && !url.startsWith('//')) {
+      return url;
+    }
+    return fallback;
+  };
+  next();
+});
+
 app.use('/static', express.static(path.join(__dirname, '..', 'public')));
-app.use('/uploads', express.static(UPLOAD_DIR));
+app.use('/uploads', express.static(UPLOAD_DIR, {
+  setHeaders: (res) => {
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.set('Content-Disposition', 'inline');
+  },
+}));
 
 app.locals.relTime = function relTime(ts) {
   const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));

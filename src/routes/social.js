@@ -7,7 +7,8 @@ const router = express.Router();
 
 function back(req, fallback = '/') {
   const ref = req.get('referer');
-  return ref || fallback;
+  if (ref && ref.startsWith('/') && !ref.startsWith('//')) return ref;
+  return fallback;
 }
 
 router.post('/follow/:username', (req, res) => {

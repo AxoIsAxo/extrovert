@@ -25,6 +25,7 @@
   </div>
 
   <form class="chat-form" method="post" action="/chats/<%= other.username %>/send" data-pubkey="<%= recipientPubKey || '' %>">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
     <input type="text" name="body" placeholder="Type a message…" maxlength="2000" required autofocus>
     <button>Send</button>
   </form>

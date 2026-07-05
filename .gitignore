@@ -6,3 +6,5 @@ uploads
 *.db-wal
 server.log
 .commandcode
+.env
+.cookies

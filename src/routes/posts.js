@@ -16,16 +16,26 @@ const router = express.Router();
 
 const UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads');
 
+const ALLOWED_EXTENSIONS = new Set([
+  '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg',
+  '.mp4', '.webm', '.mov', '.avi', '.mkv',
+]);
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: UPLOAD_DIR,
     filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname) || '';
-      cb(null, crypto.randomBytes(12).toString('hex') + ext);
+      const ext = path.extname(file.originalname).toLowerCase();
+      const safeExt = ALLOWED_EXTENSIONS.has(ext) ? ext : '';
+      cb(null, crypto.randomBytes(12).toString('hex') + safeExt);
     },
   }),
   limits: { fileSize: 60 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!ALLOWED_EXTENSIONS.has(ext)) {
+      return cb(null, false);
+    }
     if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) {
       cb(null, true);
     } else {
@@ -36,7 +46,8 @@ const upload = multer({
 
 function back(req, fallback = '/') {
   const ref = req.get('referer');
-  return ref && ref.startsWith('/') ? ref : (ref || fallback);
+  if (ref && ref.startsWith('/') && !ref.startsWith('//')) return ref;
+  return fallback;
 }
 
 // Create a post (text / photo / video).

@@ -11,7 +11,8 @@ const router = express.Router();
 
 function back(req, fallback = '/') {
   const ref = req.get('referer');
-  return ref && ref.startsWith('/') ? ref : (ref || fallback);
+  if (ref && ref.startsWith('/') && !ref.startsWith('//')) return ref;
+  return fallback;
 }
 
 // Conversation list.
