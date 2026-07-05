@@ -1,0 +1,64 @@
+<%
+  const u = locals.currentUser;
+  const time = locals.relTime || ((t) => new Date(t).toLocaleString());
+%>
+<article class="post">
+  <% if (item.isRepost) { %>
+    <div class="post-repost">🔁 <%= item.reposterName %> reposted this</div>
+  <% } %>
+  <header class="post-head">
+    <a class="post-avatar" href="/u/<%= item.authorUsername %>"><%= (item.authorName || '?').slice(0,1).toUpperCase() %></a>
+    <div>
+      <a href="/u/<%= item.authorUsername %>" class="post-name"><%= item.authorName %></a>
+      <span class="post-handle">@<%= item.authorUsername %></span>
+      <span class="post-time">· <%= time(item.createdAt) %></span>
+    </div>
+  </header>
+
+  <% if (item.body) { %><div class="post-body"><%= item.body %></div><% } %>
+  <% if (item.mediaPath && item.type === 'photo') { %>
+    <img class="post-media" src="<%= item.mediaPath %>" alt="photo">
+  <% } else if (item.mediaPath && item.type === 'video') { %>
+    <video class="post-media" controls src="<%= item.mediaPath %>"></video>
+  <% } %>
+
+  <div class="post-stats">
+    <span>❤️ <%= item.likeCount %></span>
+    <span>💬 <%= item.commentCount %></span>
+    <span>🔗 <%= item.shareCount %></span>
+    <% if (item.followBoost > 0) { %><span class="boost">⭐ followed from post ×<%= item.followBoost %></span><% } %>
+  </div>
+
+  <% if (u) { %>
+  <div class="post-actions">
+    <form method="post" action="/posts/<%= item.interactId %>/like">
+      <button class="<%= item.liked ? 'active' : '' %>"><%= item.liked ? '♥ Liked' : '♡ Like' %></button>
+    </form>
+    <form method="post" action="/posts/<%= item.interactId %>/share">
+      <button class="<%= item.shared ? 'active' : '' %>">Share</button>
+    </form>
+    <form method="post" action="/posts/<%= item.interactId %>/repost">
+      <button>Repost</button>
+    </form>
+    <% if (!item.isOwn && !item.followingAuthor) { %>
+      <form method="post" action="/posts/<%= item.interactId %>/follow-from">
+        <button class="boost-btn">⭐ Follow from post</button>
+      </form>
+    <% } %>
+  </div>
+
+  <div class="post-comments">
+    <% (item.comments || []).forEach(function(c){ %>
+      <div class="comment">
+        <b><%= c.display_name %></b> <span class="post-handle">@<%= c.username %></span>
+        <span class="post-time">· <%= time(c.created_at) %></span><br>
+        <%= c.body %>
+      </div>
+    <% }) %>
+    <form class="comment-form" method="post" action="/posts/<%= item.interactId %>/comment">
+      <input type="text" name="body" placeholder="Add a comment…" maxlength="1000" required>
+      <button>Comment</button>
+    </form>
+  </div>
+  <% } %>
+</article>

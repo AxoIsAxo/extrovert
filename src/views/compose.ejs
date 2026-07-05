@@ -1,0 +1,38 @@
+<%- include('partials/header') %>
+  <div class="card">
+    <h2 style="margin-top:0">Create a post</h2>
+    <form method="post" action="/posts" enctype="multipart/form-data">
+      <div class="type-tabs" id="typeTabs">
+        <button type="button" data-type="text" class="active">📝 Text</button>
+        <button type="button" data-type="photo">📷 Photo</button>
+        <button type="button" data-type="video">🎬 Video</button>
+      </div>
+      <input type="hidden" name="type" id="typeField" value="text">
+
+      <label>Caption / text</label>
+      <textarea name="body" rows="3" placeholder="What's on your mind?"></textarea>
+
+      <div id="mediaWrap" style="display:none">
+        <label>Media file</label>
+        <input type="file" name="media" accept="image/*,video/*">
+      </div>
+
+      <div style="margin-top:16px">
+        <button class="btn" type="submit">Post</button>
+        <a class="btn ghost" href="/">Cancel</a>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    const tabs = document.querySelectorAll('#typeTabs button');
+    const field = document.getElementById('typeField');
+    const wrap = document.getElementById('mediaWrap');
+    tabs.forEach(b => b.addEventListener('click', () => {
+      tabs.forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      field.value = b.dataset.type;
+      wrap.style.display = (b.dataset.type === 'text') ? 'none' : 'block';
+    }));
+  </script>
+<%- include('partials/footer') %>

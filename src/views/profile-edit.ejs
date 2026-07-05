@@ -1,0 +1,24 @@
+<%- include('partials/header') %>
+  <div class="card">
+    <h2 style="margin-top:0">Edit your profile</h2>
+    <form method="post" action="/u/<%= profileUser.username %>/edit">
+      <label>Display name</label>
+      <input type="text" name="displayName" value="<%= displayName %>" maxlength="60">
+
+      <label>Bio</label>
+      <textarea name="bio" rows="2" maxlength="280"><%= bio %></textarea>
+
+      <label>Profile HTML <span class="muted">(no &lt;script&gt;, no JS — stripped automatically)</span></label>
+      <textarea name="html" rows="10" spellcheck="false"><%= html %></textarea>
+      <small class="muted">Put <code>&lt;!--POSTS--&gt;</code> where you want your posts to appear. If omitted, posts are shown at the end.</small>
+
+      <label>Profile CSS <span class="muted">(styles the whole page)</span></label>
+      <textarea name="css" rows="10" spellcheck="false"><%= css %></textarea>
+
+      <div style="margin-top:16px">
+        <button class="btn">Save</button>
+        <a class="btn ghost" href="/u/<%= profileUser.username %>">Cancel</a>
+      </div>
+    </form>
+  </div>
+<%- include('partials/footer') %>

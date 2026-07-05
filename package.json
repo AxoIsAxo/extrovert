@@ -1,0 +1,19 @@
+{
+  "name": "extrovert",
+  "version": "1.0.0",
+  "description": "A social network where you only discover content from friends and friends of friends.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node scripts/test.js"
+  },
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "ejs": "^3.1.10",
+    "express": "^4.21.0",
+    "express-session": "^1.18.0",
+    "multer": "^1.4.5-lts.1",
+    "sanitize-html": "^2.13.0"
+  }
+}

@@ -1,0 +1,274 @@
+'use strict';
+
+const { DatabaseSync } = require('node:sqlite');
+const path = require('node:path');
+const fs = require('node:fs');
+
+const DB_PATH = path.join(__dirname, '..', 'data', 'extrovert.db');
+fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+
+const db = new DatabaseSync(DB_PATH);
+db.exec('PRAGMA journal_mode = WAL;');
+db.exec('PRAGMA foreign_keys = ON;');
+
+function init() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      username      TEXT UNIQUE NOT NULL COLLATE NOCASE,
+      password_hash TEXT NOT NULL,
+      display_name  TEXT NOT NULL,
+      bio           TEXT NOT NULL DEFAULT '',
+      created_at    INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS follows (
+      follower_id INTEGER NOT NULL REFERENCES users(id),
+      followee_id INTEGER NOT NULL REFERENCES users(id),
+      created_at  INTEGER NOT NULL,
+      PRIMARY KEY (follower_id, followee_id)
+    );
+
+    -- A follow that was triggered specifically by viewing a post.
+    -- This is the "follow someone because of a post" signal: a BIG boost.
+    CREATE TABLE IF NOT EXISTS follows_from_post (
+      follower_id INTEGER NOT NULL REFERENCES users(id),
+      followee_id INTEGER NOT NULL REFERENCES users(id),
+      post_id     INTEGER NOT NULL REFERENCES posts(id),
+      created_at  INTEGER NOT NULL,
+      PRIMARY KEY (follower_id, followee_id, post_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS posts (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id       INTEGER NOT NULL REFERENCES users(id),
+      type          TEXT NOT NULL CHECK(type IN ('text','photo','video','repost')),
+      body          TEXT NOT NULL DEFAULT '',
+      media_path    TEXT,
+      repost_of_id  INTEGER REFERENCES posts(id),
+      created_at    INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_posts_user ON posts(user_id);
+    CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at);
+
+    CREATE TABLE IF NOT EXISTS likes (
+      user_id    INTEGER NOT NULL REFERENCES users(id),
+      post_id    INTEGER NOT NULL REFERENCES posts(id),
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, post_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS comments (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id    INTEGER NOT NULL REFERENCES users(id),
+      post_id    INTEGER NOT NULL REFERENCES posts(id),
+      body       TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS shares (
+      user_id    INTEGER NOT NULL REFERENCES users(id),
+      post_id    INTEGER NOT NULL REFERENCES posts(id),
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, post_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS profile_customization (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id),
+      html    TEXT NOT NULL DEFAULT '',
+      css     TEXT NOT NULL DEFAULT ''
+    );
+  `);
+}
+
+init();
+
+// ---------- users ----------
+function createUser({ username, passwordHash, displayName }) {
+  const now = Date.now();
+  const res = db.prepare(
+    `INSERT INTO users (username, password_hash, display_name, created_at) VALUES (?,?,?,?)`
+  ).run(username, passwordHash, displayName, now);
+  return res.lastInsertRowid;
+}
+
+function getUserByUsername(username) {
+  return db.prepare(`SELECT * FROM users WHERE username = ?`).get(username);
+}
+
+function getUserById(id) {
+  return db.prepare(`SELECT * FROM users WHERE id = ?`).get(id);
+}
+
+function updateUserProfile(id, { displayName, bio }) {
+  db.prepare(`UPDATE users SET display_name = ?, bio = ? WHERE id = ?`)
+    .run(displayName, bio, id);
+}
+
+// ---------- follows ----------
+function follow(followerId, followeeId) {
+  if (followerId === followeeId) return;
+  db.prepare(
+    `INSERT OR IGNORE INTO follows (follower_id, followee_id, created_at) VALUES (?,?,?)`
+  ).run(followerId, followeeId, Date.now());
+}
+
+function unfollow(followerId, followeeId) {
+  db.prepare(`DELETE FROM follows WHERE follower_id = ? AND followee_id = ?`)
+    .run(followerId, followeeId);
+  db.prepare(
+    `DELETE FROM follows_from_post WHERE follower_id = ? AND followee_id = ?`
+  ).run(followerId, followeeId);
+}
+
+function isFollowing(followerId, followeeId) {
+  const row = db.prepare(
+    `SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?`
+  ).get(followerId, followeeId);
+  return !!row;
+}
+
+function followingIds(userId) {
+  const rows = db.prepare(
+    `SELECT followee_id AS id FROM follows WHERE follower_id = ?`
+  ).all(userId);
+  return rows.map(r => r.id);
+}
+
+function countFollowers(userId) {
+  return db.prepare(`SELECT COUNT(*) AS n FROM follows WHERE followee_id = ?`).get(userId).n;
+}
+
+function countFollowing(userId) {
+  return db.prepare(`SELECT COUNT(*) AS n FROM follows WHERE follower_id = ?`).get(userId).n;
+}
+
+// Record that a follow happened because of a specific post (big boost source).
+function recordFollowFromPost(followerId, followeeId, postId) {
+  follow(followerId, followeeId);
+  db.prepare(
+    `INSERT OR IGNORE INTO follows_from_post (follower_id, followee_id, post_id, created_at)
+     VALUES (?,?,?,?)`
+  ).run(followerId, followeeId, postId, Date.now());
+}
+
+// ---------- posts ----------
+function createPost({ userId, type, body = '', mediaPath = null, repostOfId = null, createdAt }) {
+  const now = createdAt || Date.now();
+  const res = db.prepare(
+    `INSERT INTO posts (user_id, type, body, media_path, repost_of_id, created_at)
+     VALUES (?,?,?,?,?,?)`
+  ).run(userId, type, body, mediaPath, repostOfId, now);
+  return res.lastInsertRowid;
+}
+
+function getPostById(id) {
+  return db.prepare(`SELECT * FROM posts WHERE id = ?`).get(id);
+}
+
+// Resolve a post, following one level of repost to its original.
+function getDisplayPost(id) {
+  const post = db.prepare(`SELECT * FROM posts WHERE id = ?`).get(id);
+  if (!post) return null;
+  if (post.type === 'repost' && post.repost_of_id) {
+    const original = getDisplayPost(post.repost_of_id);
+    return { post, original };
+  }
+  return { post, original: null };
+}
+
+function postsByUser(userId) {
+  return db.prepare(
+    `SELECT * FROM posts WHERE user_id = ? ORDER BY created_at DESC`
+  ).all(userId);
+}
+
+// ---------- likes ----------
+function toggleLike(userId, postId) {
+  const existing = db.prepare(
+    `SELECT 1 FROM likes WHERE user_id = ? AND post_id = ?`
+  ).get(userId, postId);
+  if (existing) {
+    db.prepare(`DELETE FROM likes WHERE user_id = ? AND post_id = ?`).run(userId, postId);
+    return false;
+  }
+  db.prepare(
+    `INSERT INTO likes (user_id, post_id, created_at) VALUES (?,?,?)`
+  ).run(userId, postId, Date.now());
+  return true;
+}
+
+function hasLiked(userId, postId) {
+  return !!db.prepare(
+    `SELECT 1 FROM likes WHERE user_id = ? AND post_id = ?`
+  ).get(userId, postId);
+}
+
+// ---------- comments ----------
+function addComment(userId, postId, body) {
+  const now = Date.now();
+  const res = db.prepare(
+    `INSERT INTO comments (user_id, post_id, body, created_at) VALUES (?,?,?,?)`
+  ).run(userId, postId, body, now);
+  return res.lastInsertRowid;
+}
+
+function commentsForPost(postId) {
+  return db.prepare(
+    `SELECT c.*, u.username, u.display_name FROM comments c
+     JOIN users u ON u.id = c.user_id
+     WHERE c.post_id = ? ORDER BY c.created_at ASC`
+  ).all(postId);
+}
+
+// ---------- shares ----------
+function sharePost(userId, postId) {
+  db.prepare(
+    `INSERT OR IGNORE INTO shares (user_id, post_id, created_at) VALUES (?,?,?)`
+  ).run(userId, postId, Date.now());
+}
+
+function hasShared(userId, postId) {
+  return !!db.prepare(
+    `SELECT 1 FROM shares WHERE user_id = ? AND post_id = ?`
+  ).get(userId, postId);
+}
+
+// Has `userId` already reposted `originalId`? (prevents duplicate reposts)
+function hasReposted(userId, originalId) {
+  return !!db.prepare(
+    `SELECT 1 FROM posts WHERE user_id = ? AND type = 'repost' AND repost_of_id = ?`
+  ).get(userId, originalId);
+}
+
+// ---------- profile customization ----------
+function getCustomization(userId) {
+  return db.prepare(
+    `SELECT * FROM profile_customization WHERE user_id = ?`
+  ).get(userId) || { user_id: userId, html: '', css: '' };
+}
+
+function setCustomization(userId, html, css) {
+  db.prepare(
+    `INSERT INTO profile_customization (user_id, html, css) VALUES (?,?,?)
+     ON CONFLICT(user_id) DO UPDATE SET html = excluded.html, css = excluded.css`
+  ).run(userId, html, css);
+}
+
+module.exports = {
+  db,
+  // users
+  createUser, getUserByUsername, getUserById, updateUserProfile,
+  // follows
+  follow, unfollow, isFollowing, followingIds, countFollowers, countFollowing, recordFollowFromPost,
+  // posts
+  createPost, getPostById, getDisplayPost, postsByUser,
+  // likes
+  toggleLike, hasLiked,
+  // comments
+  addComment, commentsForPost,
+  // shares
+  sharePost, hasShared, hasReposted,
+  // customization
+  getCustomization, setCustomization,
+};

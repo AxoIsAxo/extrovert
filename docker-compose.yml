@@ -1,0 +1,22 @@
+services:
+  extrovert:
+    build: .
+    restart: unless-stopped
+    expose:
+      - "3000"
+    networks:
+      - nginx-proxy-manager_default
+    volumes:
+      - extrovert_data:/app/data
+      - extrovert_uploads:/app/uploads
+    environment:
+      - NODE_ENV=production
+      - SESSION_SECRET=${SESSION_SECRET:?Set SESSION_SECRET in .env}
+
+volumes:
+  extrovert_data:
+  extrovert_uploads:
+
+networks:
+  nginx-proxy-manager_default:
+    external: true

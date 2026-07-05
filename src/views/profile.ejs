@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= profileUser.display_name %> (@<%= profileUser.username %>) · Extrovert</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <style><%- css %></style>
+</head>
+<body>
+  <%- include('partials/nav') %>
+  <main class="wrap">
+    <div class="profile-header">
+      <div class="avatar"><%= (profileUser.display_name || profileUser.username).slice(0,1).toUpperCase() %></div>
+      <div>
+        <h1><%= profileUser.display_name %></h1>
+        <div class="handle">@<%= profileUser.username %></div>
+        <% if (profileUser.bio) { %><p class="bio"><%= profileUser.bio %></p><% } %>
+        <small class="muted"><%= followerCount %> follower<%= followerCount === 1 ? '' : 's' %></small>
+      </div>
+      <span class="spacer"></span>
+      <% if (locals.currentUser) { %>
+        <% if (isOwn) { %>
+          <a class="btn ghost" href="/u/<%= profileUser.username %>/edit">Edit page</a>
+        <% } else if (following) { %>
+          <form method="post" action="/unfollow/<%= profileUser.username %>"><button class="btn ghost">Following ✓</button></form>
+        <% } else { %>
+          <form method="post" action="/follow/<%= profileUser.username %>"><button class="btn">Follow</button></form>
+        <% } %>
+      <% } %>
+    </div>
+
+    <div class="ev-custom">
+      <%- finalHtml %>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,15 @@
+<nav class="nav">
+  <a class="brand" href="/">Extrovert</a>
+  <% if (locals.currentUser) { %>
+    <a href="/">Feed</a>
+    <a href="/discover">Discover</a>
+    <a href="/compose">Post</a>
+    <a href="/u/<%= currentUser.username %>">My Profile</a>
+    <span class="spacer"></span>
+    <form method="post" action="/logout" style="margin:0"><button>Log out</button></form>
+  <% } else { %>
+    <span class="spacer"></span>
+    <a href="/login">Log in</a>
+    <a href="/register">Sign up</a>
+  <% } %>
+</nav>

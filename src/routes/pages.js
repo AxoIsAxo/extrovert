@@ -1,0 +1,51 @@
+'use strict';
+
+const express = require('express');
+const { db } = require('../db');
+const { buildFeed } = require('../feed');
+const { foafIds, friendIds } = require('../network');
+
+const router = express.Router();
+
+// Feed (home).
+router.get('/', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.redirect('/login');
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const { items, hasMore } = buildFeed(user.id, { page, perPage: 15 });
+  res.render('feed', { items, page, hasMore });
+});
+
+// Compose.
+router.get('/compose', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  res.render('compose', {});
+});
+
+// Discover: find people by username + suggested friends-of-friends to follow.
+router.get('/discover', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.redirect('/login');
+
+  const q = String(req.query.q || '').trim();
+  let results = [];
+  if (q) {
+    results = db.prepare(
+      `SELECT id, username, display_name, bio FROM users
+       WHERE username LIKE ? AND id <> ? LIMIT 20`
+    ).all(q + '%', user.id);
+  }
+
+  // Suggested: friends-of-friends you don't already follow (expand your network).
+  const following = friendIds(user.id);
+  const foaf = [...foafIds(user.id)];
+  const suggestedIds = foaf.filter(id => !following.has(id)).slice(0, 12);
+  const suggested = suggestedIds.length
+    ? db.prepare(`SELECT id, username, display_name, bio FROM users WHERE id IN (${suggestedIds.map(() => '?').join(',')})`)
+        .all(...suggestedIds)
+    : [];
+
+  res.render('discover', { q, results, suggested });
+});
+
+module.exports = router;

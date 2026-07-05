@@ -1,0 +1,16 @@
+<%- include('partials/header') %>
+  <div class="card" style="max-width:380px;margin:40px auto">
+    <h2 style="margin-top:0">Join Extrovert</h2>
+    <% if (error) { %><div class="flash err"><%= error %></div><% } %>
+    <form method="post" action="/register">
+      <label>Username</label>
+      <input type="text" name="username" required autofocus placeholder="3-20 chars, no spaces">
+      <label>Display name</label>
+      <input type="text" name="displayName" placeholder="(optional)">
+      <label>Password</label>
+      <input type="password" name="password" required>
+      <div style="margin-top:16px"><button class="btn">Create account</button></div>
+    </form>
+    <p class="muted">Already have an account? <a href="/login">Log in</a></p>
+  </div>
+<%- include('partials/footer') %>

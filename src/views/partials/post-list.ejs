@@ -1,0 +1,12 @@
+<% if (!items || items.length === 0) { %>
+  <div class="card center muted">
+    <p>No posts here yet.</p>
+    <% if (!locals.onProfile) { %>
+      <p>Follow some people to fill your feed. Try the <a href="/discover">Discover</a> page.</p>
+    <% } %>
+  </div>
+<% } else { %>
+  <% items.forEach(function(item){ %>
+    <%- include('post', { item: item }) %>
+  <% }) %>
+<% } %>

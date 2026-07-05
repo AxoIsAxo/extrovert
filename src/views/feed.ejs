@@ -1,0 +1,20 @@
+<%- include('partials/header') %>
+  <div class="card" style="display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <h2 style="margin:0">Your feed</h2>
+      <small class="muted">Only content from your friends and friends-of-friends.</small>
+    </div>
+    <a class="btn" href="/compose">+ New post</a>
+  </div>
+
+  <%- include('partials/post-list', { items: items }) %>
+
+  <div class="pager">
+    <% if (page > 1) { %>
+      <a class="btn ghost" href="/?page=<%= page - 1 %>">← Newer</a>
+    <% } else { %><span></span><% } %>
+    <% if (hasMore) { %>
+      <a class="btn ghost" href="/?page=<%= page + 1 %>">Older →</a>
+    <% } %>
+  </div>
+<%- include('partials/footer') %>

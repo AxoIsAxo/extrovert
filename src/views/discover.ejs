@@ -1,0 +1,39 @@
+<%- include('partials/header') %>
+  <div class="card">
+    <h2 style="margin-top:0">Discover people</h2>
+    <form method="get" action="/discover">
+      <input type="search" name="q" value="<%= q %>" placeholder="Search by username…">
+    </form>
+    <% if (q && results.length === 0) { %><p class="muted">No users found.</p><% } %>
+    <% results.forEach(function(r){ %>
+      <div class="user-row">
+        <div class="avatar"><%= r.username.slice(0,1).toUpperCase() %></div>
+        <div class="info">
+          <b><%= r.display_name %></b>
+          <small>@<%= r.username %></small>
+        </div>
+        <a class="btn" href="/u/<%= r.username %>">View</a>
+        <form method="post" action="/follow/<%= r.username %>"><button class="btn">Follow</button></form>
+      </div>
+    <% }) %>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">Friends of friends</h3>
+    <p class="muted">People in your extended network you don't follow yet.</p>
+    <% if (suggested.length === 0) { %>
+      <p class="muted">None right now. Follow more people to expand your network.</p>
+    <% } %>
+    <% suggested.forEach(function(r){ %>
+      <div class="user-row">
+        <div class="avatar"><%= r.username.slice(0,1).toUpperCase() %></div>
+        <div class="info">
+          <b><%= r.display_name %></b>
+          <small>@<%= r.username %></small>
+        </div>
+        <a class="btn ghost" href="/u/<%= r.username %>">View</a>
+        <form method="post" action="/follow/<%= r.username %>"><button class="btn">Follow</button></form>
+      </div>
+    <% }) %>
+  </div>
+<%- include('partials/footer') %>
