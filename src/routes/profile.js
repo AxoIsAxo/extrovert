@@ -5,6 +5,7 @@ const {
   getUserByUsername, getCustomization, setCustomization, updateUserProfile,
   getDisplayPost, getUserById, postsByUser, hasLiked, hasShared,
   commentsForPost, isFollowing, countFollowers, countFollowing,
+  getFollowers, getFollowing,
 } = require('../db');
 const { canView } = require('../network');
 const { sanitizeProfileHTML, sanitizeCSS } = require('../sanitize');
@@ -156,6 +157,34 @@ router.post('/:username/edit', (req, res) => {
   setCustomization(viewer.id, html, css);
   updateUserProfile(viewer.id, { displayName, bio });
   res.redirect('/u/' + profileUser.username);
+});
+
+// Followers list.
+router.get('/:username/followers', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.redirect('/login');
+  const target = getUserByUsername(req.params.username);
+  if (!target) return res.status(404).render('404', { thing: 'user' });
+  const list = getFollowers(target.id).map(u => ({
+    ...u, following: isFollowing(user.id, u.id),
+  }));
+  res.render('user-list', {
+    title: 'Followers', targetUser: target, list, emptyMsg: 'No followers yet.',
+  });
+});
+
+// Following list.
+router.get('/:username/following', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.redirect('/login');
+  const target = getUserByUsername(req.params.username);
+  if (!target) return res.status(404).render('404', { thing: 'user' });
+  const list = getFollowing(target.id).map(u => ({
+    ...u, following: isFollowing(user.id, u.id),
+  }));
+  res.render('user-list', {
+    title: 'Following', targetUser: target, list, emptyMsg: 'Not following anyone yet.',
+  });
 });
 
 module.exports = router;
