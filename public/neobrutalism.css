@@ -66,3 +66,14 @@ a.conv-row { border: 3px solid #111; border-radius: 0; }
 a.conv-row:hover { border-color: var(--accent); }
 
 .chat-msg.own { align-self: flex-end; }
+
+@media (max-width: 600px) {
+  .nav { flex-wrap: wrap; border-bottom-width: 3px; }
+  .comment-form { flex-direction: column; }
+  .comment-form button { width: 100%; }
+  .chat-form { flex-direction: column; }
+  .chat-form button { width: 100%; }
+  .pager { flex-direction: column; gap: 8px; }
+  .pager a { text-align: center; display: block; }
+  .grid-2 { grid-template-columns: 1fr; }
+}

@@ -236,3 +236,36 @@ a.conv-row:hover { border-color: var(--accent); }
 .notif-icon { font-size: 1.2rem; min-width: 28px; text-align: center; }
 .notif-body { flex: 1; }
 .notif-body a { color: var(--accent); }
+
+/* ---- mobile ---- */
+@media (max-width: 600px) {
+  .nav { flex-wrap: wrap; gap: 2px; padding: 8px 10px; }
+  .nav .brand { font-size: 16px; padding: 6px 10px; margin-right: 0; }
+  .nav a, .nav button { font-size: 13px; padding: 6px 10px; }
+  .wrap { padding: 14px 10px 80px; }
+  .card { padding: 14px; border-radius: 14px; }
+  .post { padding: 14px; border-radius: 14px; }
+  .post-head { gap: 10px; }
+  .post-avatar { width: 36px; height: 36px; font-size: 15px; }
+  .post-actions button { padding: 7px 12px; font-size: 12px; }
+  .profile-header { flex-wrap: wrap; gap: 10px; }
+  .profile-header .avatar { width: 52px; height: 52px; font-size: 22px; }
+  .profile-header h1 { font-size: 18px; }
+  .grid-2 { grid-template-columns: 1fr; }
+  .user-row { padding: 10px; gap: 8px; }
+  .user-row .avatar { width: 36px; height: 36px; font-size: 14px; }
+  .user-row .info b { font-size: 14px; }
+  .comment-form { flex-direction: column; }
+  .comment-form button { width: 100%; }
+  .chat-msg { max-width: 90%; }
+  .chat-form { flex-direction: column; }
+  .chat-form button { padding: 12px 20px; width: 100%; }
+  .type-tabs { gap: 4px; }
+  .type-tabs button { padding: 8px; font-size: 13px; }
+  .pager { flex-direction: column; gap: 8px; align-items: stretch; }
+  .pager .btn { text-align: center; }
+  a.conv-row { padding: 10px; }
+  .post-stats { gap: 12px; font-size: 12px; }
+  h2 { font-size: 18px; }
+  select { font-size: 16px; }
+}
