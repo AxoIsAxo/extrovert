@@ -26,6 +26,11 @@ const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
+// View engine.
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+app.set('trust proxy', 1);
+
 // Security headers.
 app.use(helmet({
   contentSecurityPolicy: {
@@ -65,6 +70,7 @@ const authLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
   message: 'Too many authentication attempts, please try again later.',
 });
 app.use('/login', authLimiter);
@@ -76,6 +82,7 @@ const actionLimiter = rateLimit({
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
   message: 'Too many requests, please slow down.',
 });
 app.use((req, res, next) => {
