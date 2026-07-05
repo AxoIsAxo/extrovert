@@ -211,6 +211,13 @@ a.conv-row:hover { border-color: var(--accent); }
 }
 .chat-form { display: flex; gap: 8px; }
 .chat-form input { flex: 1; }
+.chat-form button {
+  background: var(--accent); color: #fff; border: none; padding: 0 20px;
+  border-radius: var(--radius-pill); font-weight: 600; cursor: pointer;
+  transition: var(--t); white-space: nowrap;
+}
+.chat-form button:hover { filter: brightness(1.12); }
+.chat-form button:active { transform: scale(.97); }
 
 .chat-icon { text-decoration: none; font-size: 0.9rem; cursor: pointer; opacity: 0.8; }
 .chat-icon:hover { opacity: 1; }
