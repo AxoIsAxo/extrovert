@@ -39,22 +39,23 @@
   </div>
 
   <% if (u) { %>
+  <% const _token = typeof csrfToken !== 'undefined' ? csrfToken : (locals.csrfToken || ''); %>
   <div class="post-actions">
     <form method="post" action="/posts/<%= item.interactId %>/like">
-      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <input type="hidden" name="_csrf" value="<%= _token %>">
       <button class="<%= item.liked ? 'active' : '' %>"><%= item.liked ? '♥ Liked' : '♡ Like' %></button>
     </form>
     <form method="post" action="/posts/<%= item.interactId %>/share">
-      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <input type="hidden" name="_csrf" value="<%= _token %>">
       <button class="<%= item.shared ? 'active' : '' %>">Share</button>
     </form>
     <form method="post" action="/posts/<%= item.interactId %>/repost">
-      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <input type="hidden" name="_csrf" value="<%= _token %>">
       <button>Repost</button>
     </form>
     <% if (!item.isOwn && !item.followingAuthor) { %>
       <form method="post" action="/posts/<%= item.interactId %>/follow-from">
-        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <input type="hidden" name="_csrf" value="<%= _token %>">
         <button class="boost-btn">⭐ Follow from post</button>
       </form>
     <% } %>
@@ -72,7 +73,7 @@
       </div>
     <% }) %>
     <form class="comment-form" method="post" action="/posts/<%= item.interactId %>/comment">
-      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <input type="hidden" name="_csrf" value="<%= _token %>">
       <input type="text" name="body" placeholder="Add a comment…" maxlength="1000" required>
       <button>Comment</button>
     </form>

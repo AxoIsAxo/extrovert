@@ -100,7 +100,7 @@ router.get('/:username', (req, res) => {
   let postsHtml = '';
   if (canSeePosts) {
     const items = hydrateProfilePosts(profileUser.id, viewer.id);
-    res.app.render('partials/post-list', { items, currentUser: viewer, onProfile: true }, (err, html2) => {
+    res.app.render('partials/post-list', { items, currentUser: viewer, onProfile: true, csrfToken: res.locals.csrfToken || '' }, (err, html2) => {
       if (err) { console.error(err); }
       postsHtml = html2 || '';
       finish();
