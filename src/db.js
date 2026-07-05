@@ -116,6 +116,7 @@ try { db.exec(`ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'default
 try { db.exec(`ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''`); } catch {}
 try { db.exec(`ALTER TABLE messages ADD COLUMN key_for_sender TEXT`); } catch {}
 try { db.exec(`ALTER TABLE messages ADD COLUMN key_for_recipient TEXT`); } catch {}
+try { db.exec(`ALTER TABLE user_public_keys ADD COLUMN encrypted_private_key TEXT`); } catch {}
 
 // ---------- users ----------
 function createUser({ username, passwordHash, displayName }) {
@@ -408,16 +409,20 @@ function markConversationRead(userId, otherId) {
 }
 
 // ---------- E2EE public keys ----------
-function setPublicKey(userId, publicKey) {
+function setPublicKey(userId, publicKey, encryptedPrivateKey) {
   db.prepare(`
-    INSERT INTO user_public_keys (user_id, public_key, created_at)
-    VALUES (?,?,?)
-    ON CONFLICT(user_id) DO UPDATE SET public_key = excluded.public_key, created_at = excluded.created_at
-  `).run(userId, publicKey, Date.now());
+    INSERT INTO user_public_keys (user_id, public_key, encrypted_private_key, created_at)
+    VALUES (?,?,?,?)
+    ON CONFLICT(user_id) DO UPDATE SET public_key = excluded.public_key, encrypted_private_key = COALESCE(excluded.encrypted_private_key, user_public_keys.encrypted_private_key), created_at = excluded.created_at
+  `).run(userId, publicKey, encryptedPrivateKey || null, Date.now());
 }
 function getPublicKey(userId) {
   const row = db.prepare(`SELECT public_key FROM user_public_keys WHERE user_id = ?`).get(userId);
   return row ? row.public_key : null;
+}
+function getEncryptedPrivateKey(userId) {
+  const row = db.prepare(`SELECT encrypted_private_key FROM user_public_keys WHERE user_id = ?`).get(userId);
+  return row ? row.encrypted_private_key : null;
 }
 
 // ---------- theme ----------
@@ -455,7 +460,7 @@ module.exports = {
   // messages
   sendMessage, getConversations, getMessages, countUnreadMessages, markConversationRead,
   // E2EE
-  setPublicKey, getPublicKey,
+  setPublicKey, getPublicKey, getEncryptedPrivateKey,
   // theme
   getUserTheme, setUserTheme,
 };
