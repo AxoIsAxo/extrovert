@@ -4,7 +4,7 @@ const express = require('express');
 const {
   getUserByUsername, getUserById, areMutualFollowers,
   sendMessage, getConversations, getMessages, markConversationRead,
-  createNotification,
+  createNotification, setPublicKey, getPublicKey,
 } = require('../db');
 
 const router = express.Router();
@@ -32,8 +32,19 @@ router.get('/:username', (req, res) => {
     return res.status(403).send('You can only message mutual followers.');
   }
   const messages = getMessages(user.id, other.id);
+  const recipientPubKey = getPublicKey(other.id);
   markConversationRead(user.id, other.id);
-  res.render('chat', { other, messages });
+  res.render('chat', { other, messages, recipientPubKey });
+});
+
+// Upload public key.
+router.post('/pubkey', express.json(), (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.status(401).send('Unauthorized');
+  const pem = String(req.body.publicKey || '');
+  if (!pem || pem.length > 5000) return res.status(400).send('Invalid key');
+  setPublicKey(user.id, pem);
+  res.json({ ok: true });
 });
 
 // Send a message.
@@ -44,9 +55,11 @@ router.post('/:username/send', (req, res) => {
   if (!other || !areMutualFollowers(user.id, other.id)) {
     return res.redirect(back(req, '/chats'));
   }
-  const body = String(req.body.body || '').trim().slice(0, 2000);
+  const body = String(req.body.body || '').trim().slice(0, 5000);
+  const keyForSender = String(req.body.key_for_sender || '').trim() || null;
+  const keyForRecipient = String(req.body.key_for_recipient || '').trim() || null;
   if (body) {
-    sendMessage(user.id, other.id, body);
+    sendMessage(user.id, other.id, body, keyForSender, keyForRecipient);
     createNotification({ userId: other.id, type: 'message', actorId: user.id });
   }
   res.redirect('/chats/' + other.username);

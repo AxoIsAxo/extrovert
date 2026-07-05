@@ -13,15 +13,18 @@
       <div class="center muted" style="padding:2rem">No messages yet. Say hello!</div>
     <% } else { %>
       <% messages.forEach(function(m){ %>
-        <div class="chat-msg <%= m.from_id === currentUser.id ? 'own' : '' %>">
-          <div class="chat-bubble"><%= m.body %></div>
+        <div class="chat-msg <%= m.from_id === currentUser.id ? 'own' : '' %>"
+             data-body="<%= m.body %>"
+             data-key-sender="<%= m.key_for_sender || '' %>"
+             data-key-recipient="<%= m.key_for_recipient || '' %>">
+          <div class="chat-bubble"><%= m.key_for_sender ? '🔒' : '' %><%= m.body %></div>
           <div class="muted" style="font-size:0.7rem;padding:0 4px"><%= locals.relTime(m.created_at) %></div>
         </div>
       <% }) %>
     <% } %>
   </div>
 
-  <form class="chat-form" method="post" action="/chats/<%= other.username %>/send">
+  <form class="chat-form" method="post" action="/chats/<%= other.username %>/send" data-pubkey="<%= recipientPubKey || '' %>">
     <input type="text" name="body" placeholder="Type a message…" maxlength="2000" required autofocus>
     <button>Send</button>
   </form>

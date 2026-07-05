@@ -100,6 +100,12 @@ function init() {
     );
     CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(from_id, to_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_messages_unread ON messages(to_id, read, created_at);
+
+    CREATE TABLE IF NOT EXISTS user_public_keys (
+      user_id    INTEGER PRIMARY KEY REFERENCES users(id),
+      public_key TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
   `);
 }
 
@@ -108,6 +114,8 @@ init();
 // Migrations.
 try { db.exec(`ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'default'`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''`); } catch {}
+try { db.exec(`ALTER TABLE messages ADD COLUMN key_for_sender TEXT`); } catch {}
+try { db.exec(`ALTER TABLE messages ADD COLUMN key_for_recipient TEXT`); } catch {}
 
 // ---------- users ----------
 function createUser({ username, passwordHash, displayName }) {
@@ -343,10 +351,10 @@ function areMutualFollowers(aId, bId) {
 }
 
 // ---------- messages ----------
-function sendMessage(fromId, toId, body) {
+function sendMessage(fromId, toId, body, keyForSender, keyForRecipient) {
   db.prepare(
-    `INSERT INTO messages (from_id, to_id, body, created_at) VALUES (?,?,?,?)`
-  ).run(fromId, toId, body, Date.now());
+    `INSERT INTO messages (from_id, to_id, body, created_at, key_for_sender, key_for_recipient) VALUES (?,?,?,?,?,?)`
+  ).run(fromId, toId, body, Date.now(), keyForSender || null, keyForRecipient || null);
 }
 
 function getConversations(userId) {
@@ -399,6 +407,19 @@ function markConversationRead(userId, otherId) {
   ).run(userId, otherId);
 }
 
+// ---------- E2EE public keys ----------
+function setPublicKey(userId, publicKey) {
+  db.prepare(`
+    INSERT INTO user_public_keys (user_id, public_key, created_at)
+    VALUES (?,?,?)
+    ON CONFLICT(user_id) DO UPDATE SET public_key = excluded.public_key, created_at = excluded.created_at
+  `).run(userId, publicKey, Date.now());
+}
+function getPublicKey(userId) {
+  const row = db.prepare(`SELECT public_key FROM user_public_keys WHERE user_id = ?`).get(userId);
+  return row ? row.public_key : null;
+}
+
 // ---------- theme ----------
 function getUserTheme(userId) {
   const row = db.prepare(`SELECT theme FROM users WHERE id = ?`).get(userId);
@@ -433,6 +454,8 @@ module.exports = {
   areMutualFollowers,
   // messages
   sendMessage, getConversations, getMessages, countUnreadMessages, markConversationRead,
+  // E2EE
+  setPublicKey, getPublicKey,
   // theme
   getUserTheme, setUserTheme,
 };
