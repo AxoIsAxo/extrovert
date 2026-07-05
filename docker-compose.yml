@@ -1,6 +1,6 @@
 services:
   extrovert:
-    build: .
+    image: axoisaxo/extrovert:latest
     restart: unless-stopped
     expose:
       - "3000"
