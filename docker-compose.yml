@@ -11,7 +11,6 @@ services:
       - extrovert_uploads:/app/uploads
     environment:
       - NODE_ENV=production
-      - SESSION_SECRET=${SESSION_SECRET:-change-me-in-portainer}
 
 volumes:
   extrovert_data:
