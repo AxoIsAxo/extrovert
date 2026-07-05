@@ -5,15 +5,6 @@ const { getUserTheme, setUserTheme, getCustomization, setCustomization } = requi
 
 const router = express.Router();
 
-const DARK_HTML = `<div class="ev-banner">
-  <h2>Welcome to my profile</h2>
-  <p>This is my customizable space on Extrovert. I can edit this HTML and the
-  page CSS however I like — no JavaScript allowed.</p>
-</div>
-<div class="ev-posts-wrap">
-  <!--POSTS-->
-</div>`;
-
 const DARK_CSS = `.ev-banner {
   padding: 32px;
   background: #2a2347;
@@ -25,15 +16,6 @@ const DARK_CSS = `.ev-banner {
 .ev-banner h2 { margin: 0 0 8px; color: #fff; }
 .ev-banner p { margin: 0; opacity: .85; }
 .ev-posts-wrap { display: flex; flex-direction: column; gap: 16px; }`;
-
-const NEO_HTML = `<div class="ev-banner">
-  <h2>👋 Welcome to my profile</h2>
-  <p>This is my customizable space on Extrovert. I can edit this HTML and the
-  page CSS however I like — no JavaScript allowed.</p>
-</div>
-<div class="ev-posts-wrap">
-  <!--POSTS-->
-</div>`;
 
 const NEO_CSS = `.ev-banner {
   padding: 32px;
@@ -61,19 +43,13 @@ router.post('/', (req, res) => {
   setUserTheme(user.id, theme);
 
   const custom = getCustomization(user.id);
-  const oldHtml = (custom.html || '').trim();
   const oldCss = (custom.css || '').trim();
 
-  const newHtml = oldHtml === DARK_HTML.trim() ? NEO_HTML
-    : oldHtml === NEO_HTML.trim() ? DARK_HTML
-    : null;
-  const newCss = oldCss === DARK_CSS.trim() ? NEO_CSS
-    : oldCss === NEO_CSS.trim() ? DARK_CSS
-    : null;
+  let newCss = null;
+  if (oldCss === DARK_CSS.trim()) newCss = NEO_CSS;
+  else if (oldCss === NEO_CSS.trim()) newCss = DARK_CSS;
 
-  if (newHtml || newCss) {
-    setCustomization(user.id, newHtml || custom.html, newCss || custom.css);
-  }
+  if (newCss) setCustomization(user.id, custom.html, newCss);
 
   res.redirect('/');
 });
