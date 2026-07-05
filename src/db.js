@@ -89,6 +89,17 @@ function init() {
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, read, created_at);
+
+    CREATE TABLE IF NOT EXISTS messages (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      from_id    INTEGER NOT NULL REFERENCES users(id),
+      to_id      INTEGER NOT NULL REFERENCES users(id),
+      body       TEXT NOT NULL,
+      read       INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(from_id, to_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_messages_unread ON messages(to_id, read, created_at);
   `);
 }
 
@@ -317,6 +328,73 @@ function getFollowing(userId) {
   `).all(userId);
 }
 
+// ---------- mutual follow check ----------
+function areMutualFollowers(aId, bId) {
+  const row = db.prepare(`
+    SELECT 1 FROM follows f1
+    JOIN follows f2 ON f1.follower_id = f2.followee_id AND f1.followee_id = f2.follower_id
+    WHERE f1.follower_id = ? AND f1.followee_id = ?
+  `).get(aId, bId);
+  return !!row;
+}
+
+// ---------- messages ----------
+function sendMessage(fromId, toId, body) {
+  db.prepare(
+    `INSERT INTO messages (from_id, to_id, body, created_at) VALUES (?,?,?,?)`
+  ).run(fromId, toId, body, Date.now());
+}
+
+function getConversations(userId) {
+  return db.prepare(`
+    WITH parts AS (
+      SELECT DISTINCT
+        CASE WHEN from_id = ? THEN to_id ELSE from_id END AS other_id
+      FROM messages
+      WHERE from_id = ? OR to_id = ?
+    )
+    SELECT p.other_id AS id, u.username, u.display_name,
+      (SELECT body FROM messages m
+       WHERE (m.from_id = ? AND m.to_id = p.other_id)
+          OR (m.from_id = p.other_id AND m.to_id = ?)
+       ORDER BY m.created_at DESC LIMIT 1) AS last_message,
+      (SELECT created_at FROM messages m
+       WHERE (m.from_id = ? AND m.to_id = p.other_id)
+          OR (m.from_id = p.other_id AND m.to_id = ?)
+       ORDER BY m.created_at DESC LIMIT 1) AS last_at,
+      (SELECT COUNT(*) FROM messages m
+       WHERE m.to_id = ? AND m.from_id = p.other_id AND m.read = 0) AS unread
+    FROM parts p
+    JOIN users u ON u.id = p.other_id
+    ORDER BY last_at DESC
+  `).all(userId, userId, userId, userId, userId, userId, userId, userId);
+}
+
+function getMessages(userId, otherId, limit = 100) {
+  return db.prepare(`
+    SELECT m.*, u.username, u.display_name
+    FROM messages m
+    JOIN users u ON u.id = m.from_id
+    WHERE (m.from_id = ? AND m.to_id = ?)
+       OR (m.from_id = ? AND m.to_id = ?)
+    ORDER BY m.created_at ASC
+    LIMIT ?
+  `).all(userId, otherId, otherId, userId, limit);
+}
+
+function countUnreadMessages(userId) {
+  const row = db.prepare(
+    `SELECT COUNT(*) AS n FROM messages WHERE to_id = ? AND read = 0`
+  ).get(userId);
+  return row.n;
+}
+
+function markConversationRead(userId, otherId) {
+  db.prepare(
+    `UPDATE messages SET read = 1 WHERE to_id = ? AND from_id = ? AND read = 0`
+  ).run(userId, otherId);
+}
+
 module.exports = {
   db,
   // users
@@ -337,4 +415,8 @@ module.exports = {
   createNotification, getNotifications, countUnreadNotifications, markNotificationsRead,
   // user lists
   getFollowers, getFollowing,
+  // mutual follow
+  areMutualFollowers,
+  // messages
+  sendMessage, getConversations, getMessages, countUnreadMessages, markConversationRead,
 };

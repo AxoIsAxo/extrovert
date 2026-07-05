@@ -1,0 +1,28 @@
+<%- include('partials/header') %>
+  <div class="card" style="display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <a href="/chats" class="muted" style="font-size:0.85rem">← Chats</a>
+      <h2 style="margin:0;font-size:1.2rem"><%= other.display_name %></h2>
+      <small class="muted">@<%= other.username %></small>
+    </div>
+    <a class="btn ghost" href="/u/<%= other.username %>">Profile</a>
+  </div>
+
+  <div class="chat-messages">
+    <% if (messages.length === 0) { %>
+      <div class="center muted" style="padding:2rem">No messages yet. Say hello!</div>
+    <% } else { %>
+      <% messages.forEach(function(m){ %>
+        <div class="chat-msg <%= m.from_id === currentUser.id ? 'own' : '' %>">
+          <div class="chat-bubble"><%= m.body %></div>
+          <div class="muted" style="font-size:0.7rem;padding:0 4px"><%= locals.relTime(m.created_at) %></div>
+        </div>
+      <% }) %>
+    <% } %>
+  </div>
+
+  <form class="chat-form" method="post" action="/chats/<%= other.username %>/send">
+    <input type="text" name="body" placeholder="Type a message…" maxlength="2000" required autofocus>
+    <button>Send</button>
+  </form>
+<%- include('partials/footer') %>
