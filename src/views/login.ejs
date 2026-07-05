@@ -3,10 +3,10 @@
     <h2 style="margin-top:0">Welcome back</h2>
     <% if (error) { %><div class="flash err"><%= error %></div><% } %>
     <form method="post" action="/login<%= next ? '?next=' + encodeURIComponent(next) : '' %>">
-      <label>Username</label>
-      <input type="text" name="username" required autofocus>
-      <label>Password</label>
-      <input type="password" name="password" required>
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" autocomplete="username" required autofocus>
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" autocomplete="current-password" required>
       <input type="hidden" name="next" value="<%= next %>">
       <div style="margin-top:16px"><button class="btn">Log in</button></div>
     </form>
