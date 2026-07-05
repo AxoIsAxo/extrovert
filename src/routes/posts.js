@@ -5,8 +5,9 @@ const multer = require('multer');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const {
-  createPost, getPostById, toggleLike, addComment, sharePost,
-  hasReposted, recordFollowFromPost,
+  db, createPost, getPostById, getDisplayPost, getUserById,
+  toggleLike, addComment, commentsForPost, hasLiked, hasShared,
+  sharePost, hasReposted, recordFollowFromPost, isFollowing,
 } = require('../db');
 const { canView } = require('../network');
 
@@ -93,12 +94,42 @@ router.post('/:id/comment', (req, res) => {
   res.redirect(back(req, '/'));
 });
 
+// View a single post (shareable link).
+router.get('/:id', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.redirect('/login');
+  const post = getPostById(Number(req.params.id));
+  if (!post) return res.status(404).render('404', { thing: 'post' });
+  const content = post.type === 'repost' && post.repost_of_id
+    ? getPostById(post.repost_of_id) || post
+    : post;
+  if (!canView(user.id, content.user_id)) return res.redirect('/');
+  const interactId = content.id;
+  const author = getUserById(content.user_id);
+  const reposter = post.type === 'repost' ? getUserById(post.user_id) : null;
+  const item = {
+    id: post.id, interactId,
+    type: content.type, body: content.body, mediaPath: content.media_path,
+    createdAt: post.created_at,
+    isRepost: post.type === 'repost',
+    reposterName: reposter?.display_name, reposterUsername: reposter?.username,
+    authorId: author.id, authorUsername: author.username, authorName: author.display_name,
+    likeCount: +db.prepare(`SELECT COUNT(*) FROM likes WHERE post_id = ?`).get(interactId)['COUNT(*)'],
+    shareCount: +db.prepare(`SELECT COUNT(*) FROM shares WHERE post_id = ?`).get(interactId)['COUNT(*)'],
+    commentCount: commentsForPost(interactId).length,
+    liked: hasLiked(user.id, interactId), shared: hasShared(user.id, interactId),
+    followingAuthor: isFollowing(user.id, author.id), isOwn: author.id === user.id,
+    comments: commentsForPost(interactId),
+  };
+  res.render('post', { item });
+});
+
 // Share (engagement boost, a little more than like).
 router.post('/:id/share', (req, res) => {
   const ctx = resolveVisibleContent(req, res);
   if (!ctx) return res.redirect(back(req, '/'));
   if (ctx.content.user_id !== ctx.user.id) sharePost(ctx.user.id, ctx.content.id);
-  res.redirect(back(req, '/'));
+  res.redirect('/posts/' + ctx.content.id);
 });
 
 // Repost: re-publish the original content into your own stream.
