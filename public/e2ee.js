@@ -46,12 +46,22 @@
       }).then(function (encPriv) {
         return fetch(PUBKEY_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: csrfHeaders(),
           body: JSON.stringify({ publicKey: myPublicKeyPem, encryptedPrivateKey: encPriv }),
           credentials: 'same-origin'
         });
       });
     });
+  }
+
+  /* ---- Read CSRF token from page meta ---- */
+  function csrfToken() {
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.getAttribute('content') : '';
+  }
+
+  function csrfHeaders() {
+    return { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() };
   }
 
   /* ---- Fetch keys from server, unwrap private key with KEK ---- */
