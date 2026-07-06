@@ -20,7 +20,11 @@ function init() {
       password_hash TEXT NOT NULL,
       display_name  TEXT NOT NULL,
       bio           TEXT NOT NULL DEFAULT '',
-      created_at    INTEGER NOT NULL
+      created_at    INTEGER NOT NULL,
+      theme         TEXT NOT NULL DEFAULT 'default',
+      referral_code TEXT,
+      referred_by  INTEGER REFERENCES users(id),
+      referrer_ip   TEXT
     );
 
     CREATE TABLE IF NOT EXISTS follows (
@@ -118,7 +122,7 @@ try { db.exec(`ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''`); } ca
 try { db.exec(`ALTER TABLE messages ADD COLUMN key_for_sender TEXT`); } catch {}
 try { db.exec(`ALTER TABLE messages ADD COLUMN key_for_recipient TEXT`); } catch {}
 try { db.exec(`ALTER TABLE user_public_keys ADD COLUMN encrypted_private_key TEXT`); } catch {}
-try { db.exec(`ALTER TABLE users ADD COLUMN referral_code TEXT UNIQUE`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN referral_code TEXT`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN referred_by INTEGER REFERENCES users(id)`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN referrer_ip TEXT`); } catch {}
 
