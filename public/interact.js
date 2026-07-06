@@ -9,9 +9,9 @@ document.addEventListener('DOMContentLoaded', function(){
     var m = action.match(/^\/posts\/(\d+)\/(like|share|repost|follow-from|comment|delete)$/);
     var chatM = action.match(/^\/chats\/([^/]+)\/send$/);
     if (!m && !chatM) return;
-    e.preventDefault();
 
     if (chatM) {
+      e.preventDefault();
       var chatMsgDiv = document.querySelector('.chat-messages');
       if (!chatMsgDiv) return;
       var input = form.querySelector('input[name="body"]');
@@ -38,6 +38,7 @@ document.addEventListener('DOMContentLoaded', function(){
     var postId = m[1], verb = m[2];
     var postEl = form.closest('.post');
     if (!postEl) return;
+    e.preventDefault();
 
     var body = {};
     if (verb === 'comment') {
