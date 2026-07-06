@@ -12,8 +12,6 @@ document.addEventListener('DOMContentLoaded', function(){
     e.preventDefault();
 
     if (chatM) {
-      // If E2EE is active (data-pubkey set), e2ee.js handles it.
-      if (form.hasAttribute('data-pubkey')) return;
       var chatMsgDiv = document.querySelector('.chat-messages');
       if (!chatMsgDiv) return;
       var input = form.querySelector('input[name="body"]');
