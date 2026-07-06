@@ -7,29 +7,30 @@
         var btn = this;
         if(navigator.clipboard){
           navigator.clipboard.writeText(url).then(function(){
+            var orig = btn.textContent;
             btn.textContent = 'Copied!';
-            setTimeout(function(){btn.textContent='Copy Referral'},2000);
-          }).catch(function(e){
-            fallback(url,btn);
+            setTimeout(function(){btn.textContent=orig},2000);
+          }).catch(function(){
+            showInput(btn, url);
           });
         } else {
-          fallback(url,btn);
+          showInput(btn, url);
         }
       });
     }
-    function fallback(text,btn){
-      var ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.left = '-9999px';
-      ta.style.top = '-9999px';
-      document.body.appendChild(ta);
-      ta.focus();
-      ta.select();
-      try { document.execCommand('copy'); } catch(e){ console.error('copy fallback failed',e); }
-      document.body.removeChild(ta);
-      btn.textContent = 'Copied!';
-      setTimeout(function(){btn.textContent='Copy Referral'},2000);
+    function showInput(btn, url){
+      var parent = btn.parentNode;
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.value = url;
+      input.readOnly = true;
+      input.className = 'copy-input-fallback';
+      parent.replaceChild(input, btn);
+      input.focus();
+      input.select();
+      setTimeout(function(){
+        parent.replaceChild(btn, input);
+      }, 5000);
     }
   });
 })();
