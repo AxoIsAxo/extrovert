@@ -54,6 +54,10 @@ function back(req, fallback = '/') {
 router.post('/', upload.single('media'), (req, res) => {
   const user = res.locals.currentUser;
   if (!user) return res.redirect('/login');
+  const token = req.body._csrf || req.headers['x-csrf-token'];
+  if (!token || token !== req.session.csrfToken) {
+    return res.status(403).send('CSRF validation failed');
+  }
   const type = req.body.type;
   const body = String(req.body.body || '').trim();
 

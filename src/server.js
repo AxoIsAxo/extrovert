@@ -97,17 +97,24 @@ app.use((req, res, next) => {
 app.use((req, res, next) => {
   if (!req.session.csrfToken) {
     req.session.csrfToken = crypto.randomBytes(32).toString('hex');
+    console.log('CSRF: generated new token for session', req.sessionID, req.session.csrfToken);
   }
   res.locals.csrfToken = req.session.csrfToken;
 
-  // Skip CSRF check for multipart uploads — multer parses body later in the route.
-  if (req.method === 'POST' && (req.path === '/stickers/upload' || req.path.startsWith('/stickers/upload'))) {
+  // Skip CSRF check for multipart forms — multer parses body later in the route.
+  if (req.method === 'POST' && (
+    req.path === '/stickers/upload' ||
+    req.path.startsWith('/stickers/upload') ||
+    req.path === '/posts'
+  )) {
     return next();
   }
 
   if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH' || req.method === 'DELETE') {
-    const token = req.body._csrf || req.headers['x-csrf-token'];
+    const bodyToken = req.body && req.body._csrf;
+    const token = bodyToken || req.headers['x-csrf-token'];
     if (!token || token !== req.session.csrfToken) {
+      console.log('CSRF FAIL', req.method, req.path, 'sessionToken:', req.session.csrfToken, 'received:', token, 'bodyType:', typeof req.body, 'bodyToken:', bodyToken, 'cookie:', req.headers.cookie ? req.headers.cookie.substring(0, 50) : 'none');
       return res.status(403).send('CSRF validation failed');
     }
   }
