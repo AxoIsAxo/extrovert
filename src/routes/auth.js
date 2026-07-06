@@ -31,24 +31,21 @@ router.post('/register', async (req, res) => {
   // Handle referral.
   const ref = String(req.body.ref || req.query.ref || '').trim();
   let referredBy = null;
-  let referrerIp = null;
+  const registrantIp = req.ip || req.connection.remoteAddress;
   if (ref) {
     const referrer = getUserByReferralCode(ref);
     if (referrer) {
-      const registrantIp = req.ip || req.connection.remoteAddress;
       const refIp = db.getReferrerIp ? db.getReferrerIp(referrer.id) : null;
-      // Anti-farming: reject if same IP as referrer's registration IP.
+      // Anti-farming: reject if same IP as referrer's stored IP.
       if (refIp && registrantIp === refIp) {
         return res.render('register', { error: 'Referral link cannot be used from the same network.', ref });
       }
-      // Reject if registrant already used a referral.
       referredBy = referrer.id;
-      referrerIp = registrantIp;
     }
   }
 
   const hash = bcrypt.hashSync(password, 10);
-  const id = createUser({ username, passwordHash: hash, displayName, referredBy, referrerIp });
+  const id = createUser({ username, passwordHash: hash, displayName, referredBy, referrerIp: registrantIp });
   req.session.userId = id;
   res.redirect('/');
 });
@@ -69,6 +66,8 @@ router.post('/login', (req, res) => {
     return res.render('login', { error: 'Invalid username or password.', next: req.query.next || '' });
   }
   req.session.userId = user.id;
+  const loginIp = req.ip || req.connection.remoteAddress;
+  try { db.db.prepare(`UPDATE users SET referrer_ip = ? WHERE id = ?`).run(loginIp, user.id); } catch {}
   res.safeRedirect(req.body.next, '/');
 });
 
