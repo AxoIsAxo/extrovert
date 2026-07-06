@@ -67,11 +67,11 @@ app.use(session({
 // Auth rate limiter (login + register).
 const authLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 10,
+  max: 30,
   standardHeaders: true,
   legacyHeaders: false,
   validate: { xForwardedForHeader: false },
-  message: 'Too many authentication attempts, please try again later.',
+  message: 'Too many authentication attempts. Try again in a minute.',
 });
 app.use('/login', authLimiter);
 app.use('/register', authLimiter);
