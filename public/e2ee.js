@@ -191,6 +191,23 @@
     }).then(function (plain) { return new TextDecoder().decode(plain); });
   }
 
+  /* ---- Append a message bubble (mirrors interact.js addChatMessage) ---- */
+  function addChatMsg(container, msg) {
+    var div = document.createElement('div');
+    div.className = 'chat-msg own';
+    var bubble = document.createElement('div');
+    bubble.className = 'chat-bubble';
+    bubble.appendChild(document.createTextNode('🔒' + msg.body));
+    div.appendChild(bubble);
+    var time = document.createElement('div');
+    time.className = 'muted';
+    time.style.cssText = 'font-size:0.7rem;padding:0 4px';
+    time.textContent = window.relTime ? window.relTime(msg.created_at) : new Date(msg.created_at).toLocaleString();
+    div.appendChild(time);
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+  }
+
   /* ---- Init on every page load ---- */
   document.addEventListener('DOMContentLoaded', function () {
     interceptLoginForm();
@@ -217,23 +234,30 @@
       var recipientPem = sendForm ? sendForm.getAttribute('data-pubkey') : null;
       if (sendForm && recipientPem) {
         sendForm.addEventListener('submit', function (e) {
+          e.stopImmediatePropagation();
           e.preventDefault();
           var input = sendForm.querySelector('input[name="body"]');
           var plaintext = input.value.trim();
           if (!plaintext) return;
           input.disabled = true;
+          var chatMsgDiv = document.querySelector('.chat-messages');
           encryptMessage(plaintext, recipientPem).then(function (result) {
-            sendForm.querySelector('input[name="body"]').removeAttribute('name');
-            var ef = document.createElement('input');
-            ef.type = 'hidden'; ef.name = 'body'; ef.value = result.body;
-            sendForm.appendChild(ef);
-            var kfr = document.createElement('input');
-            kfr.type = 'hidden'; kfr.name = 'key_for_recipient'; kfr.value = result.keyForRecipient;
-            sendForm.appendChild(kfr);
-            var kfs = document.createElement('input');
-            kfs.type = 'hidden'; kfs.name = 'key_for_sender'; kfs.value = result.keyForSender;
-            sendForm.appendChild(kfs);
-            sendForm.submit();
+            var usp = new URLSearchParams(Array.from(new FormData(sendForm)));
+            usp.set('body', result.body);
+            usp.set('key_for_sender', result.keyForSender);
+            usp.set('key_for_recipient', result.keyForRecipient);
+            fetch(sendForm.getAttribute('action'), {
+              method: 'POST',
+              headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': csrfToken() },
+              body: usp,
+            }).then(function (r) { return r.json(); }).then(function (data) {
+              if (data.error) return;
+              if (data.message && chatMsgDiv) {
+                addChatMsg(chatMsgDiv, data.message);
+              }
+              input.value = '';
+              input.disabled = false;
+            }).catch(function () { input.disabled = false; });
           }).catch(function (err) {
             console.error('E2EE encrypt error', err);
             input.disabled = false;

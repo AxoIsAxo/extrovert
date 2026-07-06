@@ -12,17 +12,17 @@ document.addEventListener('DOMContentLoaded', function(){
     e.preventDefault();
 
     if (chatM) {
-      var otherUsername = chatM[1];
+      // If E2EE is active (data-pubkey set), e2ee.js handles it.
+      if (form.hasAttribute('data-pubkey')) return;
       var chatMsgDiv = document.querySelector('.chat-messages');
       if (!chatMsgDiv) return;
       var input = form.querySelector('input[name="body"]');
       if (!input || !input.value.trim()) return;
 
-      var fd = new FormData(form);
       fetch(action, {
         method: 'POST',
         headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': csrfToken },
-        body: fd,
+        body: new URLSearchParams(Array.from(new FormData(form))),
       })
       .then(function(r){ return r.json(); })
       .then(function(data){
