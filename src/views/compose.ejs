@@ -25,15 +25,5 @@
     </form>
   </div>
 
-  <script>
-    const tabs = document.querySelectorAll('#typeTabs button');
-    const field = document.getElementById('typeField');
-    const wrap = document.getElementById('mediaWrap');
-    tabs.forEach(b => b.addEventListener('click', () => {
-      tabs.forEach(x => x.classList.remove('active'));
-      b.classList.add('active');
-      field.value = b.dataset.type;
-      wrap.style.display = (b.dataset.type === 'text') ? 'none' : 'block';
-    }));
-  </script>
+  <script src="/static/compose.js?v=1"></script>
 <%- include('partials/footer') %>
