@@ -129,6 +129,8 @@ try { db.exec(`ALTER TABLE users ADD COLUMN referred_by INTEGER REFERENCES users
 try { db.exec(`ALTER TABLE users ADD COLUMN referrer_ip TEXT`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN banned INTEGER NOT NULL DEFAULT 0`); } catch {}
+// Fix stale referred_by links for users whose referrer no longer has a referral code.
+db.prepare(`UPDATE users SET referred_by = NULL WHERE referred_by IS NOT NULL AND referred_by IN (SELECT id FROM users WHERE referral_code IS NULL)`).run();
 
 // ---------- users ----------
 function adminExists() {
