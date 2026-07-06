@@ -25,7 +25,8 @@ function init() {
       referral_code TEXT,
       referred_by  INTEGER REFERENCES users(id),
       referrer_ip   TEXT,
-      is_admin     INTEGER NOT NULL DEFAULT 0
+      is_admin     INTEGER NOT NULL DEFAULT 0,
+      banned       INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS follows (
@@ -127,6 +128,7 @@ try { db.exec(`ALTER TABLE users ADD COLUMN referral_code TEXT`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN referred_by INTEGER REFERENCES users(id)`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN referrer_ip TEXT`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN banned INTEGER NOT NULL DEFAULT 0`); } catch {}
 
 // ---------- users ----------
 function adminExists() {
@@ -486,8 +488,16 @@ function deleteUser(userId) {
 }
 
 // ---------- admin ----------
+function banUser(userId) {
+  db.prepare(`UPDATE users SET banned = 1 WHERE id = ?`).run(userId);
+}
+
+function unbanUser(userId) {
+  db.prepare(`UPDATE users SET banned = 0 WHERE id = ?`).run(userId);
+}
+
 function getAllUsers() {
-  return db.prepare(`SELECT id, username, display_name, referral_code, created_at, is_admin, (SELECT COUNT(*) FROM users WHERE referred_by = users.id) AS referral_count FROM users ORDER BY created_at ASC`).all();
+  return db.prepare(`SELECT id, username, display_name, referral_code, created_at, is_admin, banned, (SELECT COUNT(*) FROM users WHERE referred_by = users.id) AS referral_count FROM users ORDER BY created_at ASC`).all();
 }
 
 function promoteUser(userId) {
@@ -569,7 +579,7 @@ module.exports = {
   // E2EE
   setPublicKey, getPublicKey, getEncryptedPrivateKey,
   // admin
-  adminExists, getAllUsers, promoteUser, removeReferralBadge,
+  adminExists, getAllUsers, promoteUser, removeReferralBadge, banUser, unbanUser,
   // referrals
   setReferralCode, getUserByReferralCode, getReferralCount, getReferralCode, getReferrerIp,
   // theme

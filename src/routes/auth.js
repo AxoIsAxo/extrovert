@@ -66,6 +66,9 @@ router.post('/login', (req, res) => {
   if (!user || !bcrypt.compareSync(password, user.password_hash)) {
     return res.render('login', { error: 'Invalid username or password.', next: req.query.next || '' });
   }
+  if (user.banned) {
+    return res.render('login', { error: 'Your account has been suspended.', next: req.query.next || '' });
+  }
   req.session.userId = user.id;
   const loginIp = req.ip || req.connection.remoteAddress;
   try { db.db.prepare(`UPDATE users SET referrer_ip = ? WHERE id = ?`).run(loginIp, user.id); } catch {}

@@ -1,14 +1,14 @@
 <%- include('partials/header') %>
-  <div class="card" style="max-width:700px;margin:0 auto">
+  <div class="card" style="max-width:800px;margin:0 auto">
     <h2>Admin panel</h2>
-    <table style="width:100%;border-collapse:collapse;font-size:14px">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead>
         <tr style="text-align:left;border-bottom:2px solid var(--border)">
           <th style="padding:8px 4px">User</th>
-          <th style="padding:8px 4px">Referrals</th>
-          <th style="padding:8px 4px">Badge</th>
-          <th style="padding:8px 4px">Admin</th>
-          <th style="padding:8px 4px">Action</th>
+          <th style="padding:8px 4px">Referred</th>
+          <th style="padding:8px 4px">★</th>
+          <th style="padding:8px 4px">Status</th>
+          <th style="padding:8px 4px">Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -20,13 +20,32 @@
             </td>
             <td style="padding:8px 4px"><%= u.referral_count %></td>
             <td style="padding:8px 4px"><%= u.referral_code ? '★' : '—' %></td>
-            <td style="padding:8px 4px"><%= u.is_admin ? '✓' : '' %></td>
             <td style="padding:8px 4px">
-              <% if (u.referral_code && !u.is_admin) { %>
-                <form method="post" action="/admin/remove-referral/<%= u.id %>" style="margin:0">
+              <% if (u.banned) { %><span style="color:var(--danger)">Banned</span><% } else if (u.is_admin) { %><span style="color:var(--accent)">Admin</span><% } else { %><span class="muted">Active</span><% } %>
+            </td>
+            <td style="padding:8px 4px;white-space:nowrap">
+              <% if (!u.is_admin) { %>
+                <form method="post" action="/admin/delete/<%= u.id %>" style="display:inline;margin:0" onsubmit="return confirm('Delete <%= u.display_name %> permanently?')">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                  <button class="btn ghost" style="font-size:12px;padding:4px 10px">Remove badge</button>
+                  <button class="btn ghost" style="font-size:12px;padding:2px 8px;color:var(--danger)">Delete</button>
                 </form>
+                <% if (u.banned) { %>
+                  <form method="post" action="/admin/unban/<%= u.id %>" style="display:inline;margin:0">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <button class="btn ghost" style="font-size:12px;padding:2px 8px">Unban</button>
+                  </form>
+                <% } else { %>
+                  <form method="post" action="/admin/ban/<%= u.id %>" style="display:inline;margin:0">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <button class="btn ghost" style="font-size:12px;padding:2px 8px">Ban</button>
+                  </form>
+                <% } %>
+                <% if (u.referral_code) { %>
+                  <form method="post" action="/admin/remove-referral/<%= u.id %>" style="display:inline;margin:0">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <button class="btn ghost" style="font-size:12px;padding:2px 8px">Remove ★</button>
+                  </form>
+                <% } %>
               <% } else { %>
                 <span class="muted">—</span>
               <% } %>

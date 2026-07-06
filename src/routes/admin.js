@@ -1,7 +1,7 @@
 'use strict';
 
 const express = require('express');
-const { getAllUsers, removeReferralBadge, getUserById } = require('../db');
+const { getAllUsers, getUserById, removeReferralBadge, banUser, unbanUser, deleteUser } = require('../db');
 
 const router = express.Router();
 
@@ -20,6 +20,29 @@ router.post('/remove-referral/:id', requireAdmin, (req, res) => {
   const target = getUserById(Number(req.params.id));
   if (!target) return res.status(404).send('User not found');
   removeReferralBadge(target.id);
+  res.redirect('/admin');
+});
+
+router.post('/ban/:id', requireAdmin, (req, res) => {
+  const target = getUserById(Number(req.params.id));
+  if (!target) return res.status(404).send('User not found');
+  if (target.is_admin) return res.status(403).send('Cannot ban another admin.');
+  banUser(target.id);
+  res.redirect('/admin');
+});
+
+router.post('/unban/:id', requireAdmin, (req, res) => {
+  const target = getUserById(Number(req.params.id));
+  if (!target) return res.status(404).send('User not found');
+  unbanUser(target.id);
+  res.redirect('/admin');
+});
+
+router.post('/delete/:id', requireAdmin, (req, res) => {
+  const target = getUserById(Number(req.params.id));
+  if (!target) return res.status(404).send('User not found');
+  if (target.is_admin) return res.status(403).send('Cannot delete another admin.');
+  deleteUser(target.id);
   res.redirect('/admin');
 });
 
