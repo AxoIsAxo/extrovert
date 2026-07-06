@@ -28,6 +28,9 @@ fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 // View engine.
 app.set('view engine', 'ejs');
+
+// Favicon (suppress 404 noise in console).
+app.get('/favicon.ico', (req, res) => res.status(204).end());
 app.set('views', path.join(__dirname, 'views'));
 app.set('trust proxy', 1);
 

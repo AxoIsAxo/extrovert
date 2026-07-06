@@ -23,21 +23,6 @@ router.get('/', (req, res) => {
   res.render('chats', { conversations });
 });
 
-// Conversation with a specific user.
-router.get('/:username', (req, res) => {
-  const user = res.locals.currentUser;
-  if (!user) return res.redirect('/login');
-  const other = getUserByUsername(req.params.username);
-  if (!other) return res.status(404).render('404', { thing: 'user' });
-  if (!areMutualFollowers(user.id, other.id)) {
-    return res.status(403).send('You can only message mutual followers.');
-  }
-  const messages = getMessages(user.id, other.id);
-  const recipientPubKey = getPublicKey(other.id);
-  markConversationRead(user.id, other.id);
-  res.render('chat', { other, messages, recipientPubKey });
-});
-
 // Download encrypted private key for the current user.
 router.get('/keys', (req, res) => {
   const user = res.locals.currentUser;
@@ -57,6 +42,21 @@ router.post('/pubkey', express.json(), (req, res) => {
   if (!pem || pem.length > 5000) return res.status(400).send('Invalid key');
   setPublicKey(user.id, pem, encPriv);
   res.json({ ok: true });
+});
+
+// Conversation with a specific user.
+router.get('/:username', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.redirect('/login');
+  const other = getUserByUsername(req.params.username);
+  if (!other) return res.status(404).render('404', { thing: 'user' });
+  if (!areMutualFollowers(user.id, other.id)) {
+    return res.status(403).send('You can only message mutual followers.');
+  }
+  const messages = getMessages(user.id, other.id);
+  const recipientPubKey = getPublicKey(other.id);
+  markConversationRead(user.id, other.id);
+  res.render('chat', { other, messages, recipientPubKey });
 });
 
 // Send a message.
