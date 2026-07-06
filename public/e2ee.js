@@ -184,8 +184,27 @@
     }).then(function (plain) { return new TextDecoder().decode(plain); });
   }
 
+  /* ---- Clipboard fallback for copy-ref buttons ---- */
+  function copyToClip(text, btn) {
+    function done() { btn.textContent = 'Copied!'; setTimeout(function(){ btn.textContent = 'Copy Referral'; }, 2000); }
+    function fallback() {
+      var i = document.createElement('input');
+      i.value = text; document.body.appendChild(i); i.select();
+      document.execCommand('copy'); document.body.removeChild(i);
+      done();
+    }
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(done).catch(fallback);
+    } else { fallback(); }
+  }
+
   /* ---- Init on every page load ---- */
   document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.copy-ref').forEach(function(b){
+      b.addEventListener('click', function(e){
+        copyToClip(this.getAttribute('data-link'), this);
+      });
+    });
     interceptLoginForm();
     interceptRegisterForm();
 
