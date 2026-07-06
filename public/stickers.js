@@ -1,4 +1,8 @@
 document.addEventListener('DOMContentLoaded', function(){
+  var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+  var csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
+
+  // Sticker picker in comment/chat forms.
   var pickers = document.querySelectorAll('.sticker-btn');
   pickers.forEach(function(btn){
     btn.addEventListener('click', function(e){
@@ -54,4 +58,32 @@ document.addEventListener('DOMContentLoaded', function(){
       }
     });
   });
+
+  // Click any sticker to add to your collection.
+  document.querySelectorAll('.sticker-inline').forEach(function(img){
+    img.addEventListener('click', function(e){
+      e.stopPropagation();
+      var path = img.getAttribute('src');
+      if (!path) return;
+      fetch('/stickers/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ path: path }),
+      }).then(function(r){
+        if (r.ok) showToast('Sticker added!');
+        else showToast('Failed to add sticker');
+      }).catch(function(){
+        showToast('Failed to add sticker');
+      });
+    });
+  });
+
+  function showToast(msg){
+    var el = document.createElement('div');
+    el.textContent = msg;
+    el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:8px 16px;border-radius:8px;font-size:14px;z-index:9999;opacity:0;transition:opacity .3s';
+    document.body.appendChild(el);
+    requestAnimationFrame(function(){ el.style.opacity = '1'; });
+    setTimeout(function(){ el.style.opacity = '0'; setTimeout(function(){ el.remove(); }, 300); }, 1500);
+  }
 });

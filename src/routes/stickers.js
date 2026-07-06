@@ -76,4 +76,16 @@ router.get('/manage', (req, res) => {
   res.render('stickers', { stickers });
 });
 
+router.post('/add', (req, res) => {
+  if (!res.locals.currentUser) return res.status(401).send('Not logged in');
+  const filePath = String(req.body.path || '').trim();
+  if (!filePath.startsWith('/uploads/stickers/')) return res.status(400).send('Invalid sticker.');
+  // Don't duplicate.
+  const existing = getMyStickers(res.locals.currentUser.id).filter(s => s.file_path === filePath);
+  if (existing.length === 0) {
+    addSticker(res.locals.currentUser.id, filePath);
+  }
+  res.json({ ok: true });
+});
+
 module.exports = router;
