@@ -33,7 +33,7 @@
   function wrapPrivateKey(privateKey, kek) {
     var iv = crypto.getRandomValues(new Uint8Array(12));
     return crypto.subtle.wrapKey('pkcs8', privateKey, kek, { name: 'AES-GCM', iv: iv }).then(function (wrapped) {
-      var combined = new Uint8Array(iv.length + wrapped.length);
+      var combined = new Uint8Array(iv.length + wrapped.byteLength);
       combined.set(iv);
       combined.set(new Uint8Array(wrapped), iv.length);
       return uint8ArrayToBase64(combined);
@@ -150,7 +150,7 @@
       iv = crypto.getRandomValues(new Uint8Array(12));
       return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, aesKey, new TextEncoder().encode(plaintext));
     }).then(function (ciphertext) {
-      var bodyArr = new Uint8Array(iv.length + ciphertext.length);
+      var bodyArr = new Uint8Array(iv.length + ciphertext.byteLength);
       bodyArr.set(iv);
       bodyArr.set(new Uint8Array(ciphertext), iv.length);
       var bodyB64 = uint8ArrayToBase64(bodyArr);
