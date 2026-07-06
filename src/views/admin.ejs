@@ -19,7 +19,7 @@
               <small class="muted">@<%= u.username %></small>
             </td>
             <td style="padding:8px 4px"><%= u.referral_count %></td>
-            <td style="padding:8px 4px"><%= u.referral_code ? '★' : '—' %></td>
+            <td style="padding:8px 4px"><%= u.referral_count > 0 ? '★' : '—' %></td>
             <td style="padding:8px 4px">
               <% if (u.banned) { %><span style="color:var(--danger)">Banned</span><% } else if (u.is_admin) { %><span style="color:var(--accent)">Admin</span><% } else { %><span class="muted">Active</span><% } %>
             </td>
@@ -41,13 +41,13 @@
                   </form>
                 <% } %>
               <% } %>
-              <% if (u.referral_code) { %>
+              <% if (u.referral_count > 0) { %>
                 <form method="post" action="/admin/remove-referral/<%= u.id %>" style="display:inline;margin:0">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                   <button class="btn ghost" style="font-size:12px;padding:2px 8px">Remove ★</button>
                 </form>
               <% } %>
-              <% if (u.is_admin && !u.referral_code) { %>
+              <% if (u.is_admin && u.referral_count === 0) { %>
                 <span class="muted">—</span>
               <% } %>
             </td>
