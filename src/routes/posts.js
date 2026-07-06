@@ -92,23 +92,28 @@ function resolveVisibleContent(req, res) {
 // Like (toggle).
 router.post('/:id/like', (req, res) => {
   const ctx = resolveVisibleContent(req, res);
-  if (!ctx) return res.redirect(back(req, '/'));
+  if (!ctx) return req.xhr ? res.json({ error: 'not found' }) : res.redirect(back(req, '/'));
   const liked = toggleLike(ctx.user.id, ctx.content.id);
   if (liked && ctx.content.user_id !== ctx.user.id) {
     createNotification({ userId: ctx.content.user_id, type: 'like', actorId: ctx.user.id, postId: ctx.content.id });
   }
+  if (req.xhr) return res.json({ liked, likeCount: +db.prepare(`SELECT COUNT(*) FROM likes WHERE post_id = ?`).get(ctx.content.id)['COUNT(*)'] });
   res.redirect(back(req, '/'));
 });
 
 // Comment.
 router.post('/:id/comment', (req, res) => {
   const ctx = resolveVisibleContent(req, res);
-  if (!ctx) return res.redirect(back(req, '/'));
+  if (!ctx) return req.xhr ? res.json({ error: 'not found' }) : res.redirect(back(req, '/'));
   const body = String(req.body.body || '').trim();
   if (body) {
-    addComment(ctx.user.id, ctx.content.id, body.slice(0, 1000));
+    const commentId = addComment(ctx.user.id, ctx.content.id, body.slice(0, 1000));
     if (ctx.content.user_id !== ctx.user.id) {
       createNotification({ userId: ctx.content.user_id, type: 'comment', actorId: ctx.user.id, postId: ctx.content.id });
+    }
+    if (req.xhr) {
+      const c = db.prepare(`SELECT c.id, c.body, c.created_at, u.display_name, u.username FROM comments c JOIN users u ON u.id = c.user_id WHERE c.id = ?`).get(commentId);
+      return res.json({ comment: c });
     }
   }
   res.redirect(back(req, '/'));
@@ -147,32 +152,36 @@ router.get('/:id', (req, res) => {
 // Share (engagement boost, a little more than like).
 router.post('/:id/share', (req, res) => {
   const ctx = resolveVisibleContent(req, res);
-  if (!ctx) return res.redirect(back(req, '/'));
+  if (!ctx) return req.xhr ? res.json({ error: 'not found' }) : res.redirect(back(req, '/'));
   if (ctx.content.user_id !== ctx.user.id) {
     sharePost(ctx.user.id, ctx.content.id);
     createNotification({ userId: ctx.content.user_id, type: 'share', actorId: ctx.user.id, postId: ctx.content.id });
   }
+  const shareCount = +db.prepare(`SELECT COUNT(*) FROM shares WHERE post_id = ?`).get(ctx.content.id)['COUNT(*)'];
+  if (req.xhr) return res.json({ shared: true, shareCount });
   res.redirect('/posts/' + ctx.content.id);
 });
 
 // Repost: re-publish the original content into your own stream.
 router.post('/:id/repost', (req, res) => {
   const ctx = resolveVisibleContent(req, res);
-  if (!ctx) return res.redirect(back(req, '/'));
-  if (ctx.content.user_id === ctx.user.id) return res.redirect(back(req, '/'));
+  if (!ctx) return req.xhr ? res.json({ error: 'not found' }) : res.redirect(back(req, '/'));
+  if (ctx.content.user_id === ctx.user.id) return req.xhr ? res.json({ ok: false, reason: 'own' }) : res.redirect(back(req, '/'));
   if (!hasReposted(ctx.user.id, ctx.content.id)) {
     createPost({ userId: ctx.user.id, type: 'repost', repostOfId: ctx.content.id });
   }
+  if (req.xhr) return res.json({ ok: true });
   res.redirect(back(req, '/'));
 });
 
 // Follow the author *because of* this post -> BIG boost to that post.
 router.post('/:id/follow-from', (req, res) => {
   const ctx = resolveVisibleContent(req, res);
-  if (!ctx) return res.redirect(back(req, '/'));
+  if (!ctx) return req.xhr ? res.json({ error: 'not found' }) : res.redirect(back(req, '/'));
   if (ctx.content.user_id !== ctx.user.id) {
     recordFollowFromPost(ctx.user.id, ctx.content.user_id, ctx.content.id);
   }
+  if (req.xhr) return res.json({ ok: true });
   res.redirect(back(req, '/'));
 });
 
@@ -188,9 +197,10 @@ router.get('/:id/delete', (req, res) => {
 
 router.post('/:id/delete', (req, res) => {
   const user = res.locals.currentUser;
-  if (!user) return res.redirect('/login');
+  if (!user) return req.xhr ? res.json({ error: 'not logged in' }) : res.redirect('/login');
   const deleted = deletePost(Number(req.params.id), user.id);
-  if (!deleted) return res.status(404).send('Post not found or not yours.');
+  if (!deleted) return req.xhr ? res.json({ error: 'not found' }) : res.status(404).send('Post not found or not yours.');
+  if (req.xhr) return res.json({ ok: true });
   res.redirect('/u/' + user.username);
 });
 
