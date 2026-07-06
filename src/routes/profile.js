@@ -202,7 +202,7 @@ router.post('/:username/referral', (req, res) => {
   if (!viewer) return res.redirect('/login');
   const profileUser = getUserByUsername(req.params.username);
   if (!profileUser || profileUser.id !== viewer.id) return res.status(403).send('Not your profile.');
-  setReferralCode(viewer.id);
+  setReferralCode(viewer.id, req.ip);
   res.redirect('/u/' + viewer.username);
 });
 

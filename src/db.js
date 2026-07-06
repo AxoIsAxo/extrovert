@@ -452,14 +452,17 @@ function getEncryptedPrivateKey(userId) {
 }
 
 // ---------- referrals ----------
-function setReferralCode(userId) {
+function setReferralCode(userId, ip) {
   const existing = db.prepare(`SELECT referral_code FROM users WHERE id = ?`).get(userId);
-  if (existing && existing.referral_code) return existing.referral_code;
+  if (existing && existing.referral_code) {
+    if (ip) db.prepare(`UPDATE users SET referrer_ip = ? WHERE id = ?`).run(ip, userId);
+    return existing.referral_code;
+  }
   let code;
   do {
     code = crypto.randomBytes(6).toString('base64url');
   } while (db.prepare(`SELECT 1 FROM users WHERE referral_code = ?`).get(code));
-  db.prepare(`UPDATE users SET referral_code = ? WHERE id = ?`).run(code, userId);
+  db.prepare(`UPDATE users SET referral_code = ?, referrer_ip = ? WHERE id = ?`).run(code, ip || null, userId);
   return code;
 }
 
