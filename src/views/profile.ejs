@@ -38,12 +38,9 @@
         <% if (isOwn) { %>
           <a class="btn ghost" href="/u/<%= profileUser.username %>/edit">Edit page</a>
           <% if (referralCode) { %>
-            <span class="referral-link-wrap">
-              <input readonly value="<%= baseUrl %>/register?ref=<%= referralCode %>" class="ref-input" onclick="this.select();navigator.clipboard.writeText(this.value)">
-              <span class="ref-copied" style="display:none;font-size:0.75rem;color:var(--accent)">Copied!</span>
-            </span>
+            <button class="btn ghost" onclick="navigator.clipboard.writeText('<%= baseUrl %>/register?ref=<%= referralCode %>');var t=this;t.textContent='Copied!';setTimeout(function(){t.textContent='Copy Referral';},2000)" style="cursor:pointer">Copy Referral</button>
           <% } else { %>
-            <form method="post" action="/u/<%= profileUser.username %>/referral" style="display:inline"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost">Create referral link</button></form>
+            <form method="post" action="/u/<%= profileUser.username %>/referral" style="display:inline"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost">Create referral</button></form>
           <% } %>
         <% } else if (following) { %>
           <form method="post" action="/unfollow/<%= profileUser.username %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost">Following ✓</button></form>
@@ -57,13 +54,5 @@
       <%- finalHtml %>
     </div>
   </main>
-  <script>
-    document.querySelectorAll('.ref-input').forEach(function(el) {
-      el.addEventListener('click', function() {
-        var tip = this.parentNode.querySelector('.ref-copied');
-        if (tip) { tip.style.display = 'inline'; setTimeout(function(){ tip.style.display = 'none'; }, 1500); }
-      });
-    });
-  </script>
 </body>
 </html>
