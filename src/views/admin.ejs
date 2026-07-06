@@ -1,0 +1,39 @@
+<%- include('partials/header') %>
+  <div class="card" style="max-width:700px;margin:0 auto">
+    <h2>Admin panel</h2>
+    <table style="width:100%;border-collapse:collapse;font-size:14px">
+      <thead>
+        <tr style="text-align:left;border-bottom:2px solid var(--border)">
+          <th style="padding:8px 4px">User</th>
+          <th style="padding:8px 4px">Referrals</th>
+          <th style="padding:8px 4px">Badge</th>
+          <th style="padding:8px 4px">Admin</th>
+          <th style="padding:8px 4px">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% users.forEach(function(u) { %>
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:8px 4px">
+              <a href="/u/<%= u.username %>"><%= u.display_name %></a>
+              <small class="muted">@<%= u.username %></small>
+            </td>
+            <td style="padding:8px 4px"><%= u.referral_count %></td>
+            <td style="padding:8px 4px"><%= u.referral_code ? '★' : '—' %></td>
+            <td style="padding:8px 4px"><%= u.is_admin ? '✓' : '' %></td>
+            <td style="padding:8px 4px">
+              <% if (u.referral_code && !u.is_admin) { %>
+                <form method="post" action="/admin/remove-referral/<%= u.id %>" style="margin:0">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn ghost" style="font-size:12px;padding:4px 10px">Remove badge</button>
+                </form>
+              <% } else { %>
+                <span class="muted">—</span>
+              <% } %>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+<%- include('partials/footer') %>

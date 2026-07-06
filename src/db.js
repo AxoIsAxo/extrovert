@@ -24,7 +24,8 @@ function init() {
       theme         TEXT NOT NULL DEFAULT 'default',
       referral_code TEXT,
       referred_by  INTEGER REFERENCES users(id),
-      referrer_ip   TEXT
+      referrer_ip   TEXT,
+      is_admin     INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS follows (
@@ -125,13 +126,19 @@ try { db.exec(`ALTER TABLE user_public_keys ADD COLUMN encrypted_private_key TEX
 try { db.exec(`ALTER TABLE users ADD COLUMN referral_code TEXT`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN referred_by INTEGER REFERENCES users(id)`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN referrer_ip TEXT`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0`); } catch {}
 
 // ---------- users ----------
+function userCount() {
+  return db.prepare(`SELECT COUNT(*) AS n FROM users`).get().n;
+}
+
 function createUser({ username, passwordHash, displayName, referredBy, referrerIp }) {
   const now = Date.now();
+  const isAdmin = userCount() === 0 ? 1 : 0;
   const res = db.prepare(
-    `INSERT INTO users (username, password_hash, display_name, created_at, referred_by, referrer_ip) VALUES (?,?,?,?,?,?)`
-  ).run(username, passwordHash, displayName, now, referredBy || null, referrerIp || null);
+    `INSERT INTO users (username, password_hash, display_name, created_at, referred_by, referrer_ip, is_admin) VALUES (?,?,?,?,?,?,?)`
+  ).run(username, passwordHash, displayName, now, referredBy || null, referrerIp || null, isAdmin);
   return res.lastInsertRowid;
 }
 
@@ -479,6 +486,15 @@ function deleteUser(userId) {
   db.prepare(`DELETE FROM users WHERE id = ?`).run(userId);
 }
 
+// ---------- admin ----------
+function getAllUsers() {
+  return db.prepare(`SELECT id, username, display_name, referral_code, created_at, is_admin, (SELECT COUNT(*) FROM users WHERE referred_by = users.id) AS referral_count FROM users ORDER BY created_at ASC`).all();
+}
+
+function removeReferralBadge(userId) {
+  db.prepare(`UPDATE users SET referral_code = NULL WHERE id = ?`).run(userId);
+}
+
 // ---------- referrals ----------
 function setReferralCode(userId, ip) {
   const existing = db.prepare(`SELECT referral_code FROM users WHERE id = ?`).get(userId);
@@ -549,6 +565,8 @@ module.exports = {
   sendMessage, getConversations, getMessages, countUnreadMessages, markConversationRead,
   // E2EE
   setPublicKey, getPublicKey, getEncryptedPrivateKey,
+  // admin
+  getAllUsers, removeReferralBadge,
   // referrals
   setReferralCode, getUserByReferralCode, getReferralCount, getReferralCode, getReferrerIp,
   // theme
