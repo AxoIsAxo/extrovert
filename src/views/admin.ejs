@@ -40,13 +40,14 @@
                     <button class="btn ghost" style="font-size:12px;padding:2px 8px">Ban</button>
                   </form>
                 <% } %>
-                <% if (u.referral_code) { %>
-                  <form method="post" action="/admin/remove-referral/<%= u.id %>" style="display:inline;margin:0">
-                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                    <button class="btn ghost" style="font-size:12px;padding:2px 8px">Remove ★</button>
-                  </form>
-                <% } %>
-              <% } else { %>
+              <% } %>
+              <% if (u.referral_code) { %>
+                <form method="post" action="/admin/remove-referral/<%= u.id %>" style="display:inline;margin:0">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn ghost" style="font-size:12px;padding:2px 8px">Remove ★</button>
+                </form>
+              <% } %>
+              <% if (u.is_admin && !u.referral_code) { %>
                 <span class="muted">—</span>
               <% } %>
             </td>
