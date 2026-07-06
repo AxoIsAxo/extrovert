@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', function(){
       var fd = new FormData(form);
       fetch(action, {
         method: 'POST',
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': csrfToken },
         body: fd,
       })
       .then(function(r){ return r.json(); })
