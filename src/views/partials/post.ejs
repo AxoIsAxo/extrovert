@@ -69,13 +69,19 @@
       <div class="comment">
         <b><%= c.display_name %></b> <span class="post-handle">@<%= c.username %></span>
         <span class="post-time">· <%= time(c.created_at) %></span><br>
-        <%= c.body %>
+        <% if (c.body && c.body.startsWith('/uploads/stickers/')) { %>
+          <img src="<%= c.body %>" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker">
+        <% } else { %>
+          <%= c.body %>
+        <% } %>
       </div>
     <% }) %>
-    <form class="comment-form" method="post" action="/posts/<%= item.interactId %>/comment">
+    <form class="comment-form" method="post" action="/posts/<%= item.interactId %>/comment" style="position:relative">
       <input type="hidden" name="_csrf" value="<%= _token %>">
-      <input type="text" name="body" placeholder="Add a comment…" maxlength="1000" required>
+      <input type="text" name="body" id="sticker-input-<%= item.interactId %>" placeholder="Add a comment…" maxlength="1000" required>
       <button>Comment</button>
+      <button class="btn ghost sticker-btn" data-target="sticker-popup-<%= item.interactId %>" type="button" style="font-size:18px;padding:4px 8px">😀</button>
+      <div id="sticker-popup-<%= item.interactId %>" style="display:none;position:absolute;bottom:100%;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.15)"></div>
     </form>
   </div>
   <% } %>

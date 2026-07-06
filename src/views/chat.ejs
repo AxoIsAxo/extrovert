@@ -17,16 +17,18 @@
              data-body="<%= m.body %>"
              data-key-sender="<%= m.key_for_sender || '' %>"
              data-key-recipient="<%= m.key_for_recipient || '' %>">
-          <div class="chat-bubble"><%= m.key_for_sender ? '🔒' : '' %><%= m.body %></div>
+          <div class="chat-bubble"><%= m.key_for_sender ? '🔒' : '' %><% if (m.body && m.body.startsWith('/uploads/stickers/')) { %><img src="<%= m.body %>" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker"><% } else { %><%= m.body %><% } %></div>
           <div class="muted" style="font-size:0.7rem;padding:0 4px"><%= locals.relTime(m.created_at) %></div>
         </div>
       <% }) %>
     <% } %>
   </div>
 
-  <form class="chat-form" method="post" action="/chats/<%= other.username %>/send" data-pubkey="<%= recipientPubKey || '' %>">
+  <form class="chat-form" method="post" action="/chats/<%= other.username %>/send" data-pubkey="<%= recipientPubKey || '' %>" style="position:relative">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-    <input type="text" name="body" placeholder="Type a message…" maxlength="2000" required autofocus>
+    <input type="text" name="body" id="sticker-input-chat" placeholder="Type a message…" maxlength="2000" required autofocus>
     <button>Send</button>
+    <button class="btn ghost sticker-btn" data-target="sticker-popup-chat" type="button" style="font-size:18px;padding:4px 8px">😀</button>
+    <div id="sticker-popup-chat" style="display:none;position:absolute;bottom:100%;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.15)"></div>
   </form>
 <%- include('partials/footer') %>

@@ -113,6 +113,13 @@ function init() {
       public_key TEXT NOT NULL,
       created_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS stickers (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id    INTEGER NOT NULL REFERENCES users(id),
+      file_path  TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
   `);
 }
 
@@ -545,6 +552,16 @@ function getReferrerIp(userId) {
   return row ? row.referrer_ip : null;
 }
 
+// ---------- stickers ----------
+function addSticker(userId, filePath) {
+  db.prepare(`INSERT INTO stickers (user_id, file_path, created_at) VALUES (?,?,?)`).run(userId, filePath, Date.now());
+  return filePath;
+}
+
+function getMyStickers(userId) {
+  return db.prepare(`SELECT id, file_path FROM stickers WHERE user_id = ? ORDER BY created_at DESC`).all(userId);
+}
+
 // ---------- theme ----------
 function getUserTheme(userId) {
   const row = db.prepare(`SELECT theme FROM users WHERE id = ?`).get(userId);
@@ -585,6 +602,8 @@ module.exports = {
   adminExists, getAllUsers, promoteUser, removeReferralBadge, banUser, unbanUser,
   // referrals
   setReferralCode, getUserByReferralCode, getReferralCount, getReferralCode, getReferrerIp,
+  // stickers
+  addSticker, getMyStickers,
   // theme
   getUserTheme, setUserTheme,
 };

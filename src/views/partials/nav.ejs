@@ -6,6 +6,7 @@
     <a href="/chats">Chats<% if (locals.unreadMessages > 0) { %><sup class="badge"><%= unreadMessages %></sup><% } %></a>
     <a href="/inbox">Inbox<% if (locals.unreadCount > 0) { %><sup class="badge"><%= unreadCount %></sup><% } %></a>
     <a href="/u/<%= currentUser.username %>">Profile</a>
+    <a href="/stickers/manage">Stickers</a>
     <a href="/settings">Settings</a>
     <% if (locals.currentUser && locals.currentUser.is_admin) { %><a href="/admin">Admin</a><% } %>
     <span class="spacer"></span>
