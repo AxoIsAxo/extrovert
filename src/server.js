@@ -97,6 +97,11 @@ app.use((req, res, next) => {
   }
   res.locals.csrfToken = req.session.csrfToken;
 
+  // Skip CSRF check for multipart uploads — multer parses body later in the route.
+  if (req.method === 'POST' && (req.path === '/stickers/upload' || req.path.startsWith('/stickers/upload'))) {
+    return next();
+  }
+
   if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH' || req.method === 'DELETE') {
     const token = req.body._csrf || req.headers['x-csrf-token'];
     if (!token || token !== req.session.csrfToken) {

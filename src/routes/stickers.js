@@ -4,6 +4,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
+const sharp = require('sharp');
 const { addSticker, getMyStickers } = require('../db');
 
 const router = express.Router();
@@ -24,7 +25,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 250 * 1024 },
+  limits: { fileSize: 500 * 1024 },
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     cb(null, ALLOWED.includes(ext));
@@ -38,12 +39,31 @@ router.get('/mine', (req, res) => {
 
 router.post('/upload', (req, res) => {
   if (!res.locals.currentUser) return res.status(401).send('Not logged in');
-  upload.single('sticker')(req, res, (err) => {
+  upload.single('sticker')(req, res, async (err) => {
     if (err) {
-      if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).send('Sticker must be under 250 KB.');
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).send('Sticker must be under 500 KB.');
       return res.status(400).send('Invalid file.');
     }
     if (!req.file) return res.status(400).send('No file uploaded.');
+
+    // Auto-compress if over 250 KB and not a GIF.
+    const fullPath = req.file.path;
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    const stat = fs.statSync(fullPath);
+    if (stat.size > 250 * 1024 && ext !== '.gif') {
+      try {
+        const img = sharp(fullPath);
+        const meta = await img.metadata();
+        let compressed;
+        if (meta.format === 'jpeg') compressed = await img.jpeg({ quality: 70 }).toBuffer();
+        else if (meta.format === 'png') compressed = await img.png({ quality: 70 }).toBuffer();
+        else if (meta.format === 'webp') compressed = await img.webp({ quality: 70 }).toBuffer();
+        if (compressed && compressed.length < stat.size) {
+          fs.writeFileSync(fullPath, compressed);
+        }
+      } catch {}
+    }
+
     const filePath = '/uploads/stickers/' + req.file.filename;
     addSticker(res.locals.currentUser.id, filePath);
     res.redirect('/stickers/manage');
