@@ -68,7 +68,8 @@ a:hover { color: var(--accent-2); }
   background: var(--accent); color: #fff; border: none;
   border-radius: var(--radius-pill); padding: 10px 18px; font-size: 14px;
   font-weight: 600; cursor: pointer; transition: filter var(--t), transform var(--t);
-  font-family: inherit;
+  font-family: inherit; display: inline-flex; align-items: center; gap: 4px;
+  box-sizing: border-box; line-height: 1; text-decoration: none;
 }
 .btn:hover { filter: brightness(1.12); }
 .btn:active { transform: scale(.97); }
