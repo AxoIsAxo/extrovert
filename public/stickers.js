@@ -1,4 +1,4 @@
-(function(){
+document.addEventListener('DOMContentLoaded', function(){
   var pickers = document.querySelectorAll('.sticker-btn');
   pickers.forEach(function(btn){
     btn.addEventListener('click', function(e){
@@ -24,7 +24,7 @@
             var p = document.createElement('div');
             p.className = 'muted';
             p.style.cssText = 'font-size:12px;padding:8px';
-            p.textContent = 'No stickers — upload some!';
+            p.textContent = 'No stickers \u2014 upload some!';
             grid.appendChild(p);
           } else {
             stickers.forEach(function(s){
@@ -47,9 +47,11 @@
         });
     });
     document.addEventListener('click', function(e){
-      if (!btn.contains(e.target) && !document.getElementById(btn.dataset.target).contains(e.target)) {
-        document.getElementById(btn.dataset.target).style.display = 'none';
+      var popup = document.getElementById(btn.dataset.target);
+      if (!popup) return;
+      if (!btn.contains(e.target) && !popup.contains(e.target)) {
+        popup.style.display = 'none';
       }
     });
   });
-})();
+});
