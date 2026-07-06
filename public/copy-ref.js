@@ -10,27 +10,9 @@
             var orig = btn.textContent;
             btn.textContent = 'Copied!';
             setTimeout(function(){btn.textContent=orig},2000);
-          }).catch(function(){
-            showInput(btn, url);
-          });
-        } else {
-          showInput(btn, url);
+          }).catch(function(){});
         }
       });
-    }
-    function showInput(btn, url){
-      var parent = btn.parentNode;
-      var input = document.createElement('input');
-      input.type = 'text';
-      input.value = url;
-      input.readOnly = true;
-      input.className = 'copy-input-fallback';
-      parent.replaceChild(input, btn);
-      input.focus();
-      input.select();
-      setTimeout(function(){
-        parent.replaceChild(btn, input);
-      }, 5000);
     }
   });
 })();

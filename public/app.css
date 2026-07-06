@@ -280,12 +280,4 @@ a.conv-row:hover { border-color: var(--accent); }
   cursor: help;
 }
 
-.copy-input-fallback {
-  display: inline-flex; align-items: center;
-  padding: 10px 14px; font-size: 14px; font-family: inherit;
-  border: 1px solid var(--border); border-radius: var(--radius-pill);
-  background: var(--panel-2); color: var(--text);
-  width: 280px; max-width: 100%; box-sizing: border-box;
-  outline: none;
-}
 
