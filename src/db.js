@@ -451,6 +451,34 @@ function getEncryptedPrivateKey(userId) {
   return row ? row.encrypted_private_key : null;
 }
 
+// ---------- account deletion ----------
+function deleteUser(userId) {
+  // Orphan any users this user referred.
+  db.prepare(`UPDATE users SET referred_by = NULL WHERE referred_by = ?`).run(userId);
+  // Delete posts-related data: collect all post IDs by this user.
+  const postIds = db.prepare(`SELECT id FROM posts WHERE user_id = ?`).all(userId).map(r => r.id);
+  for (const pid of postIds) {
+    db.prepare(`DELETE FROM likes WHERE post_id = ?`).run(pid);
+    db.prepare(`DELETE FROM comments WHERE post_id = ?`).run(pid);
+    db.prepare(`DELETE FROM shares WHERE post_id = ?`).run(pid);
+    db.prepare(`DELETE FROM follows_from_post WHERE post_id = ?`).run(pid);
+    db.prepare(`DELETE FROM notifications WHERE post_id = ?`).run(pid);
+    db.prepare(`DELETE FROM posts WHERE repost_of_id = ?`).run(pid);
+  }
+  db.prepare(`DELETE FROM posts WHERE user_id = ?`).run(userId);
+  // User activity.
+  db.prepare(`DELETE FROM likes WHERE user_id = ?`).run(userId);
+  db.prepare(`DELETE FROM comments WHERE user_id = ?`).run(userId);
+  db.prepare(`DELETE FROM shares WHERE user_id = ?`).run(userId);
+  db.prepare(`DELETE FROM follows WHERE follower_id = ? OR followee_id = ?`).run(userId, userId);
+  db.prepare(`DELETE FROM follows_from_post WHERE follower_id = ? OR followee_id = ?`).run(userId, userId);
+  db.prepare(`DELETE FROM notifications WHERE user_id = ? OR actor_id = ?`).run(userId, userId);
+  db.prepare(`DELETE FROM messages WHERE from_id = ? OR to_id = ?`).run(userId, userId);
+  db.prepare(`DELETE FROM profile_customization WHERE user_id = ?`).run(userId);
+  db.prepare(`DELETE FROM user_public_keys WHERE user_id = ?`).run(userId);
+  db.prepare(`DELETE FROM users WHERE id = ?`).run(userId);
+}
+
 // ---------- referrals ----------
 function setReferralCode(userId, ip) {
   const existing = db.prepare(`SELECT referral_code FROM users WHERE id = ?`).get(userId);
@@ -502,7 +530,7 @@ module.exports = {
   // follows
   follow, unfollow, isFollowing, followingIds, countFollowers, countFollowing, recordFollowFromPost,
   // posts
-  createPost, getPostById, getDisplayPost, postsByUser, deletePost,
+  createPost, getPostById, getDisplayPost, postsByUser, deletePost, deleteUser,
   // likes
   toggleLike, hasLiked,
   // comments

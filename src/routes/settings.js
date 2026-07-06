@@ -1,7 +1,7 @@
 'use strict';
 
 const express = require('express');
-const { getUserTheme, setUserTheme, getCustomization, setCustomization } = require('../db');
+const { getUserTheme, setUserTheme, getCustomization, setCustomization, deleteUser } = require('../db');
 
 const router = express.Router();
 
@@ -52,6 +52,22 @@ router.post('/', (req, res) => {
   if (newCss) setCustomization(user.id, custom.html, newCss);
 
   res.redirect('/');
+});
+
+// Account deletion.
+router.get('/delete', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.redirect('/login');
+  res.render('confirm-delete-account', { csrfToken: res.locals.csrfToken });
+});
+
+router.post('/delete', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.redirect('/login');
+  deleteUser(user.id);
+  req.session.destroy(() => {
+    res.redirect('/');
+  });
 });
 
 module.exports = router;
