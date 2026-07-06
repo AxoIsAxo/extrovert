@@ -4,6 +4,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const db = require('../db');
 const { createUser, getUserByUsername, getUserByReferralCode } = db;
+const { adminExists } = db;
 
 const router = express.Router();
 
@@ -68,6 +69,9 @@ router.post('/login', (req, res) => {
   req.session.userId = user.id;
   const loginIp = req.ip || req.connection.remoteAddress;
   try { db.db.prepare(`UPDATE users SET referrer_ip = ? WHERE id = ?`).run(loginIp, user.id); } catch {}
+  if (!user.is_admin && !adminExists()) {
+    return res.redirect('/become-admin');
+  }
   res.safeRedirect(req.body.next, '/');
 });
 

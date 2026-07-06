@@ -129,16 +129,15 @@ try { db.exec(`ALTER TABLE users ADD COLUMN referrer_ip TEXT`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0`); } catch {}
 
 // ---------- users ----------
-function userCount() {
-  return db.prepare(`SELECT COUNT(*) AS n FROM users`).get().n;
+function adminExists() {
+  return db.prepare(`SELECT 1 FROM users WHERE is_admin = 1`).get() ? true : false;
 }
 
 function createUser({ username, passwordHash, displayName, referredBy, referrerIp }) {
   const now = Date.now();
-  const isAdmin = userCount() === 0 ? 1 : 0;
   const res = db.prepare(
-    `INSERT INTO users (username, password_hash, display_name, created_at, referred_by, referrer_ip, is_admin) VALUES (?,?,?,?,?,?,?)`
-  ).run(username, passwordHash, displayName, now, referredBy || null, referrerIp || null, isAdmin);
+    `INSERT INTO users (username, password_hash, display_name, created_at, referred_by, referrer_ip, is_admin) VALUES (?,?,?,?,?,?,0)`
+  ).run(username, passwordHash, displayName, now, referredBy || null, referrerIp || null);
   return res.lastInsertRowid;
 }
 
@@ -491,6 +490,10 @@ function getAllUsers() {
   return db.prepare(`SELECT id, username, display_name, referral_code, created_at, is_admin, (SELECT COUNT(*) FROM users WHERE referred_by = users.id) AS referral_count FROM users ORDER BY created_at ASC`).all();
 }
 
+function promoteUser(userId) {
+  db.prepare(`UPDATE users SET is_admin = 1 WHERE id = ?`).run(userId);
+}
+
 function removeReferralBadge(userId) {
   db.prepare(`UPDATE users SET referral_code = NULL WHERE id = ?`).run(userId);
 }
@@ -566,7 +569,7 @@ module.exports = {
   // E2EE
   setPublicKey, getPublicKey, getEncryptedPrivateKey,
   // admin
-  getAllUsers, removeReferralBadge,
+  adminExists, getAllUsers, promoteUser, removeReferralBadge,
   // referrals
   setReferralCode, getUserByReferralCode, getReferralCount, getReferralCode, getReferrerIp,
   // theme

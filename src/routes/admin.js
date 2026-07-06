@@ -1,7 +1,7 @@
 'use strict';
 
 const express = require('express');
-const { getAllUsers, removeReferralBadge, getUserById } = require('../db');
+const { getAllUsers, removeReferralBadge, getUserById, adminExists } = require('../db');
 
 const router = express.Router();
 
@@ -20,6 +20,23 @@ router.post('/remove-referral/:id', requireAdmin, (req, res) => {
   const target = getUserById(Number(req.params.id));
   if (!target) return res.status(404).send('User not found');
   removeReferralBadge(target.id);
+  res.redirect('/admin');
+});
+
+router.get('/become-admin', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  if (res.locals.currentUser.is_admin) return res.redirect('/admin');
+  if (adminExists()) return res.redirect('/');
+  res.render('become-admin');
+});
+
+router.post('/become-admin', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  if (res.locals.currentUser.is_admin) return res.redirect('/admin');
+  if (adminExists()) return res.redirect('/');
+  const { promoteUser } = require('../db');
+  promoteUser(res.locals.currentUser.id);
+  res.locals.currentUser.is_admin = 1;
   res.redirect('/admin');
 });
 

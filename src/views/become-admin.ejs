@@ -1,0 +1,11 @@
+<%- include('partials/header') %>
+  <div class="card" style="max-width:500px;margin:0 auto;text-align:center">
+    <h2>No admin exists</h2>
+    <p style="margin:16px 0">There is no admin account on Extrovert. Do you want to make your account an admin account?</p>
+    <form method="post" action="/become-admin">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <button class="btn">Yes, make me admin</button>
+      <a href="/" class="btn ghost" style="margin-left:8px">No, skip</a>
+    </form>
+  </div>
+<%- include('partials/footer') %>
