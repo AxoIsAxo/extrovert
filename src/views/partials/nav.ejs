@@ -3,7 +3,6 @@
   <% if (locals.currentUser) { %>
     <a href="/">Feed</a>
     <a href="/discover">Discover</a>
-    <a href="/compose">Post</a>
     <a href="/chats">Chats<% if (locals.unreadMessages > 0) { %><sup class="badge"><%= unreadMessages %></sup><% } %></a>
     <a href="/inbox">Inbox<% if (locals.unreadCount > 0) { %><sup class="badge"><%= unreadCount %></sup><% } %></a>
     <a href="/u/<%= currentUser.username %>">Profile</a>
