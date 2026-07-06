@@ -278,3 +278,9 @@ a.conv-row:hover { border-color: var(--accent); }
   padding: 1px 6px; border-radius: 10px;
   cursor: help;
 }
+.referral-link-wrap { display: inline-flex; align-items: center; gap: 4px; }
+.ref-input {
+  font-size: 0.7rem; padding: 4px 8px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+  width: 260px; cursor: pointer;
+}
