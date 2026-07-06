@@ -59,23 +59,43 @@ document.addEventListener('DOMContentLoaded', function(){
     });
   });
 
-  // Click any sticker to add to your collection.
+  // Click any sticker to see option to add to your collection.
   document.querySelectorAll('.sticker-inline').forEach(function(img){
     img.addEventListener('click', function(e){
       e.stopPropagation();
+      // Remove any existing menu first.
+      document.querySelectorAll('.sticker-add-menu').forEach(function(m){ m.remove(); });
       var path = img.getAttribute('src');
       if (!path) return;
-      fetch('/stickers/add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify({ path: path }),
-      }).then(function(r){
-        if (r.ok) showToast('Sticker added!');
-        else showToast('Failed to add sticker');
-      }).catch(function(){
-        showToast('Failed to add sticker');
+      var pos = img.getBoundingClientRect();
+      var menu = document.createElement('div');
+      menu.className = 'sticker-add-menu';
+      menu.style.cssText = 'position:fixed;top:'+(pos.bottom+4)+'px;left:'+pos.left+'px;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.2);z-index:999;overflow:hidden;font-size:13px';
+      var btn = document.createElement('button');
+      btn.textContent = 'Add to my stickers';
+      btn.style.cssText = 'display:block;width:100%;padding:8px 16px;border:none;background:none;cursor:pointer;text-align:left;white-space:nowrap';
+      btn.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        menu.remove();
+        fetch('/stickers/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+          body: JSON.stringify({ path: path }),
+        }).then(function(r){
+          if (r.ok) showToast('Sticker added!');
+          else showToast('Failed to add sticker');
+        }).catch(function(){
+          showToast('Failed to add sticker');
+        });
       });
+      menu.appendChild(btn);
+      document.body.appendChild(menu);
     });
+  });
+  document.addEventListener('click', function(e){
+    if (!e.target.classList.contains('sticker-inline')) {
+      document.querySelectorAll('.sticker-add-menu').forEach(function(m){ m.remove(); });
+    }
   });
 
   function showToast(msg){
