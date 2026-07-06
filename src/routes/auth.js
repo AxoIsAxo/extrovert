@@ -79,4 +79,24 @@ router.post('/logout', (req, res) => {
   req.session.destroy(() => res.redirect('/login'));
 });
 
+router.get('/become-admin', (req, res) => {
+  if (!req.session.userId) return res.redirect('/login');
+  const user = getUserById(req.session.userId);
+  if (!user) return res.redirect('/login');
+  if (user.is_admin) return res.redirect('/admin');
+  if (adminExists()) return res.redirect('/');
+  res.render('become-admin');
+});
+
+router.post('/become-admin', (req, res) => {
+  if (!req.session.userId) return res.redirect('/login');
+  const user = getUserById(req.session.userId);
+  if (!user) return res.redirect('/login');
+  if (user.is_admin) return res.redirect('/admin');
+  if (adminExists()) return res.redirect('/');
+  const { promoteUser } = require('../db');
+  promoteUser(user.id);
+  res.redirect('/admin');
+});
+
 module.exports = router;
