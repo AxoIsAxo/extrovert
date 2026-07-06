@@ -8,6 +8,13 @@
   var myPrivateKey = null;
   var myPublicKeyPem = null;
 
+  /* ---- Uint8Array → base64 (no .apply, Firefox-safe) ---- */
+  function uint8ArrayToBase64(arr) {
+    var s = '';
+    for (var i = 0; i < arr.length; i++) s += String.fromCharCode(arr[i]);
+    return btoa(s);
+  }
+
   /* ---- Derive a key-encryption key from password + username ---- */
   function deriveKek(password, username) {
     var enc = new TextEncoder();
@@ -29,7 +36,7 @@
       var combined = new Uint8Array(iv.length + wrapped.length);
       combined.set(iv);
       combined.set(new Uint8Array(wrapped), iv.length);
-      return btoa(String.fromCharCode.apply(null, combined));
+      return uint8ArrayToBase64(combined);
     });
   }
 
@@ -41,7 +48,7 @@
     ).then(function (pair) {
       myPrivateKey = pair.privateKey;
       return crypto.subtle.exportKey('spki', pair.publicKey).then(function (spki) {
-        myPublicKeyPem = btoa(String.fromCharCode.apply(null, new Uint8Array(spki)));
+        myPublicKeyPem = uint8ArrayToBase64(new Uint8Array(spki));
         return wrapPrivateKey(pair.privateKey, kek);
       }).then(function (encPriv) {
         return fetch(PUBKEY_URL, {
@@ -146,7 +153,7 @@
       var bodyArr = new Uint8Array(iv.length + ciphertext.length);
       bodyArr.set(iv);
       bodyArr.set(new Uint8Array(ciphertext), iv.length);
-      var bodyB64 = btoa(String.fromCharCode.apply(null, bodyArr));
+      var bodyB64 = uint8ArrayToBase64(bodyArr);
       return crypto.subtle.exportKey('raw', aesKey).then(function (rawKey) {
         return Promise.all([
           rsaEncrypt(rawKey, pemToSpki(recipientPem)),
@@ -169,7 +176,7 @@
   function rsaEncrypt(rawKey, spkiBuf) {
     return crypto.subtle.importKey('spki', spkiBuf, { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['encrypt'])
       .then(function (pub) { return crypto.subtle.encrypt({ name: 'RSA-OAEP' }, pub, rawKey); })
-      .then(function (enc) { return btoa(String.fromCharCode.apply(null, new Uint8Array(enc))); });
+      .then(function (enc) { return uint8ArrayToBase64(new Uint8Array(enc)); });
   }
 
   /* ---- Decrypt ---- */
@@ -184,32 +191,21 @@
     }).then(function (plain) { return new TextDecoder().decode(plain); });
   }
 
-  /* ---- Clipboard fallback for copy-ref buttons ---- */
-  function copyToClip(text, btn) {
-    function done() { btn.textContent = 'Copied!'; setTimeout(function(){ btn.textContent = 'Copy Referral'; }, 2000); }
-    function fallback() {
-      var i = document.createElement('input');
-      i.value = text; document.body.appendChild(i); i.select();
-      document.execCommand('copy'); document.body.removeChild(i);
-      done();
-    }
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(text).then(done).catch(fallback);
-    } else { fallback(); }
-  }
-
   /* ---- Init on every page load ---- */
   document.addEventListener('DOMContentLoaded', function () {
-    document.querySelectorAll('.copy-ref').forEach(function(b){
-      b.addEventListener('click', function(e){
-        copyToClip(this.getAttribute('data-link'), this);
-      });
-    });
     interceptLoginForm();
     interceptRegisterForm();
 
     var kekB64 = sessionStorage.getItem(SESSION_KEY);
-    var kekPromise = kekB64 ? crypto.subtle.importKey('jwk', JSON.parse(atob(kekB64)), { name: 'AES-GCM', length: 256 }, false, ['unwrapKey']).catch(function () { return null; }) : Promise.resolve(null);
+    var kekPromise;
+    if (kekB64) {
+      try { var jwk = JSON.parse(atob(kekB64)); } catch (e) { kekPromise = Promise.resolve(null); }
+      if (!kekPromise) {
+        kekPromise = crypto.subtle.importKey('jwk', jwk, { name: 'AES-GCM', length: 256 }, false, ['unwrapKey']).catch(function () { return null; });
+      }
+    } else {
+      kekPromise = Promise.resolve(null);
+    }
 
     kekPromise.then(function (kek) {
       return ensureKeys(kek);
