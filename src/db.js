@@ -505,6 +505,7 @@ function promoteUser(userId) {
 }
 
 function removeReferralBadge(userId) {
+  db.prepare(`UPDATE users SET referred_by = NULL WHERE referred_by = ?`).run(userId);
   db.prepare(`UPDATE users SET referral_code = NULL WHERE id = ?`).run(userId);
 }
 
