@@ -2,7 +2,7 @@
 
 const express = require('express');
 const {
-  getUserByUsername, getUserById, areMutualFollowers,
+  db, getUserByUsername, getUserById, areMutualFollowers,
   sendMessage, getConversations, getMessages, markConversationRead,
   createNotification, setPublicKey, getPublicKey, getEncryptedPrivateKey,
 } = require('../db');
@@ -62,17 +62,21 @@ router.post('/pubkey', express.json(), (req, res) => {
 // Send a message.
 router.post('/:username/send', (req, res) => {
   const user = res.locals.currentUser;
-  if (!user) return res.redirect('/login');
+  if (!user) return req.xhr ? res.json({ error: 'not logged in' }) : res.redirect('/login');
   const other = getUserByUsername(req.params.username);
   if (!other || !areMutualFollowers(user.id, other.id)) {
-    return res.redirect(back(req, '/chats'));
+    return req.xhr ? res.json({ error: 'cannot message' }) : res.redirect(back(req, '/chats'));
   }
   const body = String(req.body.body || '').trim().slice(0, 5000);
   const keyForSender = String(req.body.key_for_sender || '').trim() || null;
   const keyForRecipient = String(req.body.key_for_recipient || '').trim() || null;
   if (body) {
-    sendMessage(user.id, other.id, body, keyForSender, keyForRecipient);
+    const msgId = sendMessage(user.id, other.id, body, keyForSender, keyForRecipient);
     createNotification({ userId: other.id, type: 'message', actorId: user.id });
+    if (req.xhr) {
+      const msg = db.prepare(`SELECT id, from_id, body, created_at, key_for_sender, key_for_recipient FROM messages WHERE id = ?`).get(msgId);
+      return res.json({ message: msg });
+    }
   }
   res.redirect('/chats/' + other.username);
 });

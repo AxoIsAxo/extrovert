@@ -396,9 +396,10 @@ function areMutualFollowers(aId, bId) {
 
 // ---------- messages ----------
 function sendMessage(fromId, toId, body, keyForSender, keyForRecipient) {
-  db.prepare(
+  const res = db.prepare(
     `INSERT INTO messages (from_id, to_id, body, created_at, key_for_sender, key_for_recipient) VALUES (?,?,?,?,?,?)`
   ).run(fromId, toId, body, Date.now(), keyForSender || null, keyForRecipient || null);
+  return res.lastInsertRowid;
 }
 
 function getConversations(userId) {

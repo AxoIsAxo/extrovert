@@ -7,8 +7,36 @@ document.addEventListener('DOMContentLoaded', function(){
     var form = e.target;
     var action = form.getAttribute('action') || '';
     var m = action.match(/^\/posts\/(\d+)\/(like|share|repost|follow-from|comment|delete)$/);
-    if (!m) return;
+    var chatM = action.match(/^\/chats\/([^/]+)\/send$/);
+    if (!m && !chatM) return;
     e.preventDefault();
+
+    if (chatM) {
+      var otherUsername = chatM[1];
+      var chatMsgDiv = document.querySelector('.chat-messages');
+      if (!chatMsgDiv) return;
+      var input = form.querySelector('input[name="body"]');
+      if (!input || !input.value.trim()) return;
+
+      var fd = new FormData(form);
+      fetch(action, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        body: fd,
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        if (data.error) return;
+        if (data.message) {
+          addChatMessage(chatMsgDiv, data.message);
+          input.value = '';
+          chatMsgDiv.scrollTop = chatMsgDiv.scrollHeight;
+        }
+      })
+      .catch(function(){});
+      return;
+    }
+
     var postId = m[1], verb = m[2];
     var postEl = form.closest('.post');
     if (!postEl) return;
@@ -107,6 +135,22 @@ document.addEventListener('DOMContentLoaded', function(){
         }
       }
     }
+  }
+
+  function addChatMessage(container, msg){
+    var div = document.createElement('div');
+    div.className = 'chat-msg own';
+    var bubble = document.createElement('div');
+    bubble.className = 'chat-bubble';
+    var sticker = msg.body && msg.body.indexOf('/uploads/stickers/') !== -1;
+    bubble.innerHTML = (msg.key_for_sender ? '🔒' : '') + (sticker ? '<img src="' + esc(msg.body) + '" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker">' : esc(msg.body));
+    div.appendChild(bubble);
+    var time = document.createElement('div');
+    time.className = 'muted';
+    time.style.cssText = 'font-size:0.7rem;padding:0 4px';
+    time.textContent = relTime ? relTime(msg.created_at) : new Date(msg.created_at).toLocaleString();
+    div.appendChild(time);
+    container.appendChild(div);
   }
 
   function esc(s){
