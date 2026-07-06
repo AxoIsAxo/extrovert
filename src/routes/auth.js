@@ -3,7 +3,7 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const db = require('../db');
-const { createUser, getUserByUsername, getUserByReferralCode } = db;
+const { createUser, getUserByUsername, getUserByReferralCode, getUserById } = db;
 const { adminExists } = db;
 
 const router = express.Router();
