@@ -28,12 +28,23 @@
         <small class="muted">
           <a href="/u/<%= profileUser.username %>/followers"><%= followerCount %> follower<%= followerCount === 1 ? '' : 's' %></a>
           · <a href="/u/<%= profileUser.username %>/following"><%= followingCount %> following</a>
+          <% if (referralCount > 0) { %>
+            · <span class="referral-badge" title="<%= referralCount %> person<%= referralCount === 1 ? '' : 's' %> referred">★<%= referralCount %></span>
+          <% } %>
         </small>
       </div>
       <span class="spacer"></span>
       <% if (locals.currentUser) { %>
         <% if (isOwn) { %>
           <a class="btn ghost" href="/u/<%= profileUser.username %>/edit">Edit page</a>
+          <% if (referralCode) { %>
+            <span class="referral-link-wrap" style="position:relative">
+              <button class="btn ghost" onclick="var i=this.nextElementSibling; i.style.display=i.style.display==='none'?'block':'none'; i.select(); navigator.clipboard.writeText(i.value)" style="cursor:pointer">Referral</button>
+              <input readonly value="<%= baseUrl %>/register?ref=<%= referralCode %>" style="display:none;position:absolute;top:100%;right:0;width:320px;padding:8px;font-size:0.8rem;z-index:10;background:var(--surface1);border:1px solid var(--border);border-radius:8px;margin-top:4px">
+            </span>
+          <% } else { %>
+            <form method="post" action="/u/<%= profileUser.username %>/referral" style="display:inline"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost">Create referral</button></form>
+          <% } %>
         <% } else if (following) { %>
           <form method="post" action="/unfollow/<%= profileUser.username %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost">Following ✓</button></form>
         <% } else { %>

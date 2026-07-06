@@ -6,6 +6,7 @@ const {
   getDisplayPost, getUserById, postsByUser, hasLiked, hasShared,
   commentsForPost, isFollowing, countFollowers, countFollowing,
   getFollowers, getFollowing, areMutualFollowers,
+  setReferralCode, getReferralCode, getReferralCount,
 } = require('../db');
 const { canView } = require('../network');
 const { sanitizeProfileHTML, sanitizeCSS } = require('../sanitize');
@@ -118,11 +119,15 @@ router.get('/:username', (req, res) => {
     } else {
       finalHtml += postsHtml;
     }
+    const referralCount = getReferralCount(profileUser.id);
+    const referralCode = getReferralCode(profileUser.id);
+    const baseUrl = req.protocol + '://' + req.get('host');
     res.render('profile', {
       profileUser, finalHtml, css, isOwn, following, canSeePosts,
       followerCount: countFollowers(profileUser.id),
       followingCount: countFollowing(profileUser.id),
       mutual: viewer && viewer.id !== profileUser.id && areMutualFollowers(viewer.id, profileUser.id),
+      referralCount, referralCode, baseUrl,
     });
   }
 });
@@ -189,6 +194,16 @@ router.get('/:username/following', (req, res) => {
   res.render('user-list', {
     title: 'Following', targetUser: target, list, emptyMsg: 'Not following anyone yet.',
   });
+});
+
+// Generate referral link.
+router.post('/:username/referral', (req, res) => {
+  const viewer = res.locals.currentUser;
+  if (!viewer) return res.redirect('/login');
+  const profileUser = getUserByUsername(req.params.username);
+  if (!profileUser || profileUser.id !== viewer.id) return res.status(403).send('Not your profile.');
+  setReferralCode(viewer.id);
+  res.redirect('/u/' + viewer.username);
 });
 
 module.exports = router;

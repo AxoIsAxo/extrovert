@@ -3,6 +3,7 @@
 const { DatabaseSync } = require('node:sqlite');
 const path = require('node:path');
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 
 const DB_PATH = path.join(__dirname, '..', 'data', 'extrovert.db');
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
@@ -117,13 +118,16 @@ try { db.exec(`ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''`); } ca
 try { db.exec(`ALTER TABLE messages ADD COLUMN key_for_sender TEXT`); } catch {}
 try { db.exec(`ALTER TABLE messages ADD COLUMN key_for_recipient TEXT`); } catch {}
 try { db.exec(`ALTER TABLE user_public_keys ADD COLUMN encrypted_private_key TEXT`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN referral_code TEXT UNIQUE`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN referred_by INTEGER REFERENCES users(id)`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN referrer_ip TEXT`); } catch {}
 
 // ---------- users ----------
-function createUser({ username, passwordHash, displayName }) {
+function createUser({ username, passwordHash, displayName, referredBy, referrerIp }) {
   const now = Date.now();
   const res = db.prepare(
-    `INSERT INTO users (username, password_hash, display_name, created_at) VALUES (?,?,?,?)`
-  ).run(username, passwordHash, displayName, now);
+    `INSERT INTO users (username, password_hash, display_name, created_at, referred_by, referrer_ip) VALUES (?,?,?,?,?,?)`
+  ).run(username, passwordHash, displayName, now, referredBy || null, referrerIp || null);
   return res.lastInsertRowid;
 }
 
@@ -443,6 +447,37 @@ function getEncryptedPrivateKey(userId) {
   return row ? row.encrypted_private_key : null;
 }
 
+// ---------- referrals ----------
+function setReferralCode(userId) {
+  const existing = db.prepare(`SELECT referral_code FROM users WHERE id = ?`).get(userId);
+  if (existing && existing.referral_code) return existing.referral_code;
+  let code;
+  do {
+    code = crypto.randomBytes(6).toString('base64url');
+  } while (db.prepare(`SELECT 1 FROM users WHERE referral_code = ?`).get(code));
+  db.prepare(`UPDATE users SET referral_code = ? WHERE id = ?`).run(code, userId);
+  return code;
+}
+
+function getUserByReferralCode(code) {
+  return db.prepare(`SELECT * FROM users WHERE referral_code = ?`).get(code);
+}
+
+function getReferralCount(userId) {
+  const row = db.prepare(`SELECT COUNT(*) AS n FROM users WHERE referred_by = ?`).get(userId);
+  return row.n;
+}
+
+function getReferralCode(userId) {
+  const row = db.prepare(`SELECT referral_code FROM users WHERE id = ?`).get(userId);
+  return row ? row.referral_code : null;
+}
+
+function getReferrerIp(userId) {
+  const row = db.prepare(`SELECT referrer_ip FROM users WHERE id = ?`).get(userId);
+  return row ? row.referrer_ip : null;
+}
+
 // ---------- theme ----------
 function getUserTheme(userId) {
   const row = db.prepare(`SELECT theme FROM users WHERE id = ?`).get(userId);
@@ -479,6 +514,8 @@ module.exports = {
   sendMessage, getConversations, getMessages, countUnreadMessages, markConversationRead,
   // E2EE
   setPublicKey, getPublicKey, getEncryptedPrivateKey,
+  // referrals
+  setReferralCode, getUserByReferralCode, getReferralCount, getReferralCode, getReferrerIp,
   // theme
   getUserTheme, setUserTheme,
 };

@@ -2,13 +2,15 @@
 
 const express = require('express');
 const bcrypt = require('bcrypt');
-const { createUser, getUserByUsername } = require('../db');
+const db = require('../db');
+const { createUser, getUserByUsername, getUserByReferralCode } = db;
 
 const router = express.Router();
 
 router.get('/register', (req, res) => {
   if (req.session.userId) return res.redirect('/');
-  res.render('register', { error: null });
+  const ref = String(req.query.ref || '').trim();
+  res.render('register', { error: null, ref });
 });
 
 router.post('/register', async (req, res) => {
@@ -26,8 +28,27 @@ router.post('/register', async (req, res) => {
     return res.render('register', { error: 'Username unavailable.' });
   }
 
+  // Handle referral.
+  const ref = String(req.body.ref || req.query.ref || '').trim();
+  let referredBy = null;
+  let referrerIp = null;
+  if (ref) {
+    const referrer = getUserByReferralCode(ref);
+    if (referrer) {
+      const registrantIp = req.ip || req.connection.remoteAddress;
+      const refIp = db.getReferrerIp ? db.getReferrerIp(referrer.id) : null;
+      // Anti-farming: reject if same IP as referrer's registration IP.
+      if (refIp && registrantIp === refIp) {
+        return res.render('register', { error: 'Referral link cannot be used from the same network.', ref });
+      }
+      // Reject if registrant already used a referral.
+      referredBy = referrer.id;
+      referrerIp = registrantIp;
+    }
+  }
+
   const hash = bcrypt.hashSync(password, 10);
-  const id = createUser({ username, passwordHash: hash, displayName });
+  const id = createUser({ username, passwordHash: hash, displayName, referredBy, referrerIp });
   req.session.userId = id;
   res.redirect('/');
 });

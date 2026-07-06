@@ -270,3 +270,11 @@ a.conv-row:hover { border-color: var(--accent); }
   select { font-size: 16px; }
   input, textarea, select { font-size: 16px; }
 }
+
+.referral-badge {
+  display: inline-flex; align-items: center; gap: 2px;
+  background: #7c5cff; color: #fff;
+  font-size: 0.75rem; font-weight: 700;
+  padding: 1px 6px; border-radius: 10px;
+  cursor: help;
+}

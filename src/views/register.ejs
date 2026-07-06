@@ -2,8 +2,9 @@
   <div class="card" style="max-width:380px;margin:40px auto">
     <h2 style="margin-top:0">Join Extrovert</h2>
     <% if (error) { %><div class="flash err"><%= error %></div><% } %>
-    <form method="post" action="/register" autocomplete="on">
+    <form method="post" action="/register<%= locals.ref ? '?ref=' + encodeURIComponent(ref) : '' %>" autocomplete="on">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <% if (locals.ref) { %><input type="hidden" name="ref" value="<%= ref %>"><% } %>
       <label for="reg-username">Username</label>
       <input type="text" id="reg-username" name="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" required autofocus placeholder="3-20 chars, no spaces">
       <label for="reg-displayName">Display name</label>
