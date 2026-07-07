@@ -105,7 +105,8 @@ app.use((req, res, next) => {
   if (req.method === 'POST' && (
     req.path === '/stickers/upload' ||
     req.path.startsWith('/stickers/upload') ||
-    req.path === '/posts'
+    req.path === '/posts' ||
+    /^\/u\/[^\/]+\/avatar$/.test(req.path)
   )) {
     return next();
   }
