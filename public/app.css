@@ -98,7 +98,7 @@ a:hover { color: #a8def5; }
 }
 .btn.ghost:hover { background: rgba(126,200,227,.08); border-color: var(--primary); }
 .btn.danger { background: var(--error); color: var(--on-error); }
-.btn.ghost.danger { color: var(--error); border-color: var(--outline-variant); }
+.btn.ghost.danger { background: transparent; color: var(--error); border-color: var(--outline-variant); }
 .btn.ghost.danger:hover { background: rgba(255,180,171,.08); border-color: var(--error); }
 
 /* ---- inputs (M3 outlined fields) ---- */
