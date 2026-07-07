@@ -12,9 +12,8 @@
         <form method="post" action="/u/<%= profileUser.username %>/avatar" enctype="multipart/form-data" style="margin:0">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
           <input type="file" name="avatar" accept="image/*" required style="display:none" id="avatarInput">
-          <button class="btn ghost" type="button" onclick="document.getElementById('avatarInput').click()">Upload photo</button>
+          <button class="btn ghost" type="button" id="avatarUploadBtn">Upload photo</button>
           <small class="muted" style="display:block;margin-top:4px">Square JPEG/PNG, max 5 MB</small>
-          <script>document.getElementById('avatarInput').onchange = function(){ this.closest('form').submit(); };</script>
         </form>
         <% if (profileUser.avatar) { %>
           <form method="post" action="/u/<%= profileUser.username %>/avatar/remove" style="margin:4px 0 0">
@@ -46,4 +45,5 @@
       </div>
     </form>
   </div>
+  <script src="/avatar.js?v=1"></script>
 <%- include('partials/footer') %>
