@@ -183,6 +183,11 @@ app.use('/stickers', require('./routes/stickers'));
 
 app.use((req, res) => res.status(404).render('404', { thing: 'page' }));
 
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).send('Internal server error');
+});
+
 app.listen(PORT, () => {
   console.log(`Extrovert is running on http://localhost:${PORT}`);
 });

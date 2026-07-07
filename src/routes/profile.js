@@ -22,6 +22,7 @@ const router = express.Router();
 const AVATAR_DIR = path.join(__dirname, '..', '..', 'uploads', 'avatars');
 fs.mkdirSync(AVATAR_DIR, { recursive: true });
 
+const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const avatarUpload = multer({
   storage: multer.diskStorage({
     destination: AVATAR_DIR,
@@ -30,9 +31,9 @@ const avatarUpload = multer({
       cb(null, crypto.randomBytes(12).toString('hex') + (ext === '.png' ? '.png' : '.jpg'));
     },
   }),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) return cb(null, true);
+    if (ALLOWED_AVATAR_TYPES.includes(file.mimetype)) return cb(null, true);
     cb(null, false);
   },
 });
@@ -192,7 +193,16 @@ router.post('/:username/edit', (req, res) => {
 });
 
 // Upload/change avatar.
-router.post('/:username/avatar', avatarUpload.single('avatar'), async (req, res) => {
+router.post('/:username/avatar', (req, res, next) => {
+  avatarUpload.single('avatar')(req, res, (err) => {
+    if (err) {
+      console.error('Avatar upload multer error:', err);
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).send('File too large (max 10 MB).');
+      return res.status(400).send('Upload error.');
+    }
+    next();
+  });
+}, async (req, res) => {
   const viewer = res.locals.currentUser;
   if (!viewer) return res.redirect('/login');
   const profileUser = getUserByUsername(req.params.username);
@@ -210,6 +220,7 @@ router.post('/:username/avatar', avatarUpload.single('avatar'), async (req, res)
     fs.unlinkSync(inputPath);
     setAvatar(viewer.id, '/uploads/avatars/' + outputName);
   } catch (e) {
+    console.error('Avatar processing error:', e);
     try { fs.unlinkSync(inputPath); } catch {}
     return res.status(400).send('Failed to process image');
   }
