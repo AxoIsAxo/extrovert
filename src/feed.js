@@ -162,6 +162,7 @@ function hydrateItem(row, viewerId, score) {
     authorId: author.id,
     authorUsername: author.username,
     authorName: author.display_name,
+    authorAvatar: author.avatar,
     likeCount: row.like_count,
     shareCount: row.share_count,
     commentCount: comments.length,

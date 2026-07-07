@@ -7,7 +7,7 @@
     <% if (q && results.length === 0) { %><p class="muted">No users found.</p><% } %>
     <% results.forEach(function(r){ %>
       <div class="user-row">
-        <div class="avatar"><%= r.username.slice(0,1).toUpperCase() %></div>
+        <% if (r.avatar) { %><img src="<%= r.avatar %>" alt="" class="avatar-img"><% } else { %><div class="avatar"><%= r.username.slice(0,1).toUpperCase() %></div><% } %>
         <div class="info">
           <b><%= r.display_name %></b>
           <small>@<%= r.username %></small>
@@ -26,7 +26,7 @@
     <% } %>
     <% suggested.forEach(function(r){ %>
       <div class="user-row">
-        <div class="avatar"><%= r.username.slice(0,1).toUpperCase() %></div>
+        <% if (r.avatar) { %><img src="<%= r.avatar %>" alt="" class="avatar-img"><% } else { %><div class="avatar"><%= r.username.slice(0,1).toUpperCase() %></div><% } %>
         <div class="info">
           <b><%= r.display_name %></b>
           <small>@<%= r.username %></small>

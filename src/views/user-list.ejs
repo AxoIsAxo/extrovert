@@ -13,7 +13,7 @@
   <% } else { %>
     <% list.forEach(function(u){ %>
       <div class="card user-row">
-        <div class="avatar"><%= (u.display_name || '?').slice(0,1).toUpperCase() %></div>
+        <% if (u.avatar) { %><img src="<%= u.avatar %>" alt="" class="avatar-img"><% } else { %><div class="avatar"><%= (u.display_name || '?').slice(0,1).toUpperCase() %></div><% } %>
         <div class="info">
           <div style="display:flex;align-items:center;gap:6px">
             <a href="/u/<%= u.username %>" class="post-name"><%= u.display_name %></a>

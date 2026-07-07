@@ -1,17 +1,41 @@
 'use strict';
 
 const express = require('express');
+const multer = require('multer');
+const sharp = require('sharp');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const fs = require('node:fs');
 const {
   getUserByUsername, getCustomization, setCustomization, updateUserProfile,
   getDisplayPost, getUserById, postsByUser, hasLiked, hasShared,
   commentsForPost, isFollowing, countFollowers, countFollowing,
   getFollowers, getFollowing, areMutualFollowers,
   setReferralCode, getReferralCode, getReferralCount,
+  setAvatar,
 } = require('../db');
 const { canView } = require('../network');
 const { sanitizeProfileHTML, sanitizeCSS } = require('../sanitize');
 
 const router = express.Router();
+
+const AVATAR_DIR = path.join(__dirname, '..', '..', 'uploads', 'avatars');
+fs.mkdirSync(AVATAR_DIR, { recursive: true });
+
+const avatarUpload = multer({
+  storage: multer.diskStorage({
+    destination: AVATAR_DIR,
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      cb(null, crypto.randomBytes(12).toString('hex') + (ext === '.png' ? '.png' : '.jpg'));
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) return cb(null, true);
+    cb(null, false);
+  },
+});
 
 const DEFAULT_PROFILE_HTML = `<div class="ev-banner">
   <h2>Welcome to my profile</h2>
@@ -59,6 +83,7 @@ function hydrateProfilePosts(userId, viewerId) {
       authorId: author.id,
       authorUsername: author.username,
       authorName: author.display_name,
+      authorAvatar: author.avatar,
       likeCount: countLikes(content.id),
       shareCount: countShares(content.id),
       commentCount: comments.length,
@@ -164,6 +189,44 @@ router.post('/:username/edit', (req, res) => {
   setCustomization(viewer.id, html, css);
   updateUserProfile(viewer.id, { displayName, bio });
   res.redirect('/u/' + profileUser.username);
+});
+
+// Upload/change avatar.
+router.post('/:username/avatar', avatarUpload.single('avatar'), async (req, res) => {
+  const viewer = res.locals.currentUser;
+  if (!viewer) return res.redirect('/login');
+  const profileUser = getUserByUsername(req.params.username);
+  if (!profileUser || profileUser.id !== viewer.id) return res.status(403).send('Not your profile.');
+  const token = req.body._csrf || req.headers['x-csrf-token'];
+  if (!token || token !== req.session.csrfToken) return res.status(403).send('CSRF validation failed');
+  if (!req.file) return res.redirect('/u/' + profileUser.username + '/edit');
+
+  const inputPath = req.file.path;
+  const outputName = crypto.randomBytes(12).toString('hex') + '.jpg';
+  const outputPath = path.join(AVATAR_DIR, outputName);
+
+  try {
+    await sharp(inputPath).resize(200, 200, { fit: 'cover', position: 'center' }).jpeg({ quality: 85 }).toFile(outputPath);
+    fs.unlinkSync(inputPath);
+    setAvatar(viewer.id, '/uploads/avatars/' + outputName);
+  } catch (e) {
+    try { fs.unlinkSync(inputPath); } catch {}
+    return res.status(400).send('Failed to process image');
+  }
+
+  res.redirect('/u/' + profileUser.username + '/edit');
+});
+
+// Remove avatar.
+router.post('/:username/avatar/remove', (req, res) => {
+  const viewer = res.locals.currentUser;
+  if (!viewer) return res.redirect('/login');
+  const profileUser = getUserByUsername(req.params.username);
+  if (!profileUser || profileUser.id !== viewer.id) return res.status(403).send('Not your profile.');
+  const token = req.body._csrf || req.headers['x-csrf-token'];
+  if (!token || token !== req.session.csrfToken) return res.status(403).send('CSRF validation failed');
+  setAvatar(viewer.id, null);
+  res.redirect('/u/' + profileUser.username + '/edit');
 });
 
 // Followers list.

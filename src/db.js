@@ -26,7 +26,8 @@ function init() {
       referred_by  INTEGER REFERENCES users(id),
       referrer_ip   TEXT,
       is_admin     INTEGER NOT NULL DEFAULT 0,
-      banned       INTEGER NOT NULL DEFAULT 0
+      banned       INTEGER NOT NULL DEFAULT 0,
+      avatar       TEXT
     );
 
     CREATE TABLE IF NOT EXISTS follows (
@@ -136,6 +137,7 @@ try { db.exec(`ALTER TABLE users ADD COLUMN referred_by INTEGER REFERENCES users
 try { db.exec(`ALTER TABLE users ADD COLUMN referrer_ip TEXT`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN banned INTEGER NOT NULL DEFAULT 0`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN avatar TEXT`); } catch {}
 // Fix stale referred_by links for users whose referrer no longer has a referral code.
 db.prepare(`UPDATE users SET referred_by = NULL WHERE referred_by IS NOT NULL AND referred_by IN (SELECT id FROM users WHERE referral_code IS NULL)`).run();
 
@@ -163,6 +165,15 @@ function getUserById(id) {
 function updateUserProfile(id, { displayName, bio }) {
   db.prepare(`UPDATE users SET display_name = ?, bio = ? WHERE id = ?`)
     .run(displayName, bio, id);
+}
+
+function setAvatar(id, avatarPath) {
+  db.prepare(`UPDATE users SET avatar = ? WHERE id = ?`).run(avatarPath, id);
+}
+
+function getAvatar(id) {
+  const row = db.prepare(`SELECT avatar FROM users WHERE id = ?`).get(id);
+  return row ? row.avatar : null;
 }
 
 // ---------- follows ----------
@@ -366,7 +377,7 @@ function markNotificationsRead(userId) {
 // ---------- user lists ----------
 function getFollowers(userId) {
   return db.prepare(`
-    SELECT u.id, u.username, u.display_name, u.bio, f.created_at AS followed_at
+    SELECT u.id, u.username, u.display_name, u.avatar, u.bio, f.created_at AS followed_at
     FROM follows f
     JOIN users u ON u.id = f.follower_id
     WHERE f.followee_id = ?
@@ -376,7 +387,7 @@ function getFollowers(userId) {
 
 function getFollowing(userId) {
   return db.prepare(`
-    SELECT u.id, u.username, u.display_name, u.bio, f.created_at AS followed_at
+    SELECT u.id, u.username, u.display_name, u.avatar, u.bio, f.created_at AS followed_at
     FROM follows f
     JOIN users u ON u.id = f.followee_id
     WHERE f.follower_id = ?
@@ -410,7 +421,7 @@ function getConversations(userId) {
       FROM messages
       WHERE from_id = ? OR to_id = ?
     )
-    SELECT p.other_id AS id, u.username, u.display_name,
+    SELECT p.other_id AS id, u.username, u.display_name, u.avatar,
       (SELECT body FROM messages m
        WHERE (m.from_id = ? AND m.to_id = p.other_id)
           OR (m.from_id = p.other_id AND m.to_id = ?)
@@ -607,4 +618,6 @@ module.exports = {
   addSticker, getMyStickers,
   // theme
   getUserTheme, setUserTheme,
+  // avatar
+  setAvatar, getAvatar,
 };

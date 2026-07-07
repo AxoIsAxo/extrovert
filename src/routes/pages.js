@@ -31,7 +31,7 @@ router.get('/discover', (req, res) => {
   let results = [];
   if (q) {
     results = db.prepare(
-      `SELECT id, username, display_name, bio FROM users
+      `SELECT id, username, display_name, avatar, bio FROM users
        WHERE username LIKE ? AND id <> ? LIMIT 20`
     ).all(q + '%', user.id);
   }
@@ -41,7 +41,7 @@ router.get('/discover', (req, res) => {
   const foaf = [...foafIds(user.id)];
   const suggestedIds = foaf.filter(id => !following.has(id)).slice(0, 12);
   const suggested = suggestedIds.length
-    ? db.prepare(`SELECT id, username, display_name, bio FROM users WHERE id IN (${suggestedIds.map(() => '?').join(',')})`)
+    ? db.prepare(`SELECT id, username, display_name, avatar, bio FROM users WHERE id IN (${suggestedIds.map(() => '?').join(',')})`)
         .all(...suggestedIds)
     : [];
 

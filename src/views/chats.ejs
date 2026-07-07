@@ -10,7 +10,7 @@
   <% } else { %>
     <% conversations.forEach(function(c){ %>
       <a href="/chats/<%= c.username %>" class="card conv-row">
-        <div class="avatar"><%= (c.display_name || '?').slice(0,1).toUpperCase() %></div>
+        <% if (c.avatar) { %><img src="<%= c.avatar %>" alt="" class="avatar-img"><% } else { %><div class="avatar"><%= (c.display_name || '?').slice(0,1).toUpperCase() %></div><% } %>
         <div class="info">
           <b><%= c.display_name %></b>
           <small>@<%= c.username %></small>

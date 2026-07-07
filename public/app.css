@@ -208,9 +208,26 @@ label { display: block; font-size: 13px; color: var(--on-surface-variant); margi
 }
 .user-row:hover { box-shadow: 0 2px 6px var(--shadow); }
 .user-row .avatar {
-  width: 42px; height: 42px; border-radius: var(--radius-full);
+  width: 42px; height: 42px; border-radius: var(--radius-full); flex: none;
   background: var(--primary-container); color: var(--on-primary-container);
   display: flex; align-items: center; justify-content: center; font-weight: 700;
+  object-fit: cover;
+}
+.avatar-img {
+  width: 42px; height: 42px; border-radius: var(--radius-full); flex: none;
+  object-fit: cover; display: block;
+}
+.post-avatar-link { display: inline-block; flex: none; line-height: 0; }
+.post-avatar-img {
+  width: 44px; height: 44px; border-radius: var(--radius-full); flex: none;
+  object-fit: cover; display: block;
+}
+
+.avatar-preview {
+  width: 72px; height: 72px; border-radius: var(--radius-full); flex: none;
+  background: var(--primary-container); color: var(--on-primary-container);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; font-weight: 700; object-fit: cover;
 }
 .user-row .info { flex: 1; }
 .user-row .info b { display: block; }
@@ -278,14 +295,14 @@ a.conv-row:hover { color: var(--primary); }
   .card { padding: 14px; border-radius: 14px; }
   .post { padding: 14px; border-radius: 14px; }
   .post-head { gap: 10px; }
-  .post-avatar { width: 36px; height: 36px; font-size: 15px; }
+  .post-avatar, .post-avatar-img { width: 36px; height: 36px; font-size: 15px; }
   .post-actions button { padding: 7px 12px; font-size: 12px; }
   .profile-header { flex-wrap: wrap; gap: 10px; }
   .profile-header .avatar { width: 52px; height: 52px; font-size: 22px; }
   .profile-header h1 { font-size: 18px; }
   .grid-2 { grid-template-columns: 1fr; }
   .user-row { padding: 10px; gap: 8px; }
-  .user-row .avatar { width: 36px; height: 36px; font-size: 14px; }
+  .user-row .avatar, .user-row .avatar-img { width: 36px; height: 36px; font-size: 14px; }
   .user-row .info b { font-size: 14px; }
   .comment-form { flex-direction: column; }
   .comment-form button { width: 100%; }

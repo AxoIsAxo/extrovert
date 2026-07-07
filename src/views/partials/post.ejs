@@ -7,7 +7,7 @@
     <div class="post-repost">🔁 <%= item.reposterName %> reposted this</div>
   <% } %>
   <header class="post-head">
-    <a class="post-avatar" href="/u/<%= item.authorUsername %>"><%= (item.authorName || '?').slice(0,1).toUpperCase() %></a>
+    <% if (item.authorAvatar) { %><a class="post-avatar-link" href="/u/<%= item.authorUsername %>"><img src="<%= item.authorAvatar %>" alt="" class="post-avatar-img"></a><% } else { %><a class="post-avatar" href="/u/<%= item.authorUsername %>"><%= (item.authorName || '?').slice(0,1).toUpperCase() %></a><% } %>
     <div>
       <div style="display:flex;align-items:center;gap:4px">
         <a href="/u/<%= item.authorUsername %>" class="post-name"><%= item.authorName %></a>

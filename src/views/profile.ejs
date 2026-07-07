@@ -14,7 +14,7 @@
   <%- include('partials/nav') %>
   <main class="wrap">
     <div class="profile-header">
-      <div class="avatar"><%= (profileUser.display_name || profileUser.username).slice(0,1).toUpperCase() %></div>
+      <% if (profileUser.avatar) { %><img src="<%= profileUser.avatar %>" alt="" style="width:68px;height:68px;border-radius:999px;flex:none;object-fit:cover"><% } else { %><div class="avatar" style="width:68px;height:68px;font-size:28px"><%= (profileUser.display_name || profileUser.username).slice(0,1).toUpperCase() %></div><% } %>
       <div>
         <div style="display:flex;align-items:center;gap:8px">
           <h1 style="margin:0"><%= profileUser.display_name %></h1>
