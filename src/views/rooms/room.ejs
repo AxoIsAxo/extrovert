@@ -18,7 +18,7 @@
       <% if (role && (role.permissions & 4)) { %><a href="/rooms/<%= room.id %>/channels" class="room-sidebar-link">Channels</a><% } %>
       <% if (role && (role.permissions & 8)) { %><a href="/rooms/<%= room.id %>/roles" class="room-sidebar-link">Roles</a><% } %>
       <% if (role && (role.permissions & 32)) { %><a href="/rooms/<%= room.id %>/members" class="room-sidebar-link">Members</a><% } %>
-      <form method="post" action="/rooms/<%= room.id %>/leave" style="margin:0"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="room-sidebar-link danger" style="background:none;border:none;cursor:pointer">Leave</button></form>
+      <% if (role && (role.is_founder || locals.currentUser && locals.currentUser.is_admin)) { %><a href="/rooms/<%= room.id %>/settings" class="room-sidebar-link danger">Delete Room</a><% } else { %><form method="post" action="/rooms/<%= room.id %>/leave" style="margin:0"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="room-sidebar-link danger" style="background:none;border:none;cursor:pointer">Leave</button></form><% } %>
     </div>
   </aside>
   <main class="room-main">
@@ -35,6 +35,7 @@
             <span class="room-msg-author" style="color:<%= mRole ? mRole.color : '#ccc' %>"><%= m.display_name || m.username %></span>
             <span class="room-msg-text"><%= m.body %></span>
             <span class="room-msg-time"><%= locals.relTime ? locals.relTime(m.created_at) : new Date(m.created_at).toLocaleString() %></span>
+            <span class="room-msg-report" data-msg-id="<%= m.id %>">Report</span>
           </div>
         </div>
       <% }) %>
@@ -46,6 +47,22 @@
       <button class="btn" type="submit">Send</button>
     </form>
   </main>
+</div>
+<div class="report-overlay" id="report-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center">
+  <div class="card" style="max-width:400px;width:90%">
+    <h3 style="margin-top:0">Report Message</h3>
+    <div id="report-message-preview" style="padding:8px;background:var(--surface-container);border-radius:8px;margin-bottom:12px;font-style:italic"></div>
+    <form id="report-form">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <input type="hidden" name="message_id" id="report-msg-id" value="">
+      <label>Reason</label>
+      <input type="text" name="reason" id="report-reason" placeholder="Why is this message inappropriate?" required style="width:100%;margin-bottom:12px">
+      <div style="display:flex;gap:8px">
+        <button class="btn" type="submit">Submit Report</button>
+        <button class="btn ghost close-report-overlay" type="button">Cancel</button>
+      </div>
+    </form>
+  </div>
 </div>
 <script src="/static/rooms.js?v=1"></script>
 <%- include('../partials/footer') %>

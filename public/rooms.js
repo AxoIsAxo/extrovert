@@ -3,6 +3,8 @@ document.addEventListener('DOMContentLoaded', function() {
   var sendForm = document.getElementById('room-send-form');
   var channelList = document.getElementById('channel-list');
   var channelName = document.getElementById('channel-name');
+  var reportOverlay = document.getElementById('report-overlay');
+  var reportForm = document.getElementById('report-form');
 
   if (!msgArea || !sendForm || !channelList) return;
 
@@ -39,6 +41,49 @@ document.addEventListener('DOMContentLoaded', function() {
       loadMessages(cid);
     }).catch(function() { input.disabled = false; });
   });
+
+  // Report buttons: delegation on msgArea for server-rendered and AJAX messages
+  msgArea.addEventListener('click', function(e) {
+    var reportBtn = e.target.closest('.room-msg-report');
+    if (!reportBtn) return;
+    var msgId = reportBtn.dataset.msgId;
+    var msgDiv = reportBtn.closest('.room-msg');
+    var msgText = msgDiv ? msgDiv.querySelector('.room-msg-text') : null;
+    var preview = document.getElementById('report-message-preview');
+    if (preview && msgText) preview.textContent = msgText.textContent;
+    document.getElementById('report-msg-id').value = msgId;
+    document.getElementById('report-reason').value = '';
+    if (reportOverlay) reportOverlay.style.display = 'flex';
+  });
+
+  // Close report overlay
+  document.addEventListener('click', function(e) {
+    if (e.target.closest('.close-report-overlay')) {
+      if (reportOverlay) reportOverlay.style.display = 'none';
+    }
+  });
+
+  // Submit report
+  if (reportForm) {
+    reportForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      var msgId = document.getElementById('report-msg-id').value;
+      var reason = document.getElementById('report-reason').value.trim();
+      if (!msgId || !reason) return;
+      var csrf = getCsrf();
+      var cid = sendForm ? sendForm.dataset.channelId : '';
+      fetch('/rooms/' + roomId() + '/channels/' + cid + '/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
+        body: 'message_id=' + encodeURIComponent(msgId) + '&reason=' + encodeURIComponent(reason)
+      }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.ok) {
+          if (reportOverlay) reportOverlay.style.display = 'none';
+          alert('Report submitted.');
+        }
+      }).catch(function() {});
+    });
+  }
 
   function switchChannel(cid, name) {
     msgArea.dataset.channelId = cid;
@@ -78,6 +123,13 @@ document.addEventListener('DOMContentLoaded', function() {
       bodyDiv.className = 'room-msg-body';
       var color = roleMap[m.user_id] || '#ccc';
       bodyDiv.innerHTML = '<span class="room-msg-author" style="color:' + color + '">' + escHtml(m.display_name || m.username) + '</span><span class="room-msg-text">' + escHtml(m.body) + '</span><span class="room-msg-time">' + relTime(m.created_at) + '</span>';
+      // Add report button
+      var reportSpan = document.createElement('span');
+      reportSpan.className = 'room-msg-report';
+      reportSpan.dataset.msgId = m.id;
+      reportSpan.textContent = 'Report';
+      var timeSpan = bodyDiv.querySelector('.room-msg-time');
+      if (timeSpan) timeSpan.parentNode.insertBefore(reportSpan, timeSpan.nextSibling);
       div.appendChild(bodyDiv);
       msgArea.appendChild(div);
     });

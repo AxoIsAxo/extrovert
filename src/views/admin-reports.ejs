@@ -1,0 +1,37 @@
+<%- include('partials/header') %>
+  <div class="card" style="max-width:800px;margin:0 auto">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h2 style="margin:0">Reports</h2>
+      <a class="btn ghost" href="/admin">Back to Admin</a>
+    </div>
+  </div>
+  <% if (!reports.length) { %><div class="card"><p class="muted">No pending reports.</p></div><% } %>
+  <% reports.forEach(function(r) { %>
+    <div class="card" style="border-left:3px solid var(--danger)">
+      <div style="display:flex;justify-content:space-between;align-items:start">
+        <div>
+          <strong>Room:</strong> <%= r.room_name %> &middot;
+          <strong>Reported:</strong> <a href="/u/<%= r.username %>"><%= r.display_name %></a> @<%= r.username %>
+          &middot; <strong>By:</strong> <%= r.reporter_name %> @<%= r.reporter_username %>
+        </div>
+        <small class="muted"><%= new Date(r.created_at).toLocaleString() %></small>
+      </div>
+      <div style="margin:8px 0;padding:8px;background:var(--surface-container);border-radius:8px">
+        <em>"<%= r.message_body %>"</em>
+      </div>
+      <div style="margin-bottom:8px">
+        <strong>Reason:</strong> <%= r.reason %>
+      </div>
+      <div style="display:flex;gap:8px">
+        <form method="post" action="/admin/reports/<%= r.id %>/ban" style="margin:0">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button class="btn danger">Ban <%= r.display_name %></button>
+        </form>
+        <form method="post" action="/admin/reports/<%= r.id %>/dismiss" style="margin:0">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button class="btn ghost">Dismiss</button>
+        </form>
+      </div>
+    </div>
+  <% }) %>
+<%- include('partials/footer') %>

@@ -56,4 +56,40 @@
       </tbody>
     </table>
   </div>
+
+  <div class="card" style="max-width:800px;margin:16px auto" id="rooms">
+    <h2>Rooms</h2>
+    <% if (rooms.length) { %>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="text-align:left;border-bottom:2px solid var(--border)">
+            <th style="padding:8px 4px">Room</th>
+            <th style="padding:8px 4px">Creator</th>
+            <th style="padding:8px 4px">Members</th>
+            <th style="padding:8px 4px">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% rooms.forEach(function(r) { %>
+            <tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:8px 4px">
+                <a href="/rooms/<%= r.id %>"><%= r.name %></a>
+                <small class="muted"><%= r.description ? r.description.substring(0, 60) : '' %></small>
+              </td>
+              <td style="padding:8px 4px"><%= r.creator_username || '—' %></td>
+              <td style="padding:8px 4px"><%= r.member_count %></td>
+              <td style="padding:8px 4px">
+                <form method="post" action="/admin/rooms/<%= r.id %>/delete" style="display:inline;margin:0">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn ghost" style="font-size:12px;padding:2px 8px;color:var(--danger)">Delete</button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    <% } else { %>
+      <p class="muted">No rooms.</p>
+    <% } %>
+  </div>
 <%- include('partials/footer') %>

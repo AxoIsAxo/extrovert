@@ -168,6 +168,19 @@ function init() {
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_room_msg_channel ON room_messages(channel_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS reports (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      reporter_id      INTEGER NOT NULL REFERENCES users(id),
+      reported_user_id INTEGER NOT NULL REFERENCES users(id),
+      message_id       INTEGER NOT NULL,
+      message_body     TEXT NOT NULL,
+      channel_id       INTEGER NOT NULL,
+      room_id          INTEGER NOT NULL,
+      reason           TEXT NOT NULL,
+      status           TEXT NOT NULL DEFAULT 'pending',
+      created_at       INTEGER NOT NULL
+    );
   `);
 }
 
@@ -185,6 +198,7 @@ try { db.exec(`ALTER TABLE users ADD COLUMN referrer_ip TEXT`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN banned INTEGER NOT NULL DEFAULT 0`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN avatar TEXT`); } catch {}
+try { db.exec(`CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, reporter_id INTEGER NOT NULL REFERENCES users(id), reported_user_id INTEGER NOT NULL REFERENCES users(id), message_id INTEGER NOT NULL, message_body TEXT NOT NULL, channel_id INTEGER NOT NULL, room_id INTEGER NOT NULL, reason TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL)`); } catch {}
 // Fix stale referred_by links for users whose referrer no longer has a referral code.
 db.prepare(`UPDATE users SET referred_by = NULL WHERE referred_by IS NOT NULL AND referred_by IN (SELECT id FROM users WHERE referral_code IS NULL)`).run();
 
@@ -717,6 +731,28 @@ function hasRoomPermission(roomId, userId, permBit) {
   return role && (role.permissions & permBit) === permBit;
 }
 
+// ---------- reports ----------
+function createReport(reporterId, reportedUserId, messageId, messageBody, channelId, roomId, reason) {
+  return db.prepare(`INSERT INTO reports (reporter_id, reported_user_id, message_id, message_body, channel_id, room_id, reason, status, created_at) VALUES (?,?,?,?,?,?,?,'pending',?)`).run(reporterId, reportedUserId, messageId, messageBody, channelId, roomId, reason, Date.now()).lastInsertRowid;
+}
+function getPendingReports() {
+  return db.prepare(`SELECT r.*, rep.username AS reporter_username, rep.display_name AS reporter_name, u.username, u.display_name, rm.name AS room_name FROM reports r INNER JOIN users rep ON rep.id = r.reporter_id INNER JOIN users u ON u.id = r.reported_user_id INNER JOIN rooms rm ON rm.id = r.room_id WHERE r.status = 'pending' ORDER BY r.created_at DESC`).all();
+}
+function getReport(id) {
+  return db.prepare(`SELECT r.*, rep.username AS reporter_username, rep.display_name AS reporter_name, u.username, u.display_name, u.avatar, rm.name AS room_name FROM reports r INNER JOIN users rep ON rep.id = r.reporter_id INNER JOIN users u ON u.id = r.reported_user_id INNER JOIN rooms rm ON rm.id = r.room_id WHERE r.id = ?`).get(id);
+}
+function resolveReport(id) {
+  db.prepare(`UPDATE reports SET status = 'resolved' WHERE id = ?`).run(id);
+}
+function dismissReport(id) {
+  db.prepare(`UPDATE reports SET status = 'dismissed' WHERE id = ?`).run(id);
+}
+
+// ---------- admin rooms ----------
+function getAllRooms() {
+  return db.prepare(`SELECT r.*, (SELECT COUNT(*) FROM room_members WHERE room_id = r.id) AS member_count, u.username AS creator_username FROM rooms r LEFT JOIN users u ON u.id = r.creator_id ORDER BY r.created_at DESC`).all();
+}
+
 // ---------- theme ----------
 function getUserTheme(userId) {
   const row = db.prepare(`SELECT theme FROM users WHERE id = ?`).get(userId);
@@ -769,4 +805,8 @@ module.exports = {
   createRoomRole, getRoomRole, getRoomRoles, updateRoomRole, deleteRoomRole, transferFounder,
   createRoomChannel, getRoomChannel, getRoomChannels, updateRoomChannel, deleteRoomChannel,
   getRoomMessages, sendRoomMessage, joinDefaultRole, hasRoomPermission,
+  // reports
+  createReport, getPendingReports, getReport, resolveReport, dismissReport,
+  // admin rooms
+  getAllRooms,
 };
