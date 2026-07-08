@@ -1,20 +1,81 @@
 <%- include('partials/header') %>
-  <div class="card" style="display:flex;justify-content:space-between;align-items:center">
-    <div>
-      <h2 style="margin:0">Your feed</h2>
-      <small class="muted">Only content from your friends and friends-of-friends.</small>
+<div class="feed-layout">
+  <aside class="feed-sidebar feed-sidebar-left">
+    <div class="card">
+      <h4 style="margin:0 0 8px">My Stickers</h4>
+      <form method="post" action="/stickers/upload" enctype="multipart/form-data" style="margin-bottom:8px">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <input type="file" name="sticker" accept="image/*" required style="font-size:12px;width:100%">
+        <button class="btn" type="submit" style="font-size:12px;padding:4px 10px;margin-top:4px">Upload</button>
+      </form>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        <% if (stickers.length) { %>
+          <% stickers.forEach(function(s){ %>
+            <img src="<%= s.file_path %>" alt="" style="width:56px;height:56px;object-fit:contain;border-radius:6px;background:var(--surface-container-high)">
+          <% }) %>
+        <% } else { %>
+          <p class="muted" style="font-size:12px;margin:0">No stickers yet.</p>
+        <% } %>
+      </div>
+      <% if (stickers.length) { %><a href="/stickers/manage" style="font-size:12px;display:inline-block;margin-top:4px">Manage →</a><% } %>
     </div>
-    <a class="btn" href="/compose">+ New post</a>
-  </div>
+  </aside>
+  <div class="feed-main">
+    <div class="card" style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <h2 style="margin:0">Your feed</h2>
+        <small class="muted">Only content from your friends and friends-of-friends.</small>
+      </div>
+      <a class="btn" href="/compose">+ New post</a>
+    </div>
 
-  <%- include('partials/post-list', { items: items }) %>
+    <%- include('partials/post-list', { items: items }) %>
 
-  <div class="pager">
-    <% if (page > 1) { %>
-      <a class="btn ghost" href="/?page=<%= page - 1 %>">← Newer</a>
-    <% } else { %><span></span><% } %>
-    <% if (hasMore) { %>
-      <a class="btn ghost" href="/?page=<%= page + 1 %>">Older →</a>
-    <% } %>
+    <div class="pager">
+      <% if (page > 1) { %>
+        <a class="btn ghost" href="/?page=<%= page - 1 %>">← Newer</a>
+      <% } else { %><span></span><% } %>
+      <% if (hasMore) { %>
+        <a class="btn ghost" href="/?page=<%= page + 1 %>">Older →</a>
+      <% } %>
+    </div>
   </div>
+  <aside class="feed-sidebar feed-sidebar-right">
+    <div class="card">
+      <h4 style="margin:0 0 8px">Discover people</h4>
+      <form method="get" action="/">
+        <input type="search" name="q" value="<%= q %>" placeholder="Search by username…" style="font-size:13px;width:100%">
+      </form>
+      <% if (discoverResults.length) { %>
+        <div style="margin-top:8px">
+          <% discoverResults.forEach(function(r){ %>
+            <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border)">
+              <% if (r.avatar) { %><img src="<%= r.avatar %>" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover"><% } else { %><div style="width:28px;height:28px;border-radius:50%;background:var(--primary-container);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0"><%= r.username.slice(0,1).toUpperCase() %></div><% } %>
+              <div style="flex:1;min-width:0;font-size:13px">
+                <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><%= r.display_name %></div>
+                <small class="muted">@<%= r.username %></small>
+              </div>
+              <a class="btn" href="/u/<%= r.username %>" style="font-size:11px;padding:2px 8px">View</a>
+            </div>
+          <% }) %>
+        </div>
+      <% } %>
+      <h5 style="margin:12px 0 6px;font-size:13px">Friends of friends</h5>
+      <% if (suggested.length) { %>
+        <% suggested.forEach(function(r){ %>
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border)">
+            <% if (r.avatar) { %><img src="<%= r.avatar %>" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover"><% } else { %><div style="width:28px;height:28px;border-radius:50%;background:var(--secondary-container);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0"><%= r.username.slice(0,1).toUpperCase() %></div><% } %>
+            <div style="flex:1;min-width:0;font-size:13px">
+              <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><%= r.display_name %></div>
+              <small class="muted">@<%= r.username %></small>
+            </div>
+            <a class="btn ghost" href="/u/<%= r.username %>" style="font-size:11px;padding:2px 8px">View</a>
+          </div>
+        <% }) %>
+      <% } else { %>
+        <p class="muted" style="font-size:12px">Follow more people to expand your network.</p>
+      <% } %>
+    </div>
+  </aside>
+</div>
 <%- include('partials/footer') %>

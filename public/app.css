@@ -76,11 +76,11 @@ a:hover { color: #a8def5; }
 
 /* ---- feed layout (3-column on desktop) ---- */
 .feed-layout { display: flex; gap: 24px; align-items: flex-start; max-width: 1440px; margin: 0 auto; padding: 24px 24px 90px; }
-.feed-main { flex: 1; min-width: 0; max-width: 900px; }
+.feed-main { width: 680px; flex-shrink: 0; }
 .feed-sidebar { width: 260px; flex-shrink: 0; display: flex; flex-direction: column; gap: 16px; }
 .feed-sidebar .card { padding: 14px; }
 @media (max-width: 1000px) {
-  .feed-layout { flex-direction: column; max-width: 680px; }
+  .feed-layout { flex-direction: column; max-width: 680px; padding: 24px 16px 90px; }
   .feed-sidebar { width: 100%; }
 }
 
