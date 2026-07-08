@@ -14,4 +14,4 @@
 </head>
 <body>
   <%- include('nav') %>
-  <main class="wrap">
+  <main class="wrap<%= locals.wrapClass ? ' ' + locals.wrapClass : '' %>">
