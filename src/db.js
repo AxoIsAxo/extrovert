@@ -580,6 +580,14 @@ function deleteUser(userId) {
   db.prepare(`DELETE FROM messages WHERE from_id = ? OR to_id = ?`).run(userId, userId);
   db.prepare(`DELETE FROM profile_customization WHERE user_id = ?`).run(userId);
   db.prepare(`DELETE FROM user_public_keys WHERE user_id = ?`).run(userId);
+  // Rooms cleanup.
+  db.prepare(`DELETE FROM room_messages WHERE user_id = ?`).run(userId);
+  db.prepare(`DELETE FROM room_members WHERE user_id = ?`).run(userId);
+  db.prepare(`DELETE FROM join_requests WHERE user_id = ?`).run(userId);
+  db.prepare(`UPDATE rooms SET creator_id = NULL WHERE creator_id = ?`).run(userId);
+  // Reports cleanup.
+  db.prepare(`UPDATE reports SET reporter_id = NULL WHERE reporter_id = ?`).run(userId);
+  db.prepare(`UPDATE reports SET reported_user_id = NULL WHERE reported_user_id = ?`).run(userId);
   db.prepare(`DELETE FROM users WHERE id = ?`).run(userId);
 }
 
