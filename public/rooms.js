@@ -138,7 +138,11 @@ document.addEventListener('DOMContentLoaded', function() {
       rowDiv.appendChild(wrap);
       var innerDiv = document.createElement('div');
       innerDiv.className = 'room-msg-body-inner';
-      innerDiv.innerHTML = '<span class="room-msg-text">' + escHtml(m.body) + '</span>';
+      innerDiv.appendChild(headerDiv);
+      var textSpan = document.createElement('span');
+      textSpan.className = 'room-msg-text';
+      textSpan.textContent = m.body;
+      innerDiv.appendChild(textSpan);
       rowDiv.appendChild(innerDiv);
       bodyDiv.appendChild(rowDiv);
       var reportSpan = document.createElement('span');
