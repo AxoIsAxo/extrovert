@@ -206,6 +206,9 @@ db.prepare(`UPDATE users SET referred_by = NULL WHERE referred_by IS NOT NULL AN
 function adminExists() {
   return db.prepare(`SELECT 1 FROM users WHERE is_admin = 1`).get() ? true : false;
 }
+function makeAdmin(userId) {
+  db.prepare(`UPDATE users SET is_admin = 1 WHERE id = ?`).run(userId);
+}
 
 function createUser({ username, passwordHash, displayName, referredBy, referrerIp }) {
   const now = Date.now();

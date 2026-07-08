@@ -25,6 +25,10 @@
             </td>
             <td style="padding:8px 4px;white-space:nowrap">
               <% if (!u.is_admin) { %>
+                <form method="post" action="/admin/make-admin/<%= u.id %>" style="display:inline;margin:0">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn ghost" style="font-size:12px;padding:2px 8px;color:var(--accent)">Make Admin</button>
+                </form>
                 <form method="post" action="/admin/delete/<%= u.id %>" style="display:inline;margin:0" onsubmit="return confirm('Delete <%= u.display_name %> permanently?')">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                   <button class="btn ghost" style="font-size:12px;padding:2px 8px;color:var(--danger)">Delete</button>

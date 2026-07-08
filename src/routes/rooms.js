@@ -100,7 +100,7 @@ router.post('/:id/leave', (req, res) => {
   if (role && role.is_founder) {
     const members = getRoomMembers(room.id);
     const others = members.filter(m => m.user_id !== userId);
-    if (others.length === 0) { removeRoomMember(room.id, userId); return res.redirect('/rooms'); }
+    if (others.length === 0) { deleteRoom(room.id); return res.redirect('/rooms'); }
     return res.status(400).send('Transfer founder before leaving');
   }
   removeRoomMember(room.id, userId);

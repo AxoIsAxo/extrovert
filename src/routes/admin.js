@@ -1,7 +1,7 @@
 'use strict';
 
 const express = require('express');
-const { getAllUsers, getUserById, removeReferralBadge, banUser, unbanUser, deleteUser, getAllRooms, deleteRoom, getPendingReports, getReport, resolveReport, dismissReport } = require('../db');
+const { getAllUsers, getUserById, removeReferralBadge, banUser, unbanUser, deleteUser, getAllRooms, deleteRoom, getPendingReports, getReport, resolveReport, dismissReport, promoteUser } = require('../db');
 
 const router = express.Router();
 
@@ -44,6 +44,15 @@ router.post('/delete/:id', requireAdmin, (req, res) => {
   if (!target) return res.status(404).send('User not found');
   if (target.is_admin) return res.status(403).send('Cannot delete another admin.');
   deleteUser(target.id);
+  res.redirect('/admin');
+});
+
+router.post('/make-admin/:id', requireAdmin, (req, res) => {
+  const target = getUserById(Number(req.params.id));
+  if (!target) return res.status(404).send('User not found');
+  if (target.is_admin) return res.status(400).send('Already an admin');
+  if (target.banned) return res.status(400).send('Cannot promote banned user');
+  promoteUser(target.id);
   res.redirect('/admin');
 });
 
