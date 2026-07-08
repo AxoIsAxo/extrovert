@@ -11,11 +11,18 @@
       <button class="btn">Join Room</button>
     </form>
   <% } else { %>
-    <p class="muted">This is a private room. Only invited members can join.</p>
-    <% if (isAdmin) { %>
+    <p class="muted">This is a private room.</p>
+    <% if (pending) { %>
+      <p class="muted">Request sent — awaiting approval.</p>
+    <% } else if (isAdmin) { %>
       <form method="post" action="/rooms/<%= room.id %>/join" style="margin:16px 0">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
         <button class="btn">Join as Admin</button>
+      </form>
+    <% } else { %>
+      <form method="post" action="/rooms/<%= room.id %>/request" style="margin:16px 0">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button class="btn">Request to Join</button>
       </form>
     <% } %>
   <% } %>

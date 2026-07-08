@@ -182,6 +182,14 @@ function init() {
       status           TEXT NOT NULL DEFAULT 'pending',
       created_at       INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS join_requests (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      room_id    INTEGER NOT NULL REFERENCES rooms(id),
+      user_id    INTEGER NOT NULL REFERENCES users(id),
+      status     TEXT NOT NULL DEFAULT 'pending',
+      created_at INTEGER NOT NULL
+    );
   `);
 }
 
@@ -201,6 +209,7 @@ try { db.exec(`ALTER TABLE users ADD COLUMN banned INTEGER NOT NULL DEFAULT 0`);
 try { db.exec(`ALTER TABLE users ADD COLUMN avatar TEXT`); } catch {}
 try { db.exec(`ALTER TABLE rooms ADD COLUMN is_public INTEGER NOT NULL DEFAULT 1`); } catch {}
 try { db.exec(`CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, reporter_id INTEGER NOT NULL REFERENCES users(id), reported_user_id INTEGER NOT NULL REFERENCES users(id), message_id INTEGER NOT NULL, message_body TEXT NOT NULL, channel_id INTEGER NOT NULL, room_id INTEGER NOT NULL, reason TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL)`); } catch {}
+try { db.exec(`CREATE TABLE IF NOT EXISTS join_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, room_id INTEGER NOT NULL REFERENCES rooms(id), user_id INTEGER NOT NULL REFERENCES users(id), status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL)`); } catch {}
 // Fix stale referred_by links for users whose referrer no longer has a referral code.
 db.prepare(`UPDATE users SET referred_by = NULL WHERE referred_by IS NOT NULL AND referred_by IN (SELECT id FROM users WHERE referral_code IS NULL)`).run();
 
@@ -758,6 +767,33 @@ function getAllRooms() {
   return db.prepare(`SELECT r.*, (SELECT COUNT(*) FROM room_members WHERE room_id = r.id) AS member_count, u.username AS creator_username FROM rooms r LEFT JOIN users u ON u.id = r.creator_id ORDER BY r.created_at DESC`).all();
 }
 
+// ---------- join requests ----------
+function createJoinRequest(roomId, userId) {
+  const existing = db.prepare(`SELECT id, status FROM join_requests WHERE room_id = ? AND user_id = ?`).get(roomId, userId);
+  if (existing) return existing;
+  return db.prepare(`INSERT INTO join_requests (room_id, user_id, status, created_at) VALUES (?,?,?,?)`).run(roomId, userId, 'pending', Date.now());
+}
+function getJoinRequests(roomId) {
+  return db.prepare(`SELECT j.*, u.username, u.display_name, u.avatar FROM join_requests j INNER JOIN users u ON u.id = j.user_id WHERE j.room_id = ? AND j.status = 'pending' ORDER BY j.created_at ASC`).all(roomId);
+}
+function approveJoinRequest(requestId) {
+  const req = db.prepare(`SELECT * FROM join_requests WHERE id = ?`).get(requestId);
+  if (!req || req.status !== 'pending') return null;
+  db.prepare(`UPDATE join_requests SET status = 'approved' WHERE id = ?`).run(requestId);
+  const defaultRole = db.prepare(`SELECT id FROM room_roles WHERE room_id = ? AND is_founder = 0 ORDER BY position DESC LIMIT 1`).get(req.room_id);
+  if (defaultRole) addRoomMember(req.room_id, req.user_id, defaultRole.id);
+  return true;
+}
+function rejectJoinRequest(requestId) {
+  const req = db.prepare(`SELECT * FROM join_requests WHERE id = ?`).get(requestId);
+  if (!req || req.status !== 'pending') return null;
+  db.prepare(`UPDATE join_requests SET status = 'rejected' WHERE id = ?`).run(requestId);
+  return true;
+}
+function hasPendingRequest(roomId, userId) {
+  return !!db.prepare(`SELECT 1 FROM join_requests WHERE room_id = ? AND user_id = ? AND status = 'pending'`).get(roomId, userId);
+}
+
 // ---------- theme ----------
 function getUserTheme(userId) {
   const row = db.prepare(`SELECT theme FROM users WHERE id = ?`).get(userId);
@@ -814,4 +850,6 @@ module.exports = {
   createReport, getPendingReports, getReport, resolveReport, dismissReport,
   // admin rooms
   getAllRooms,
+  // join requests
+  createJoinRequest, getJoinRequests, approveJoinRequest, rejectJoinRequest, hasPendingRequest,
 };

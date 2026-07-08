@@ -10,6 +10,7 @@ const {
   createRoomChannel, getRoomChannel, getRoomChannels, updateRoomChannel, deleteRoomChannel,
   getRoomMessages, sendRoomMessage, joinDefaultRole, hasRoomPermission, getUserById, db,
   createReport,
+  createJoinRequest, getJoinRequests, approveJoinRequest, rejectJoinRequest, hasPendingRequest,
 } = require('../db');
 
 const router = express.Router();
@@ -57,7 +58,8 @@ router.get('/:id', (req, res) => {
     const members = getRoomMembers(room.id);
     const roles = getRoomRoles(room.id);
     const channels = getRoomChannels(room.id);
-    return res.render('rooms/room-info', { room, members, roles, channels, isAdmin });
+    const pending = hasPendingRequest(room.id, userId);
+    return res.render('rooms/room-info', { room, members, roles, channels, isAdmin, pending });
   }
 
   let role, channels;
@@ -265,7 +267,8 @@ router.get('/:id/members', (req, res) => {
   if (!checkPerm(room.id, res.locals.currentUser.id, PERM.MANAGE_MEMBERS)) return res.status(403).send('No permission');
   const members = getRoomMembers(room.id);
   const roles = getRoomRoles(room.id);
-  res.render('rooms/members', { room, members, roles });
+  const requests = getJoinRequests(room.id);
+  res.render('rooms/members', { room, members, roles, requests });
 });
 
 router.post('/:id/members/:uid/setrole', (req, res) => {
@@ -380,6 +383,49 @@ router.post('/:id/channels/:cid/report', (req, res) => {
   if (!msg) return res.status(404).json({ error: 'Message not found' });
   createReport(res.locals.currentUser.id, msg.user_id, msg.id, msg.body, channel.id, room.id, reason);
   res.json({ ok: true });
+});
+
+// Request to join private room
+router.post('/:id/request', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  const room = getRoom(Number(req.params.id));
+  if (!room || room.is_public) return res.status(404).send('Room not found');
+  const userId = res.locals.currentUser.id;
+  if (isRoomMember(room.id, userId)) return res.redirect('/rooms/' + room.id);
+  createJoinRequest(room.id, userId);
+  res.redirect('/rooms/' + room.id);
+});
+
+// Approve join request
+router.post('/:id/requests/:rid/approve', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  if (!checkPerm(Number(req.params.id), res.locals.currentUser.id, PERM.MANAGE_MEMBERS)) return res.status(403).send('No permission');
+  approveJoinRequest(Number(req.params.rid));
+  res.redirect('/rooms/' + req.params.id + '/members');
+});
+
+// Reject join request
+router.post('/:id/requests/:rid/reject', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  if (!checkPerm(Number(req.params.id), res.locals.currentUser.id, PERM.MANAGE_MEMBERS)) return res.status(403).send('No permission');
+  rejectJoinRequest(Number(req.params.rid));
+  res.redirect('/rooms/' + req.params.id + '/members');
+});
+
+// Invite user to private room
+router.post('/:id/invite', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).send('Room not found');
+  if (!checkPerm(room.id, res.locals.currentUser.id, PERM.MANAGE_MEMBERS)) return res.status(403).send('No permission');
+  const username = String(req.body.username || '').trim().toLowerCase();
+  if (!username) return res.redirect('/rooms/' + room.id + '/members');
+  const target = getUserByUsername(username);
+  if (!target) return res.status(404).send('User not found');
+  if (isRoomMember(room.id, target.id)) return res.status(400).send('Already a member');
+  const defaultRole = joinDefaultRole(room.id);
+  if (defaultRole) addRoomMember(room.id, target.id, defaultRole.id);
+  res.redirect('/rooms/' + room.id + '/members');
 });
 
 module.exports = router;
