@@ -4,11 +4,11 @@ const express = require('express');
 const { sanitizeProfileHTML, sanitizeCSS } = require('../sanitize');
 
 const {
-  createRoom, getRoom, getRoomsForUser, getAvailableRooms, updateRoom, deleteRoom,
+  createRoom, getRoom, getRoomsForUser, getAvailableRooms, updateRoom, deleteRoom, deleteRoomMessage,
   isRoomMember, addRoomMember, removeRoomMember, getRoomMembers, getUserRoomRole, countRoomMembers,
   createRoomRole, getRoomRole, getRoomRoles, updateRoomRole, deleteRoomRole, transferFounder,
   createRoomChannel, getRoomChannel, getRoomChannels, updateRoomChannel, deleteRoomChannel,
-  getRoomMessages, sendRoomMessage, joinDefaultRole, hasRoomPermission, getUserById, db,
+  getRoomMessages, sendRoomMessage, joinDefaultRole, hasRoomPermission, getUserById, getUserByUsername, db,
   createReport,
   createJoinRequest, getJoinRequests, approveJoinRequest, rejectJoinRequest, hasPendingRequest,
 } = require('../db');
@@ -138,7 +138,8 @@ router.post('/:id/settings', (req, res) => {
   const html = sanitizeProfileHTML(req.body.html || '');
   const css = sanitizeCSS(req.body.css || '');
   if (!name) return res.redirect('/rooms/' + room.id + '/settings');
-  updateRoom(room.id, name, description, html, css);
+  const isPublic = req.body.is_public !== '0';
+  updateRoom(room.id, name, description, html, css, isPublic);
   res.redirect('/rooms/' + room.id);
 });
 
@@ -343,7 +344,8 @@ router.get('/:id/channels/:cid/messages', (req, res) => {
     var r = roles.find(function(rr) { return rr.id === m.role_id; });
     if (r) roleMap[m.user_id] = r.color;
   });
-  res.json({ messages, roles, roleMap });
+  const canDelete = !!(role && role.permissions & PERM.MANAGE_MESSAGES) || res.locals.currentUser.is_admin;
+  res.json({ messages, roles, roleMap, canDelete });
 });
 
 router.post('/:id/channels/:cid/send', (req, res) => {
@@ -365,6 +367,26 @@ router.post('/:id/channels/:cid/send', (req, res) => {
   if (!body) return res.status(400).json({ error: 'Message is empty' });
   const msgId = sendRoomMessage(channel.id, res.locals.currentUser.id, body);
   res.json({ id: msgId });
+});
+
+// Delete a message
+router.post('/:id/channels/:cid/messages/:mid/delete', (req, res) => {
+  if (!res.locals.currentUser) return res.status(401).json({ error: 'Not logged in' });
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+  const userId = res.locals.currentUser.id;
+  if (!isRoomMember(room.id, userId) && !res.locals.currentUser.is_admin) return res.status(403).json({ error: 'Not a member' });
+  const channel = getRoomChannel(Number(req.params.cid));
+  if (!channel || channel.room_id !== room.id) return res.status(404).json({ error: 'Channel not found' });
+  const msgId = Number(req.params.mid);
+  const msgs = getRoomMessages(channel.id);
+  const msg = msgs.find(m => m.id === msgId);
+  if (!msg) return res.status(404).json({ error: 'Message not found' });
+  const canDeleteOwn = msg.user_id === userId;
+  const canModerate = checkPerm(room.id, userId, PERM.MANAGE_MESSAGES);
+  if (!canDeleteOwn && !canModerate && !res.locals.currentUser.is_admin) return res.status(403).json({ error: 'No permission' });
+  deleteRoomMessage(msgId);
+  res.json({ ok: true });
 });
 
 // Report a message

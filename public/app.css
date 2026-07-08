@@ -362,14 +362,20 @@ a.conv-row:hover { color: var(--primary); }
 .room-msg.self .room-msg-body-inner { background: var(--primary-container); }
 .room-msg.self .room-msg-text { color: var(--on-primary-container); }
 .room-msg.self .room-msg-report { display: none; }
+.room-msg.self .room-msg-delete { display: none; }
 .room-msg-header { display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px; }
 .room-msg-author { font-weight: 600; font-size: 14px; }
 .room-msg-time { font-size: 11px; color: var(--on-surface-variant); }
 .room-msg-body-inner { background: var(--surface-container-high); border-radius: 12px; padding: 6px 12px 8px; display: inline-block; max-width: 100%; }
 .room-msg-text { font-size: 14px; color: var(--on-surface); word-wrap: break-word; }
-.room-msg-report { font-size: 11px; cursor: pointer; margin-left: 8px; padding: 2px 8px; border-radius: 4px; background: var(--surface-container); border: 1px solid var(--outline-variant); color: var(--on-surface-variant); display:none; margin-top:4px; }
+.room-msg-actions { display: flex; gap: 4px; margin-top: 4px; justify-content: flex-end; }
+.room-msg.self .room-msg-actions { justify-content: flex-start; }
+.room-msg-report, .room-msg-delete { font-size: 11px; cursor: pointer; padding: 2px 8px; border-radius: 4px; background: var(--surface-container); border: 1px solid var(--outline-variant); color: var(--on-surface-variant); display: none; }
+.room-msg-delete { color: var(--error); border-color: var(--error); }
 .room-msg:hover .room-msg-report { display: inline-block; }
+.room-msg:hover .room-msg-delete { display: inline-block; }
 .room-msg-report:hover { background: var(--danger-container); border-color: var(--danger); color: var(--on-danger-container); }
+.room-msg-delete:hover { background: var(--error-container); border-color: var(--error); color: var(--on-error-container); }
 .room-input { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--outline-variant); }
 .room-input input { flex: 1; }
 

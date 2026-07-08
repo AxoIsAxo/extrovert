@@ -11,6 +11,11 @@
       <textarea name="html" rows="8" spellcheck="false"><%= room.html %></textarea>
       <label>Room CSS <span class="muted">(styles the entire room page)</span></label>
       <textarea name="css" rows="8" spellcheck="false"><%= room.css %></textarea>
+      <label style="margin-top:12px">Privacy</label>
+      <div style="display:flex;gap:16px;margin-bottom:8px">
+        <label style="font-weight:400;font-size:14px"><input type="radio" name="is_public" value="1" <%= room.is_public ? 'checked' : '' %>> Public</label>
+        <label style="font-weight:400;font-size:14px"><input type="radio" name="is_public" value="0" <%= !room.is_public ? 'checked' : '' %>> Private</label>
+      </div>
       <div style="margin-top:16px">
         <button class="btn">Save</button>
         <a class="btn ghost" href="/rooms/<%= room.id %>">Back</a>

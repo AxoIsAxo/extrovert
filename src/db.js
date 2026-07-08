@@ -667,8 +667,11 @@ function getRoomsForUser(userId) {
 function getAvailableRooms(userId) {
   return db.prepare(`SELECT r.id, r.name, r.description, r.is_public, r.created_at, (SELECT COUNT(*) FROM room_members WHERE room_id = r.id) AS member_count FROM rooms r WHERE r.id NOT IN (SELECT room_id FROM room_members WHERE user_id = ?) ORDER BY r.is_public DESC, r.name`).all(userId);
 }
-function updateRoom(id, name, description, html, css) {
-  db.prepare(`UPDATE rooms SET name=?, description=?, html=?, css=? WHERE id=?`).run(name, description, html, css, id);
+function updateRoom(id, name, description, html, css, isPublic) {
+  db.prepare(`UPDATE rooms SET name=?, description=?, html=?, css=?, is_public=? WHERE id=?`).run(name, description, html, css, isPublic !== undefined ? (isPublic ? 1 : 0) : undefined, id);
+}
+function deleteRoomMessage(msgId) {
+  db.prepare(`DELETE FROM room_messages WHERE id = ?`).run(msgId);
 }
 function deleteRoom(id) {
   db.prepare(`DELETE FROM room_messages WHERE channel_id IN (SELECT id FROM room_channels WHERE room_id = ?)`).run(id);

@@ -43,7 +43,12 @@
                 <span class="room-msg-text"><%= m.body %></span>
               </div>
             </div>
-            <span class="room-msg-report" data-msg-id="<%= m.id %>">Report</span>
+            <div class="room-msg-actions">
+              <% if (m.user_id === locals.currentUser.id || (role && role.permissions & 16) || locals.currentUser.is_admin) { %>
+                <span class="room-msg-delete" data-msg-id="<%= m.id %>">Delete</span>
+              <% } %>
+              <span class="room-msg-report" data-msg-id="<%= m.id %>">Report</span>
+            </div>
           </div>
         </div>
       <% }) %>
@@ -72,5 +77,5 @@
     </form>
   </div>
 </div>
-<script src="/static/rooms.js?v=2"></script>
+<script src="/static/rooms.js?v=3"></script>
 <%- include('../partials/footer') %>

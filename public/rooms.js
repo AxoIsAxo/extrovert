@@ -45,6 +45,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Report buttons: delegation on msgArea for server-rendered and AJAX messages
   msgArea.addEventListener('click', function(e) {
+    var delBtn = e.target.closest('.room-msg-delete');
+    if (delBtn) {
+      var msgId = delBtn.dataset.msgId;
+      if (!confirm('Delete this message?')) return;
+      var csrf = getCsrf();
+      var cid = sendForm ? sendForm.dataset.channelId : '';
+      fetch('/rooms/' + roomId() + '/channels/' + cid + '/messages/' + msgId + '/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf }
+      }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.ok) loadMessages(cid);
+      });
+      return;
+    }
     var reportBtn = e.target.closest('.room-msg-report');
     if (!reportBtn) return;
     var msgId = reportBtn.dataset.msgId;
@@ -146,11 +160,21 @@ document.addEventListener('DOMContentLoaded', function() {
       innerDiv.appendChild(textSpan);
       rowDiv.appendChild(innerDiv);
       bodyDiv.appendChild(rowDiv);
+      var actionsDiv = document.createElement('div');
+      actionsDiv.className = 'room-msg-actions';
+      if (m.user_id === currentUserId || data.canDelete) {
+        var delSpan = document.createElement('span');
+        delSpan.className = 'room-msg-delete';
+        delSpan.dataset.msgId = m.id;
+        delSpan.textContent = 'Delete';
+        actionsDiv.appendChild(delSpan);
+      }
       var reportSpan = document.createElement('span');
       reportSpan.className = 'room-msg-report';
       reportSpan.dataset.msgId = m.id;
       reportSpan.textContent = 'Report';
-      bodyDiv.appendChild(reportSpan);
+      actionsDiv.appendChild(reportSpan);
+      bodyDiv.appendChild(actionsDiv);
       div.appendChild(bodyDiv);
       msgArea.appendChild(div);
     });
