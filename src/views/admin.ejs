@@ -98,4 +98,41 @@
       <p class="muted">No rooms.</p>
     <% } %>
   </div>
+
+  <div class="card" style="max-width:800px;margin:16px auto" id="reports">
+    <h2>Reports (<%= reports.length %>)</h2>
+    <% if (reports.length) { %>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="text-align:left;border-bottom:2px solid var(--border)">
+            <th style="padding:8px 4px">Message</th>
+            <th style="padding:8px 4px">From</th>
+            <th style="padding:8px 4px">Room</th>
+            <th style="padding:8px 4px">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% reports.forEach(function(r) { %>
+            <tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:8px 4px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><%= r.message_body %></td>
+              <td style="padding:8px 4px"><%= r.reporter_username %></td>
+              <td style="padding:8px 4px"><%= r.room_name %></td>
+              <td style="padding:8px 4px;white-space:nowrap">
+                <form method="post" action="/admin/reports/<%= r.id %>/ban" style="display:inline;margin:0">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn ghost" style="font-size:12px;padding:2px 8px;color:var(--danger)">Ban author</button>
+                </form>
+                <form method="post" action="/admin/reports/<%= r.id %>/dismiss" style="display:inline;margin:0">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn ghost" style="font-size:12px;padding:2px 8px">Dismiss</button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    <% } else { %>
+      <p class="muted">No pending reports.</p>
+    <% } %>
+  </div>
 <%- include('partials/footer') %>

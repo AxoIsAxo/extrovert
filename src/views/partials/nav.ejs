@@ -7,7 +7,7 @@
     <a href="/u/<%= currentUser.username %>">Profile</a>
     <a href="/rooms">Rooms</a>
     <a href="/settings">Settings</a>
-    <% if (locals.currentUser && locals.currentUser.is_admin) { %><a href="/admin">Admin</a><a href="/admin/reports">Reports</a><% } %>
+    <% if (locals.currentUser && locals.currentUser.is_admin) { %><a href="/admin">Admin<% if (locals.pendingReports > 0) { %><sup class="badge"><%= pendingReports %></sup><% } %></a><% } %>
     <span class="spacer"></span>
     <form method="post" action="/logout" style="margin:0"><input type="hidden" name="_csrf" value="<%= locals.csrfToken %>"><button>Log out</button></form>
   <% } else { %>

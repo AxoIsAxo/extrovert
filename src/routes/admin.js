@@ -14,7 +14,8 @@ function requireAdmin(req, res, next) {
 router.get('/', requireAdmin, (req, res) => {
   const users = getAllUsers();
   const rooms = getAllRooms();
-  res.render('admin', { users, rooms });
+  const reports = getPendingReports();
+  res.render('admin', { users, rooms, reports });
 });
 
 router.post('/remove-referral/:id', requireAdmin, (req, res) => {
