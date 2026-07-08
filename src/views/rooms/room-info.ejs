@@ -1,0 +1,24 @@
+<%- include('../partials/header') %>
+<% if (room.css) { %><style><%= room.css %></style><% } %>
+<div class="card" style="max-width:600px;margin:0 auto;text-align:center">
+  <% if (room.html) { %><div><%- room.html %></div><% } %>
+  <h2><%= room.name %></h2>
+  <p class="muted"><%= room.description || 'No description' %></p>
+  <p class="muted"><%= members.length %> member<%= members.length !== 1 ? 's' : '' %> &middot; <%= channels.length %> channel<%= channels.length !== 1 ? 's' : '' %></p>
+  <% if (room.is_public) { %>
+    <form method="post" action="/rooms/<%= room.id %>/join" style="margin:16px 0">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <button class="btn">Join Room</button>
+    </form>
+  <% } else { %>
+    <p class="muted">This is a private room. Only invited members can join.</p>
+    <% if (isAdmin) { %>
+      <form method="post" action="/rooms/<%= room.id %>/join" style="margin:16px 0">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button class="btn">Join as Admin</button>
+      </form>
+    <% } %>
+  <% } %>
+  <a class="btn ghost" href="/rooms">Back to Rooms</a>
+</div>
+<%- include('../partials/footer') %>

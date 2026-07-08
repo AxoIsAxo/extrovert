@@ -20,22 +20,53 @@
     </div>
   <% } %>
 
-  <div class="card">
-    <h3>Public Rooms</h3>
-    <% if (publicRooms.length) { %>
+  <% if (available.length) { %>
+    <div class="card">
+      <h3>Public Rooms</h3>
       <div style="display:flex;flex-direction:column;gap:8px">
-        <% publicRooms.forEach(function(r) { %>
+        <% available.filter(function(r) { return r.is_public; }).forEach(function(r) { %>
           <div class="room-card" style="display:flex;justify-content:space-between;align-items:center">
             <div>
               <a href="/rooms/<%= r.id %>"><strong><%= r.name %></strong></a>
               <small class="muted"><%= r.description || 'No description' %></small>
             </div>
-            <small class="muted"><%= r.member_count %> member<%= r.member_count !== 1 ? 's' : '' %></small>
+            <div style="display:flex;align-items:center;gap:8px">
+              <small class="muted"><%= r.member_count %></small>
+              <form method="post" action="/rooms/<%= r.id %>/join" style="margin:0">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <button class="btn" style="font-size:13px;padding:4px 12px">Join</button>
+              </form>
+            </div>
           </div>
         <% }) %>
+        <% if (!available.some(function(r) { return r.is_public; })) { %>
+          <p class="muted">No public rooms available.</p>
+        <% } %>
       </div>
-    <% } else { %>
-      <p class="muted">No rooms yet. Create one!</p>
-    <% } %>
-  </div>
+    </div>
+
+    <div class="card">
+      <h3>Private Rooms</h3>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <% available.filter(function(r) { return !r.is_public; }).forEach(function(r) { %>
+          <div class="room-card" style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <a href="/rooms/<%= r.id %>"><strong><%= r.name %></strong></a>
+              <small class="muted"><%= r.description || 'No description' %></small>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <small class="muted"><%= r.member_count %> members</small>
+            </div>
+          </div>
+        <% }) %>
+        <% if (!available.some(function(r) { return !r.is_public; })) { %>
+          <p class="muted">No private rooms.</p>
+        <% } %>
+      </div>
+    </div>
+  <% } else { %>
+    <div class="card">
+      <p class="muted">No available rooms. Create one!</p>
+    </div>
+  <% } %>
 <%- include('../partials/footer') %>

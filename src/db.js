@@ -129,6 +129,7 @@ function init() {
       html        TEXT NOT NULL DEFAULT '',
       css         TEXT NOT NULL DEFAULT '',
       creator_id  INTEGER NOT NULL REFERENCES users(id),
+      is_public   INTEGER NOT NULL DEFAULT 1,
       created_at  INTEGER NOT NULL
     );
 
@@ -198,6 +199,7 @@ try { db.exec(`ALTER TABLE users ADD COLUMN referrer_ip TEXT`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN banned INTEGER NOT NULL DEFAULT 0`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN avatar TEXT`); } catch {}
+try { db.exec(`ALTER TABLE rooms ADD COLUMN is_public INTEGER NOT NULL DEFAULT 1`); } catch {}
 try { db.exec(`CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, reporter_id INTEGER NOT NULL REFERENCES users(id), reported_user_id INTEGER NOT NULL REFERENCES users(id), message_id INTEGER NOT NULL, message_body TEXT NOT NULL, channel_id INTEGER NOT NULL, room_id INTEGER NOT NULL, reason TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL)`); } catch {}
 // Fix stale referred_by links for users whose referrer no longer has a referral code.
 db.prepare(`UPDATE users SET referred_by = NULL WHERE referred_by IS NOT NULL AND referred_by IN (SELECT id FROM users WHERE referral_code IS NULL)`).run();
@@ -639,9 +641,9 @@ function getMyStickers(userId) {
 }
 
 // ---------- rooms ----------
-function createRoom(name, description, creatorId) {
+function createRoom(name, description, creatorId, isPublic = 1) {
   const now = Date.now();
-  const res = db.prepare(`INSERT INTO rooms (name, description, creator_id, created_at) VALUES (?,?,?,?)`).run(name, description, creatorId, now);
+  const res = db.prepare(`INSERT INTO rooms (name, description, creator_id, is_public, created_at) VALUES (?,?,?,?,?)`).run(name, description, creatorId, isPublic ? 1 : 0, now);
   const roomId = res.lastInsertRowid;
   const founderRole = db.prepare(`INSERT INTO room_roles (room_id, name, color, permissions, is_founder, position, created_at) VALUES (?,?,?,?,?,?,?)`).run(roomId, 'Founder', '#ffd700', 127, 1, 100, now);
   const memberRole = db.prepare(`INSERT INTO room_roles (room_id, name, color, permissions, is_founder, position, created_at) VALUES (?,?,?,?,?,?,?)`).run(roomId, 'Member', '#cccccc', 3, 0, 0, now);
@@ -653,8 +655,8 @@ function getRoom(id) { return db.prepare(`SELECT * FROM rooms WHERE id = ?`).get
 function getRoomsForUser(userId) {
   return db.prepare(`SELECT r.* FROM rooms r INNER JOIN room_members m ON m.room_id = r.id WHERE m.user_id = ? ORDER BY r.name`).all(userId);
 }
-function getPublicRooms() {
-  return db.prepare(`SELECT r.id, r.name, r.description, r.created_at, (SELECT COUNT(*) FROM room_members WHERE room_id = r.id) AS member_count FROM rooms r ORDER BY r.name`).all();
+function getAvailableRooms(userId) {
+  return db.prepare(`SELECT r.id, r.name, r.description, r.is_public, r.created_at, (SELECT COUNT(*) FROM room_members WHERE room_id = r.id) AS member_count FROM rooms r WHERE r.id NOT IN (SELECT room_id FROM room_members WHERE user_id = ?) ORDER BY r.is_public DESC, r.name`).all(userId);
 }
 function updateRoom(id, name, description, html, css) {
   db.prepare(`UPDATE rooms SET name=?, description=?, html=?, css=? WHERE id=?`).run(name, description, html, css, id);
@@ -803,7 +805,7 @@ module.exports = {
   // avatar
   setAvatar, getAvatar,
   // rooms
-  createRoom, getRoom, getRoomsForUser, getPublicRooms, updateRoom, deleteRoom,
+  createRoom, getRoom, getRoomsForUser, getAvailableRooms, updateRoom, deleteRoom,
   isRoomMember, addRoomMember, removeRoomMember, getRoomMembers, getUserRoomRole, countRoomMembers,
   createRoomRole, getRoomRole, getRoomRoles, updateRoomRole, deleteRoomRole, transferFounder,
   createRoomChannel, getRoomChannel, getRoomChannels, updateRoomChannel, deleteRoomChannel,

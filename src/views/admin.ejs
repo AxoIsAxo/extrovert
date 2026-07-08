@@ -70,6 +70,7 @@
             <th style="padding:8px 4px">Room</th>
             <th style="padding:8px 4px">Creator</th>
             <th style="padding:8px 4px">Members</th>
+            <th style="padding:8px 4px">Type</th>
             <th style="padding:8px 4px">Actions</th>
           </tr>
         </thead>
@@ -82,6 +83,7 @@
               </td>
               <td style="padding:8px 4px"><%= r.creator_username || '—' %></td>
               <td style="padding:8px 4px"><%= r.member_count %></td>
+              <td style="padding:8px 4px"><% if (r.is_public) { %><span class="muted">Public</span><% } else { %><span class="muted">Private</span><% } %></td>
               <td style="padding:8px 4px">
                 <form method="post" action="/admin/rooms/<%= r.id %>/delete" style="display:inline;margin:0">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>">

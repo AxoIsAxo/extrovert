@@ -4,7 +4,7 @@ const express = require('express');
 const { sanitizeProfileHTML, sanitizeCSS } = require('../sanitize');
 
 const {
-  createRoom, getRoom, getRoomsForUser, getPublicRooms, updateRoom, deleteRoom,
+  createRoom, getRoom, getRoomsForUser, getAvailableRooms, updateRoom, deleteRoom,
   isRoomMember, addRoomMember, removeRoomMember, getRoomMembers, getUserRoomRole, countRoomMembers,
   createRoomRole, getRoomRole, getRoomRoles, updateRoomRole, deleteRoomRole, transferFounder,
   createRoomChannel, getRoomChannel, getRoomChannels, updateRoomChannel, deleteRoomChannel,
@@ -24,8 +24,8 @@ function checkPerm(roomId, userId, perm) {
 router.get('/', (req, res) => {
   if (!res.locals.currentUser) return res.redirect('/login');
   const myRooms = getRoomsForUser(res.locals.currentUser.id);
-  const publicRooms = getPublicRooms();
-  res.render('rooms/index', { myRooms, publicRooms });
+  const available = getAvailableRooms(res.locals.currentUser.id);
+  res.render('rooms/index', { myRooms, available });
 });
 
 // Create room form
@@ -39,8 +39,9 @@ router.post('/create', (req, res) => {
   if (!res.locals.currentUser) return res.redirect('/login');
   const name = String(req.body.name || '').trim();
   const description = String(req.body.description || '').trim();
+  const isPublic = req.body.is_public !== '0';
   if (!name) return res.redirect('/rooms/create');
-  const roomId = createRoom(name, description, res.locals.currentUser.id);
+  const roomId = createRoom(name, description, res.locals.currentUser.id, isPublic);
   res.redirect('/rooms/' + roomId);
 });
 
@@ -52,7 +53,12 @@ router.get('/:id', (req, res) => {
   const userId = res.locals.currentUser.id;
   const isAdmin = res.locals.currentUser.is_admin;
   const isMember = isRoomMember(room.id, userId);
-  if (!isMember && !isAdmin) return res.redirect('/rooms');
+  if (!isMember) {
+    const members = getRoomMembers(room.id);
+    const roles = getRoomRoles(room.id);
+    const channels = getRoomChannels(room.id);
+    return res.render('rooms/room-info', { room, members, roles, channels, isAdmin });
+  }
 
   let role, channels;
   if (isMember) {
@@ -85,6 +91,7 @@ router.post('/:id/join', (req, res) => {
   if (!room) return res.status(404).send('Room not found');
   const userId = res.locals.currentUser.id;
   if (isRoomMember(room.id, userId)) return res.redirect('/rooms/' + room.id);
+  if (!room.is_public && !res.locals.currentUser.is_admin) return res.status(403).send('This room is private');
   const defaultRole = joinDefaultRole(room.id);
   if (defaultRole) addRoomMember(room.id, userId, defaultRole.id);
   res.redirect('/rooms/' + room.id);

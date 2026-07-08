@@ -7,6 +7,15 @@
       <input type="text" name="name" maxlength="60" required>
       <label>Description <span class="muted">(optional)</span></label>
       <input type="text" name="description" maxlength="200">
+      <label>Room type</label>
+      <div style="margin:8px 0">
+        <label style="display:inline-flex;align-items:center;gap:4px;margin-right:16px;cursor:pointer">
+          <input type="radio" name="is_public" value="1" checked> Public
+        </label>
+        <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer">
+          <input type="radio" name="is_public" value="0"> Private
+        </label>
+      </div>
       <div style="margin-top:16px">
         <button class="btn">Create</button>
         <a class="btn ghost" href="/rooms">Cancel</a>
