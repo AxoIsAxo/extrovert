@@ -111,20 +111,32 @@ document.addEventListener('DOMContentLoaded', function() {
     messages.forEach(function(m) {
       var div = document.createElement('div');
       div.className = 'room-msg';
+      var wrap = document.createElement('div');
+      wrap.className = 'room-msg-avatar-wrap';
       if (m.avatar) {
         var img = document.createElement('img');
         img.className = 'room-msg-avatar';
         img.src = m.avatar;
         img.alt = '';
         img.addEventListener('error', function() { this.style.display = 'none'; });
-        div.appendChild(img);
+        wrap.appendChild(img);
+      } else {
+        var letter = document.createElement('span');
+        letter.className = 'room-msg-avatar room-msg-avatar-letter';
+        letter.textContent = (m.display_name || m.username)[0].toUpperCase();
+        wrap.appendChild(letter);
       }
+      div.appendChild(wrap);
       var bodyDiv = document.createElement('div');
       bodyDiv.className = 'room-msg-body';
+      var headerDiv = document.createElement('div');
+      headerDiv.className = 'room-msg-header';
+      var color = roleMap[m.user_id] || '#ccc';
+      headerDiv.innerHTML = '<span class="room-msg-author" style="color:' + color + '">' + escHtml(m.display_name || m.username) + '</span><span class="room-msg-time">' + relTime(m.created_at) + '</span>';
+      bodyDiv.appendChild(headerDiv);
       var innerDiv = document.createElement('div');
       innerDiv.className = 'room-msg-body-inner';
-      var color = roleMap[m.user_id] || '#ccc';
-      innerDiv.innerHTML = '<span class="room-msg-author" style="color:' + color + '">' + escHtml(m.display_name || m.username) + '</span><span class="room-msg-text">' + escHtml(m.body) + '</span><span class="room-msg-time">' + relTime(m.created_at) + '</span>';
+      innerDiv.innerHTML = '<span class="room-msg-text">' + escHtml(m.body) + '</span>';
       bodyDiv.appendChild(innerDiv);
       var reportSpan = document.createElement('span');
       reportSpan.className = 'room-msg-report';

@@ -30,12 +30,16 @@
       <% messages.forEach(function(m) { %>
         <% var mRole = roles.find(function(r) { var mem = members.find(function(mm) { return mm.user_id === m.user_id; }); return mem && mem.role_id === r.id; }); %>
         <div class="room-msg">
-          <% if (m.avatar) { %><img src="<%= m.avatar %>" alt="" class="room-msg-avatar"><% } %>
+          <div class="room-msg-avatar-wrap">
+            <% if (m.avatar) { %><img src="<%= m.avatar %>" alt="" class="room-msg-avatar"><% } else { %><span class="room-msg-avatar room-msg-avatar-letter"><%= (m.display_name || m.username)[0].toUpperCase() %></span><% } %>
+          </div>
           <div class="room-msg-body">
-            <div class="room-msg-body-inner">
+            <div class="room-msg-header">
               <span class="room-msg-author" style="color:<%= mRole ? mRole.color : '#ccc' %>"><%= m.display_name || m.username %></span>
-              <span class="room-msg-text"><%= m.body %></span>
               <span class="room-msg-time"><%= locals.relTime ? locals.relTime(m.created_at) : new Date(m.created_at).toLocaleString() %></span>
+            </div>
+            <div class="room-msg-body-inner">
+              <span class="room-msg-text"><%= m.body %></span>
             </div>
             <span class="room-msg-report" data-msg-id="<%= m.id %>">Report</span>
           </div>
