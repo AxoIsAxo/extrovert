@@ -104,10 +104,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function renderMessages(messages, roleMap) {
     if (!messages || !messages.length) {
-      msgArea.innerHTML = '<div class="room-msg"><div class="room-msg-body"><span class="muted">No messages yet</span></div></div>';
+      msgArea.innerHTML = '<div class="room-msg"><div class="room-msg-body"><div class="room-msg-body-inner"><span class="muted">No messages yet</span></div></div></div>';
       return;
     }
-    msgArea.innerHTML = '';
+      msgArea.innerHTML = '';
     messages.forEach(function(m) {
       var div = document.createElement('div');
       div.className = 'room-msg';
@@ -121,15 +121,16 @@ document.addEventListener('DOMContentLoaded', function() {
       }
       var bodyDiv = document.createElement('div');
       bodyDiv.className = 'room-msg-body';
+      var innerDiv = document.createElement('div');
+      innerDiv.className = 'room-msg-body-inner';
       var color = roleMap[m.user_id] || '#ccc';
-      bodyDiv.innerHTML = '<span class="room-msg-author" style="color:' + color + '">' + escHtml(m.display_name || m.username) + '</span><span class="room-msg-text">' + escHtml(m.body) + '</span><span class="room-msg-time">' + relTime(m.created_at) + '</span>';
-      // Add report button
+      innerDiv.innerHTML = '<span class="room-msg-author" style="color:' + color + '">' + escHtml(m.display_name || m.username) + '</span><span class="room-msg-text">' + escHtml(m.body) + '</span><span class="room-msg-time">' + relTime(m.created_at) + '</span>';
+      bodyDiv.appendChild(innerDiv);
       var reportSpan = document.createElement('span');
       reportSpan.className = 'room-msg-report';
       reportSpan.dataset.msgId = m.id;
       reportSpan.textContent = 'Report';
-      var timeSpan = bodyDiv.querySelector('.room-msg-time');
-      if (timeSpan) timeSpan.parentNode.insertBefore(reportSpan, timeSpan.nextSibling);
+      bodyDiv.appendChild(reportSpan);
       div.appendChild(bodyDiv);
       msgArea.appendChild(div);
     });

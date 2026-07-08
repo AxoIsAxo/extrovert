@@ -32,14 +32,16 @@
         <div class="room-msg">
           <% if (m.avatar) { %><img src="<%= m.avatar %>" alt="" class="room-msg-avatar"><% } %>
           <div class="room-msg-body">
-            <span class="room-msg-author" style="color:<%= mRole ? mRole.color : '#ccc' %>"><%= m.display_name || m.username %></span>
-            <span class="room-msg-text"><%= m.body %></span>
-            <span class="room-msg-time"><%= locals.relTime ? locals.relTime(m.created_at) : new Date(m.created_at).toLocaleString() %></span>
+            <div class="room-msg-body-inner">
+              <span class="room-msg-author" style="color:<%= mRole ? mRole.color : '#ccc' %>"><%= m.display_name || m.username %></span>
+              <span class="room-msg-text"><%= m.body %></span>
+              <span class="room-msg-time"><%= locals.relTime ? locals.relTime(m.created_at) : new Date(m.created_at).toLocaleString() %></span>
+            </div>
             <span class="room-msg-report" data-msg-id="<%= m.id %>">Report</span>
           </div>
         </div>
       <% }) %>
-      <% if (!messages.length) { %><div class="room-msg"><div class="room-msg-body"><span class="muted">No messages yet</span></div></div><% } %>
+      <% if (!messages.length) { %><div class="room-msg"><div class="room-msg-body"><div class="room-msg-body-inner"><span class="muted">No messages yet</span></div></div></div><% } %>
     </div>
     <form class="room-input" id="room-send-form" data-channel-id="<%= firstChannel ? firstChannel.id : '' %>">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
@@ -64,5 +66,5 @@
     </form>
   </div>
 </div>
-<script src="/static/rooms.js?v=1"></script>
+<script src="/static/rooms.js?v=2"></script>
 <%- include('../partials/footer') %>
