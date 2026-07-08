@@ -1,7 +1,7 @@
 'use strict';
 
 const express = require('express');
-const { db } = require('../db');
+const { db, getMyStickers } = require('../db');
 const { buildFeed } = require('../feed');
 const { foafIds, friendIds } = require('../network');
 
@@ -13,7 +13,27 @@ router.get('/', (req, res) => {
   if (!user) return res.redirect('/login');
   const page = Math.max(1, Number(req.query.page) || 1);
   const { items, hasMore } = buildFeed(user.id, { page, perPage: 15 });
-  res.render('feed', { items, page, hasMore });
+
+  const q = String(req.query.q || '').trim();
+  let discoverResults = [];
+  if (q) {
+    discoverResults = db.prepare(
+      `SELECT id, username, display_name, avatar, bio FROM users
+       WHERE username LIKE ? AND id <> ? LIMIT 20`
+    ).all(q + '%', user.id);
+  }
+
+  const following = friendIds(user.id);
+  const foaf = [...foafIds(user.id)];
+  const suggestedIds = foaf.filter(id => !following.has(id)).slice(0, 12);
+  const suggested = suggestedIds.length
+    ? db.prepare(`SELECT id, username, display_name, avatar, bio FROM users WHERE id IN (${suggestedIds.map(() => '?').join(',')})`)
+        .all(...suggestedIds)
+    : [];
+
+  const stickers = getMyStickers(user.id);
+
+  res.render('feed', { items, page, hasMore, q, discoverResults, suggested, stickers });
 });
 
 // Compose.
