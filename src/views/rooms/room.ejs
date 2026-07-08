@@ -26,10 +26,10 @@
     <div class="room-channel-header" id="channel-header">
       # <span id="channel-name"><%= firstChannel ? firstChannel.name : '' %></span>
     </div>
-    <div class="room-messages" id="room-messages" data-channel-id="<%= firstChannel ? firstChannel.id : '' %>">
+    <div class="room-messages" id="room-messages" data-channel-id="<%= firstChannel ? firstChannel.id : '' %>" data-user-id="<%= locals.currentUser.id %>">
       <% messages.forEach(function(m) { %>
         <% var mRole = roles.find(function(r) { var mem = members.find(function(mm) { return mm.user_id === m.user_id; }); return mem && mem.role_id === r.id; }); %>
-        <div class="room-msg">
+        <div class="room-msg<%= m.user_id === locals.currentUser.id ? ' self' : '' %>">
           <div class="room-msg-body">
             <div class="room-msg-row">
               <div class="room-msg-avatar-wrap">

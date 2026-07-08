@@ -356,6 +356,10 @@ a.conv-row:hover { color: var(--primary); }
 .room-msg-avatar-letter { display: flex; align-items: center; justify-content: center; background: var(--primary-container); color: var(--on-primary-container); font-weight: 600; font-size: 15px; }
 .room-msg-body { min-width: 0; flex: 1; }
 .room-msg-row { display: flex; gap: 8px; align-items: center; }
+.room-msg.self .room-msg-row { flex-direction: row-reverse; justify-content: flex-end; }
+.room-msg.self .room-msg-body-inner { background: var(--primary-container); }
+.room-msg.self .room-msg-text { color: var(--on-primary-container); }
+.room-msg.self .room-msg-report { display: none; }
 .room-msg-header { display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px; }
 .room-msg-author { font-weight: 600; font-size: 14px; }
 .room-msg-time { font-size: 11px; color: var(--on-surface-variant); }

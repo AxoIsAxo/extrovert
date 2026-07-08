@@ -1,5 +1,6 @@
 document.addEventListener('DOMContentLoaded', function() {
   var msgArea = document.getElementById('room-messages');
+  var currentUserId = msgArea ? parseInt(msgArea.dataset.userId, 10) : 0;
   var sendForm = document.getElementById('room-send-form');
   var channelList = document.getElementById('channel-list');
   var channelName = document.getElementById('channel-name');
@@ -110,7 +111,7 @@ document.addEventListener('DOMContentLoaded', function() {
       msgArea.innerHTML = '';
     messages.forEach(function(m) {
       var div = document.createElement('div');
-      div.className = 'room-msg';
+      div.className = 'room-msg' + (m.user_id === currentUserId ? ' self' : '');
       var bodyDiv = document.createElement('div');
       bodyDiv.className = 'room-msg-body';
       var headerDiv = document.createElement('div');
