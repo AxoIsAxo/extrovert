@@ -42,7 +42,7 @@
     </div>
     <form class="room-input" id="room-send-form" data-channel-id="<%= firstChannel ? firstChannel.id : '' %>">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-      <input type="text" name="body" placeholder="Message #<%= firstChannel ? firstChannel.name : '' ?>" autocomplete="off" required>
+      <input type="text" name="body" placeholder="Message #<%= firstChannel ? firstChannel.name : '' %>" autocomplete="off" required>
       <button class="btn" type="submit">Send</button>
     </form>
   </main>
