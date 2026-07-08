@@ -1,0 +1,41 @@
+<%- include('../partials/header') %>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h2 style="margin:0">Rooms</h2>
+      <a class="btn" href="/rooms/create">Create Room</a>
+    </div>
+  </div>
+
+  <% if (myRooms.length) { %>
+    <div class="card">
+      <h3>Your Rooms</h3>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <% myRooms.forEach(function(r) { %>
+          <a href="/rooms/<%= r.id %>" class="room-card">
+            <strong><%= r.name %></strong>
+            <small class="muted"><%= r.description || 'No description' %></small>
+          </a>
+        <% }) %>
+      </div>
+    </div>
+  <% } %>
+
+  <div class="card">
+    <h3>Public Rooms</h3>
+    <% if (publicRooms.length) { %>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <% publicRooms.forEach(function(r) { %>
+          <div class="room-card" style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <a href="/rooms/<%= r.id %>"><strong><%= r.name %></strong></a>
+              <small class="muted"><%= r.description || 'No description' %></small>
+            </div>
+            <small class="muted"><%= r.member_count %> member<%= r.member_count !== 1 ? 's' : '' %></small>
+          </div>
+        <% }) %>
+      </div>
+    <% } else { %>
+      <p class="muted">No rooms yet. Create one!</p>
+    <% } %>
+  </div>
+<%- include('../partials/footer') %>

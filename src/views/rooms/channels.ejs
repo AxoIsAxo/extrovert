@@ -1,0 +1,49 @@
+<%- include('../partials/header') %>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h2 style="margin:0">Channels — <%= room.name %></h2>
+      <a class="btn" href="/rooms/<%= room.id %>">Back</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Create Channel</h3>
+    <form method="post" action="/rooms/<%= room.id %>/channels/create">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <label>Channel name</label>
+      <input type="text" name="name" maxlength="40" required>
+      <label>Role restrictions <span class="muted">(leave blank for everyone)</span></label>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:8px">
+        <div>
+          <strong>Can view:</strong>
+          <% roles.forEach(function(r) { %><label style="display:block;font-weight:400;font-size:13px"><input type="checkbox" name="view_roles" value="<%= r.id %>"> <span style="color:<%= r.color %>"><%= r.name %></span></label><% }) %>
+        </div>
+        <div>
+          <strong>Can write:</strong>
+          <% roles.forEach(function(r) { %><label style="display:block;font-weight:400;font-size:13px"><input type="checkbox" name="write_roles" value="<%= r.id %>"> <span style="color:<%= r.color %>"><%= r.name %></span></label><% }) %>
+        </div>
+      </div>
+      <button class="btn">Create</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>Existing Channels</h3>
+    <% if (channels.length) { %>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <% channels.forEach(function(ch) { %>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+            <div>
+              <strong>#<%= ch.name %></strong>
+              <% if (ch.view_role_ids) { %><small class="muted"> restricted view</small><% } %>
+              <% if (ch.write_role_ids) { %><small class="muted"> restricted write</small><% } %>
+            </div>
+            <form method="post" action="/rooms/<%= room.id %>/channels/<%= ch.id %>/delete" style="margin:0"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost danger">Delete</button></form>
+          </div>
+        <% }) %>
+      </div>
+    <% } else { %>
+      <p class="muted">No channels</p>
+    <% } %>
+  </div>
+<%- include('../partials/footer') %>

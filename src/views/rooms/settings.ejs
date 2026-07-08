@@ -1,0 +1,26 @@
+<%- include('../partials/header') %>
+  <div class="card">
+    <h2 style="margin-top:0">Room Settings — <%= room.name %></h2>
+    <form method="post" action="/rooms/<%= room.id %>/settings">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <label>Room name</label>
+      <input type="text" name="name" value="<%= room.name %>" maxlength="60" required>
+      <label>Description</label>
+      <input type="text" name="description" value="<%= room.description %>" maxlength="200">
+      <label>Banner HTML <span class="muted">(no &lt;script&gt;, no JS — stripped automatically)</span></label>
+      <textarea name="html" rows="8" spellcheck="false"><%= room.html %></textarea>
+      <label>Room CSS <span class="muted">(styles the entire room page)</span></label>
+      <textarea name="css" rows="8" spellcheck="false"><%= room.css %></textarea>
+      <div style="margin-top:16px">
+        <button class="btn">Save</button>
+        <a class="btn ghost" href="/rooms/<%= room.id %>">Back</a>
+      </div>
+    </form>
+    <hr>
+    <form method="post" action="/rooms/<%= room.id %>/delete" class="delete-room-form">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <button class="btn danger">Delete Room</button>
+    </form>
+  </div>
+  <script src="/static/rooms.js?v=1"></script>
+<%- include('../partials/footer') %>

@@ -180,6 +180,7 @@ app.use('/chats', require('./routes/chats'));
 app.use('/settings', require('./routes/settings'));
 app.use('/admin', require('./routes/admin'));
 app.use('/stickers', require('./routes/stickers'));
+app.use('/rooms', require('./routes/rooms'));
 
 app.use((req, res) => res.status(404).render('404', { thing: 'page' }));
 

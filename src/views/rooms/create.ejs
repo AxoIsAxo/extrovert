@@ -1,0 +1,16 @@
+<%- include('../partials/header') %>
+  <div class="card">
+    <h2 style="margin-top:0">Create Room</h2>
+    <form method="post" action="/rooms/create">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <label>Room name</label>
+      <input type="text" name="name" maxlength="60" required>
+      <label>Description <span class="muted">(optional)</span></label>
+      <input type="text" name="description" maxlength="200">
+      <div style="margin-top:16px">
+        <button class="btn">Create</button>
+        <a class="btn ghost" href="/rooms">Cancel</a>
+      </div>
+    </form>
+  </div>
+<%- include('../partials/footer') %>

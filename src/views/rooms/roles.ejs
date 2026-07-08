@@ -1,0 +1,73 @@
+<%- include('../partials/header') %>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h2 style="margin:0">Roles — <%= room.name %></h2>
+      <a class="btn" href="/rooms/<%= room.id %>">Back</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Create Role</h3>
+    <form method="post" action="/rooms/<%= room.id %>/roles/create">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <div style="display:flex;gap:8px;align-items:center">
+        <div style="flex:1">
+          <label>Name</label>
+          <input type="text" name="name" maxlength="30" required>
+        </div>
+        <div style="width:100px">
+          <label>Color</label>
+          <input type="color" name="color" value="#cccccc">
+        </div>
+      </div>
+      <label>Permissions</label>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+        <label style="font-weight:400;font-size:13px"><input type="checkbox" name="can_view" checked> View channels</label>
+        <label style="font-weight:400;font-size:13px"><input type="checkbox" name="can_write" checked> Write messages</label>
+        <label style="font-weight:400;font-size:13px"><input type="checkbox" name="can_manage_channels"> Manage channels</label>
+        <label style="font-weight:400;font-size:13px"><input type="checkbox" name="can_manage_roles"> Manage roles</label>
+        <label style="font-weight:400;font-size:13px"><input type="checkbox" name="can_manage_messages"> Manage messages</label>
+        <label style="font-weight:400;font-size:13px"><input type="checkbox" name="can_manage_members"> Manage members</label>
+        <label style="font-weight:400;font-size:13px"><input type="checkbox" name="can_manage_room"> Manage room</label>
+      </div>
+      <button class="btn">Create</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>Roles</h3>
+    <% roles.forEach(function(r) { %>
+      <div style="padding:12px 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <strong style="color:<%= r.color %>"><%= r.name %></strong>
+            <% if (r.is_founder) { %><span class="badge" style="background:#ffd70022;color:#ffd700;padding:2px 8px;border-radius:4px;font-size:11px">Founder</span><% } %>
+          </div>
+          <% if (!r.is_founder) { %>
+            <div style="display:flex;gap:4px">
+              <form method="post" action="/rooms/<%= room.id %>/roles/<%= r.id %>/delete" style="margin:0"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost danger">Delete</button></form>
+            </div>
+          <% } %>
+        </div>
+        <% if (!r.is_founder) { %>
+          <form method="post" action="/rooms/<%= room.id %>/roles/<%= r.id %>/update" style="margin:8px 0 0;display:flex;flex-wrap:wrap;gap:8px;align-items:end">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <div><label style="font-size:11px">Name</label><input type="text" name="name" value="<%= r.name %>" maxlength="30" style="padding:4px 8px;font-size:13px"></div>
+            <div><label style="font-size:11px">Color</label><input type="color" name="color" value="<%= r.color %>" style="padding:2px;width:60px;height:30px"></div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;font-size:12px">
+              <label style="font-weight:400"><input type="checkbox" name="can_view" <%= r.permissions & 1 ? 'checked' : '' %>> View</label>
+              <label style="font-weight:400"><input type="checkbox" name="can_write" <%= r.permissions & 2 ? 'checked' : '' %>> Write</label>
+              <label style="font-weight:400"><input type="checkbox" name="can_manage_channels" <%= r.permissions & 4 ? 'checked' : '' %>> Channels</label>
+              <label style="font-weight:400"><input type="checkbox" name="can_manage_roles" <%= r.permissions & 8 ? 'checked' : '' %>> Roles</label>
+              <label style="font-weight:400"><input type="checkbox" name="can_manage_messages" <%= r.permissions & 16 ? 'checked' : '' %>> Messages</label>
+              <label style="font-weight:400"><input type="checkbox" name="can_manage_members" <%= r.permissions & 32 ? 'checked' : '' %>> Members</label>
+              <label style="font-weight:400"><input type="checkbox" name="can_manage_room" <%= r.permissions & 64 ? 'checked' : '' %>> Room</label>
+            </div>
+            <button class="btn" style="font-size:12px;padding:4px 12px">Save</button>
+          </form>
+        <% } %>
+      </div>
+    <% }) %>
+    <% if (!roles.length) { %><p class="muted">No roles</p><% } %>
+  </div>
+<%- include('../partials/footer') %>

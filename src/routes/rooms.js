@@ -1,0 +1,345 @@
+'use strict';
+
+const express = require('express');
+const { sanitizeProfileHTML, sanitizeCSS } = require('../sanitize');
+
+const {
+  createRoom, getRoom, getRoomsForUser, getPublicRooms, updateRoom, deleteRoom,
+  isRoomMember, addRoomMember, removeRoomMember, getRoomMembers, getUserRoomRole, countRoomMembers,
+  createRoomRole, getRoomRole, getRoomRoles, updateRoomRole, deleteRoomRole, transferFounder,
+  createRoomChannel, getRoomChannel, getRoomChannels, updateRoomChannel, deleteRoomChannel,
+  getRoomMessages, sendRoomMessage, joinDefaultRole, hasRoomPermission, getUserById, db,
+} = require('../db');
+
+const router = express.Router();
+
+const PERM = { VIEW: 1, WRITE: 2, MANAGE_CHANNELS: 4, MANAGE_ROLES: 8, MANAGE_MESSAGES: 16, MANAGE_MEMBERS: 32, MANAGE_ROOM: 64 };
+
+function checkPerm(roomId, userId, perm) {
+  return hasRoomPermission(roomId, userId, perm);
+}
+
+// List rooms
+router.get('/', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  const myRooms = getRoomsForUser(res.locals.currentUser.id);
+  const publicRooms = getPublicRooms();
+  res.render('rooms/index', { myRooms, publicRooms });
+});
+
+// Create room form
+router.get('/create', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  res.render('rooms/create');
+});
+
+// Create room
+router.post('/create', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  const name = String(req.body.name || '').trim();
+  const description = String(req.body.description || '').trim();
+  if (!name) return res.redirect('/rooms/create');
+  const roomId = createRoom(name, description, res.locals.currentUser.id);
+  res.redirect('/rooms/' + roomId);
+});
+
+// View room
+router.get('/:id', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).render('404', { thing: 'room' });
+  const userId = res.locals.currentUser.id;
+  const isMember = isRoomMember(room.id, userId);
+  if (!isMember) return res.redirect('/rooms');
+
+  const role = getUserRoomRole(room.id, userId);
+  const channels = getRoomChannels(room.id).filter(ch => {
+    if (!ch.view_role_ids) return true;
+    try {
+      const viewRoles = JSON.parse(ch.view_role_ids);
+      return Array.isArray(viewRoles) && viewRoles.includes(role.id);
+    } catch { return true; }
+  });
+  const members = getRoomMembers(room.id);
+  const roles = getRoomRoles(room.id);
+
+  const firstChannel = channels[0];
+  let messages = [];
+  if (firstChannel) messages = getRoomMessages(firstChannel.id);
+
+  res.render('rooms/room', { room, channels, members, roles, role, messages, firstChannel });
+});
+
+// Join room
+router.post('/:id/join', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).send('Room not found');
+  const userId = res.locals.currentUser.id;
+  if (isRoomMember(room.id, userId)) return res.redirect('/rooms/' + room.id);
+  const defaultRole = joinDefaultRole(room.id);
+  if (defaultRole) addRoomMember(room.id, userId, defaultRole.id);
+  res.redirect('/rooms/' + room.id);
+});
+
+// Leave room
+router.post('/:id/leave', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).send('Room not found');
+  const userId = res.locals.currentUser.id;
+  const role = getUserRoomRole(room.id, userId);
+  if (role && role.is_founder) {
+    const members = getRoomMembers(room.id);
+    const others = members.filter(m => m.user_id !== userId);
+    if (others.length === 0) { deleteRoom(room.id); return res.redirect('/rooms'); }
+    return res.status(400).send('Transfer founder before leaving');
+  }
+  removeRoomMember(room.id, userId);
+  res.redirect('/rooms');
+});
+
+// --- Settings ---
+
+router.get('/:id/settings', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).render('404', { thing: 'room' });
+  if (!checkPerm(room.id, res.locals.currentUser.id, PERM.MANAGE_ROOM)) return res.status(403).send('No permission');
+  res.render('rooms/settings', { room });
+});
+
+router.post('/:id/settings', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).send('Room not found');
+  if (!checkPerm(room.id, res.locals.currentUser.id, PERM.MANAGE_ROOM)) return res.status(403).send('No permission');
+  const name = String(req.body.name || '').trim();
+  const description = String(req.body.description || '').trim();
+  const html = sanitizeProfileHTML(req.body.html || '');
+  const css = sanitizeCSS(req.body.css || '');
+  if (!name) return res.redirect('/rooms/' + room.id + '/settings');
+  updateRoom(room.id, name, description, html, css);
+  res.redirect('/rooms/' + room.id);
+});
+
+router.post('/:id/delete', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).send('Room not found');
+  const role = getUserRoomRole(room.id, res.locals.currentUser.id);
+  if (!role || !role.is_founder) return res.status(403).send('Only founder can delete');
+  deleteRoom(room.id);
+  res.redirect('/rooms');
+});
+
+// --- Channels ---
+
+router.get('/:id/channels', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).render('404', { thing: 'room' });
+  if (!checkPerm(room.id, res.locals.currentUser.id, PERM.MANAGE_CHANNELS)) return res.status(403).send('No permission');
+  const channels = getRoomChannels(room.id);
+  const roles = getRoomRoles(room.id);
+  res.render('rooms/channels', { room, channels, roles });
+});
+
+router.post('/:id/channels/create', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).send('Room not found');
+  if (!checkPerm(room.id, res.locals.currentUser.id, PERM.MANAGE_CHANNELS)) return res.status(403).send('No permission');
+  const name = String(req.body.name || '').trim();
+  if (!name) return res.redirect('/rooms/' + room.id + '/channels');
+  function rolesToJson(val) {
+    if (!val) return null;
+    const arr = Array.isArray(val) ? val : [val];
+    return JSON.stringify(arr.map(Number));
+  }
+  const viewRoles = rolesToJson(req.body.view_roles);
+  const writeRoles = rolesToJson(req.body.write_roles);
+  createRoomChannel(room.id, name, viewRoles, writeRoles);
+  res.redirect('/rooms/' + room.id + '/channels');
+});
+
+router.post('/:id/channels/:cid/delete', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).send('Room not found');
+  if (!checkPerm(room.id, res.locals.currentUser.id, PERM.MANAGE_CHANNELS)) return res.status(403).send('No permission');
+  deleteRoomChannel(Number(req.params.cid));
+  res.redirect('/rooms/' + room.id + '/channels');
+});
+
+// --- Roles ---
+
+router.get('/:id/roles', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).render('404', { thing: 'room' });
+  if (!checkPerm(room.id, res.locals.currentUser.id, PERM.MANAGE_ROLES)) return res.status(403).send('No permission');
+  const roles = getRoomRoles(room.id);
+  res.render('rooms/roles', { room, roles });
+});
+
+router.post('/:id/roles/create', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).send('Room not found');
+  if (!checkPerm(room.id, res.locals.currentUser.id, PERM.MANAGE_ROLES)) return res.status(403).send('No permission');
+  const name = String(req.body.name || '').trim();
+  if (!name) return res.redirect('/rooms/' + room.id + '/roles');
+  const color = String(req.body.color || '#cccccc').trim();
+  let permissions = 0;
+  if (req.body.can_view) permissions |= PERM.VIEW;
+  if (req.body.can_write) permissions |= PERM.WRITE;
+  if (req.body.can_manage_channels) permissions |= PERM.MANAGE_CHANNELS;
+  if (req.body.can_manage_roles) permissions |= PERM.MANAGE_ROLES;
+  if (req.body.can_manage_messages) permissions |= PERM.MANAGE_MESSAGES;
+  if (req.body.can_manage_members) permissions |= PERM.MANAGE_MEMBERS;
+  if (req.body.can_manage_room) permissions |= PERM.MANAGE_ROOM;
+  createRoomRole(room.id, name, color, permissions, 0);
+  res.redirect('/rooms/' + room.id + '/roles');
+});
+
+router.post('/:id/roles/:rid/update', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).send('Room not found');
+  if (!checkPerm(room.id, res.locals.currentUser.id, PERM.MANAGE_ROLES)) return res.status(403).send('No permission');
+  const role = getRoomRole(Number(req.params.rid));
+  if (!role || role.room_id !== room.id) return res.status(404).send('Role not found');
+  if (role.is_founder) return res.status(400).send('Cannot edit founder role');
+  const name = String(req.body.name || '').trim();
+  const color = String(req.body.color || '#cccccc').trim();
+  let permissions = 0;
+  if (req.body.can_view) permissions |= PERM.VIEW;
+  if (req.body.can_write) permissions |= PERM.WRITE;
+  if (req.body.can_manage_channels) permissions |= PERM.MANAGE_CHANNELS;
+  if (req.body.can_manage_roles) permissions |= PERM.MANAGE_ROLES;
+  if (req.body.can_manage_messages) permissions |= PERM.MANAGE_MESSAGES;
+  if (req.body.can_manage_members) permissions |= PERM.MANAGE_MEMBERS;
+  if (req.body.can_manage_room) permissions |= PERM.MANAGE_ROOM;
+  updateRoomRole(role.id, name || role.name, color, permissions || 0);
+  res.redirect('/rooms/' + room.id + '/roles');
+});
+
+router.post('/:id/roles/:rid/delete', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).send('Room not found');
+  if (!checkPerm(room.id, res.locals.currentUser.id, PERM.MANAGE_ROLES)) return res.status(403).send('No permission');
+  if (!deleteRoomRole(Number(req.params.rid))) return res.status(400).send('Cannot delete founder role');
+  res.redirect('/rooms/' + room.id + '/roles');
+});
+
+// --- Members ---
+
+router.get('/:id/members', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).render('404', { thing: 'room' });
+  if (!checkPerm(room.id, res.locals.currentUser.id, PERM.MANAGE_MEMBERS)) return res.status(403).send('No permission');
+  const members = getRoomMembers(room.id);
+  const roles = getRoomRoles(room.id);
+  res.render('rooms/members', { room, members, roles });
+});
+
+router.post('/:id/members/:uid/setrole', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).send('Room not found');
+  if (!checkPerm(room.id, res.locals.currentUser.id, PERM.MANAGE_MEMBERS)) return res.status(403).send('No permission');
+  const roleId = Number(req.body.role_id);
+  const targetUser = getUserById(Number(req.params.uid));
+  if (!targetUser) return res.status(404).send('User not found');
+  const targetRole = getRoomRole(roleId);
+  if (!targetRole || targetRole.room_id !== room.id) return res.status(404).send('Role not found');
+  if (targetRole.is_founder) return res.status(400).send('Cannot assign founder role');
+  const currentMemberRole = getUserRoomRole(room.id, targetUser.id);
+  if (currentMemberRole && currentMemberRole.is_founder) return res.status(400).send('Cannot change founder role');
+  db.prepare(`UPDATE room_members SET role_id = ? WHERE room_id = ? AND user_id = ?`).run(roleId, room.id, targetUser.id);
+  res.redirect('/rooms/' + room.id + '/members');
+});
+
+router.post('/:id/members/:uid/kick', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).send('Room not found');
+  if (!checkPerm(room.id, res.locals.currentUser.id, PERM.MANAGE_MEMBERS)) return res.status(403).send('No permission');
+  const targetUser = getUserById(Number(req.params.uid));
+  if (!targetUser) return res.status(404).send('User not found');
+  const currentMemberRole = getUserRoomRole(room.id, targetUser.id);
+  if (currentMemberRole && currentMemberRole.is_founder) return res.status(400).send('Cannot kick founder');
+  removeRoomMember(room.id, targetUser.id);
+  res.redirect('/rooms/' + room.id + '/members');
+});
+
+// Transfer founder
+router.post('/:id/transfer', (req, res) => {
+  if (!res.locals.currentUser) return res.redirect('/login');
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).send('Room not found');
+  const userId = res.locals.currentUser.id;
+  const myRole = getUserRoomRole(room.id, userId);
+  if (!myRole || !myRole.is_founder) return res.status(403).send('Only founder can transfer');
+  const newOwnerId = Number(req.body.user_id);
+  if (!newOwnerId) return res.status(400).send('No user specified');
+  if (!isRoomMember(room.id, newOwnerId)) return res.status(400).send('User is not a member');
+  transferFounder(room.id, newOwnerId);
+  const defaultRole = joinDefaultRole(room.id);
+  if (defaultRole) db.prepare(`UPDATE room_members SET role_id = ? WHERE room_id = ? AND user_id = ?`).run(defaultRole.id, room.id, userId);
+  res.redirect('/rooms/' + room.id + '/members');
+});
+
+// --- Messages (AJAX) ---
+
+router.get('/:id/channels/:cid/messages', (req, res) => {
+  if (!res.locals.currentUser) return res.json([]);
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.json([]);
+  if (!isRoomMember(room.id, res.locals.currentUser.id)) return res.json([]);
+  const channel = getRoomChannel(Number(req.params.cid));
+  if (!channel || channel.room_id !== room.id) return res.json([]);
+  const role = getUserRoomRole(room.id, res.locals.currentUser.id);
+  if (channel.view_role_ids) {
+    try {
+      const viewRoles = JSON.parse(channel.view_role_ids);
+      if (Array.isArray(viewRoles) && !viewRoles.includes(role.id)) return res.json([]);
+    } catch {}
+  }
+  const before = req.query.before ? Number(req.query.before) : null;
+  const messages = getRoomMessages(channel.id, before);
+  const roles = getRoomRoles(room.id);
+  const members = getRoomMembers(room.id);
+  const roleMap = {};
+  members.forEach(function(m) {
+    var r = roles.find(function(rr) { return rr.id === m.role_id; });
+    if (r) roleMap[m.user_id] = r.color;
+  });
+  res.json({ messages, roles, roleMap });
+});
+
+router.post('/:id/channels/:cid/send', (req, res) => {
+  if (!res.locals.currentUser) return res.status(401).json({ error: 'Not logged in' });
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+  if (!isRoomMember(room.id, res.locals.currentUser.id)) return res.status(403).json({ error: 'Not a member' });
+  const channel = getRoomChannel(Number(req.params.cid));
+  if (!channel || channel.room_id !== room.id) return res.status(404).json({ error: 'Channel not found' });
+  const role = getUserRoomRole(room.id, res.locals.currentUser.id);
+  if (channel.write_role_ids) {
+    try {
+      const writeRoles = JSON.parse(channel.write_role_ids);
+      if (Array.isArray(writeRoles) && !writeRoles.includes(role.id)) return res.status(403).json({ error: 'No write permission' });
+    } catch {}
+  }
+  if (!checkPerm(room.id, res.locals.currentUser.id, PERM.WRITE)) return res.status(403).json({ error: 'No write permission' });
+  const body = String(req.body.body || '').trim();
+  if (!body) return res.status(400).json({ error: 'Message is empty' });
+  const msgId = sendRoomMessage(channel.id, res.locals.currentUser.id, body);
+  res.json({ id: msgId });
+});
+
+module.exports = router;

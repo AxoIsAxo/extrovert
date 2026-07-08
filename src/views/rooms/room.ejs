@@ -1,0 +1,51 @@
+<%- include('../partials/header') %>
+<% if (room.css) { %><style><%= room.css %></style><% } %>
+<div class="room-layout">
+  <aside class="room-sidebar">
+    <div class="room-sidebar-header">
+      <strong><%= room.name %></strong>
+      <small class="muted"><%= members.length %> member<%= members.length !== 1 ? 's' : '' %></small>
+    </div>
+    <nav class="room-channel-list" id="channel-list">
+      <% channels.forEach(function(ch) { %>
+        <a href="#" class="room-channel<%= firstChannel && ch.id === firstChannel.id ? ' active' : '' %>" data-channel-id="<%= ch.id %>">
+          # <span><%= ch.name %></span>
+        </a>
+      <% }) %>
+    </nav>
+    <div class="room-sidebar-actions">
+      <% if (role && (role.permissions & 64)) { %><a href="/rooms/<%= room.id %>/settings" class="room-sidebar-link">Settings</a><% } %>
+      <% if (role && (role.permissions & 4)) { %><a href="/rooms/<%= room.id %>/channels" class="room-sidebar-link">Channels</a><% } %>
+      <% if (role && (role.permissions & 8)) { %><a href="/rooms/<%= room.id %>/roles" class="room-sidebar-link">Roles</a><% } %>
+      <% if (role && (role.permissions & 32)) { %><a href="/rooms/<%= room.id %>/members" class="room-sidebar-link">Members</a><% } %>
+      <form method="post" action="/rooms/<%= room.id %>/leave" style="margin:0"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="room-sidebar-link danger" style="background:none;border:none;cursor:pointer">Leave</button></form>
+    </div>
+  </aside>
+  <main class="room-main">
+    <% if (room.html) { %><div class="room-banner"><%- room.html %></div><% } %>
+    <div class="room-channel-header" id="channel-header">
+      # <span id="channel-name"><%= firstChannel ? firstChannel.name : '' %></span>
+    </div>
+    <div class="room-messages" id="room-messages" data-channel-id="<%= firstChannel ? firstChannel.id : '' %>">
+      <% messages.forEach(function(m) { %>
+        <% var mRole = roles.find(function(r) { var mem = members.find(function(mm) { return mm.user_id === m.user_id; }); return mem && mem.role_id === r.id; }); %>
+        <div class="room-msg">
+          <% if (m.avatar) { %><img src="<%= m.avatar %>" alt="" class="room-msg-avatar"><% } %>
+          <div class="room-msg-body">
+            <span class="room-msg-author" style="color:<%= mRole ? mRole.color : '#ccc' %>"><%= m.display_name || m.username %></span>
+            <span class="room-msg-text"><%= m.body %></span>
+            <span class="room-msg-time"><%= locals.relTime ? locals.relTime(m.created_at) : new Date(m.created_at).toLocaleString() %></span>
+          </div>
+        </div>
+      <% }) %>
+      <% if (!messages.length) { %><div class="room-msg"><div class="room-msg-body"><span class="muted">No messages yet</span></div></div><% } %>
+    </div>
+    <form class="room-input" id="room-send-form" data-channel-id="<%= firstChannel ? firstChannel.id : '' %>">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <input type="text" name="body" placeholder="Message #<%= firstChannel ? firstChannel.name : '' ?>" autocomplete="off" required>
+      <button class="btn" type="submit">Send</button>
+    </form>
+  </main>
+</div>
+<script src="/static/rooms.js?v=1"></script>
+<%- include('../partials/footer') %>

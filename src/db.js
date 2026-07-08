@@ -121,6 +121,53 @@ function init() {
       file_path  TEXT NOT NULL,
       created_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS rooms (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      name        TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      html        TEXT NOT NULL DEFAULT '',
+      css         TEXT NOT NULL DEFAULT '',
+      creator_id  INTEGER NOT NULL REFERENCES users(id),
+      created_at  INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS room_roles (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      room_id     INTEGER NOT NULL REFERENCES rooms(id),
+      name        TEXT NOT NULL,
+      color       TEXT NOT NULL DEFAULT '#cccccc',
+      permissions INTEGER NOT NULL DEFAULT 3,
+      is_founder  INTEGER NOT NULL DEFAULT 0,
+      position    INTEGER NOT NULL DEFAULT 0,
+      created_at  INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS room_members (
+      room_id   INTEGER NOT NULL REFERENCES rooms(id),
+      user_id   INTEGER NOT NULL REFERENCES users(id),
+      role_id   INTEGER NOT NULL REFERENCES room_roles(id),
+      joined_at INTEGER NOT NULL,
+      PRIMARY KEY (room_id, user_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS room_channels (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      room_id        INTEGER NOT NULL REFERENCES rooms(id),
+      name           TEXT NOT NULL,
+      view_role_ids  TEXT,
+      write_role_ids TEXT,
+      created_at     INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS room_messages (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_id INTEGER NOT NULL REFERENCES room_channels(id),
+      user_id    INTEGER NOT NULL REFERENCES users(id),
+      body       TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_room_msg_channel ON room_messages(channel_id, created_at);
   `);
 }
 
@@ -574,6 +621,102 @@ function getMyStickers(userId) {
   return db.prepare(`SELECT id, file_path FROM stickers WHERE user_id = ? ORDER BY created_at DESC`).all(userId);
 }
 
+// ---------- rooms ----------
+function createRoom(name, description, creatorId) {
+  const now = Date.now();
+  const res = db.prepare(`INSERT INTO rooms (name, description, creator_id, created_at) VALUES (?,?,?,?)`).run(name, description, creatorId, now);
+  const roomId = res.lastInsertRowid;
+  const founderRole = db.prepare(`INSERT INTO room_roles (room_id, name, color, permissions, is_founder, position, created_at) VALUES (?,?,?,?,?,?,?)`).run(roomId, 'Founder', '#ffd700', 127, 1, 100, now);
+  const memberRole = db.prepare(`INSERT INTO room_roles (room_id, name, color, permissions, is_founder, position, created_at) VALUES (?,?,?,?,?,?,?)`).run(roomId, 'Member', '#cccccc', 3, 0, 0, now);
+  db.prepare(`INSERT INTO room_members (room_id, user_id, role_id, joined_at) VALUES (?,?,?,?)`).run(roomId, creatorId, founderRole.lastInsertRowid, now);
+  db.prepare(`INSERT INTO room_channels (room_id, name, created_at) VALUES (?,?,?)`).run(roomId, 'general', now);
+  return roomId;
+}
+function getRoom(id) { return db.prepare(`SELECT * FROM rooms WHERE id = ?`).get(id); }
+function getRoomsForUser(userId) {
+  return db.prepare(`SELECT r.* FROM rooms r INNER JOIN room_members m ON m.room_id = r.id WHERE m.user_id = ? ORDER BY r.name`).all(userId);
+}
+function getPublicRooms() {
+  return db.prepare(`SELECT r.id, r.name, r.description, r.created_at, (SELECT COUNT(*) FROM room_members WHERE room_id = r.id) AS member_count FROM rooms r ORDER BY r.name`).all();
+}
+function updateRoom(id, name, description, html, css) {
+  db.prepare(`UPDATE rooms SET name=?, description=?, html=?, css=? WHERE id=?`).run(name, description, html, css, id);
+}
+function deleteRoom(id) {
+  db.prepare(`DELETE FROM room_messages WHERE channel_id IN (SELECT id FROM room_channels WHERE room_id = ?)`).run(id);
+  db.prepare(`DELETE FROM room_channels WHERE room_id = ?`).run(id);
+  db.prepare(`DELETE FROM room_members WHERE room_id = ?`).run(id);
+  db.prepare(`DELETE FROM room_roles WHERE room_id = ?`).run(id);
+  db.prepare(`DELETE FROM rooms WHERE id = ?`).run(id);
+}
+function isRoomMember(roomId, userId) { return !!db.prepare(`SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?`).get(roomId, userId); }
+function addRoomMember(roomId, userId, roleId) {
+  db.prepare(`INSERT OR IGNORE INTO room_members (room_id, user_id, role_id, joined_at) VALUES (?,?,?,?)`).run(roomId, userId, roleId, Date.now());
+}
+function removeRoomMember(roomId, userId) {
+  db.prepare(`DELETE FROM room_members WHERE room_id = ? AND user_id = ?`).run(roomId, userId);
+}
+function getRoomMembers(roomId) {
+  return db.prepare(`SELECT u.id AS user_id, u.username, u.display_name, u.avatar, m.role_id, m.joined_at FROM room_members m INNER JOIN users u ON u.id = m.user_id WHERE m.room_id = ? ORDER BY m.joined_at`).all(roomId);
+}
+function getUserRoomRole(roomId, userId) {
+  return db.prepare(`SELECT r.* FROM room_roles r INNER JOIN room_members m ON m.role_id = r.id WHERE m.room_id = ? AND m.user_id = ?`).get(roomId, userId);
+}
+function countRoomMembers(roomId) {
+  return db.prepare(`SELECT COUNT(*) AS n FROM room_members WHERE room_id = ?`).get(roomId).n;
+}
+function createRoomRole(roomId, name, color, permissions, position) {
+  return db.prepare(`INSERT INTO room_roles (room_id, name, color, permissions, position, created_at) VALUES (?,?,?,?,?,?)`).run(roomId, name, color, permissions, position, Date.now()).lastInsertRowid;
+}
+function getRoomRole(id) { return db.prepare(`SELECT * FROM room_roles WHERE id = ?`).get(id); }
+function getRoomRoles(roomId) {
+  return db.prepare(`SELECT * FROM room_roles WHERE room_id = ? ORDER BY position DESC, created_at`).all(roomId);
+}
+function updateRoomRole(id, name, color, permissions) {
+  db.prepare(`UPDATE room_roles SET name=?, color=?, permissions=? WHERE id=?`).run(name, color, permissions, id);
+}
+function deleteRoomRole(id) {
+  const role = getRoomRole(id);
+  if (role && role.is_founder) return false;
+  db.prepare(`UPDATE room_members SET role_id = (SELECT id FROM room_roles WHERE room_id = (SELECT room_id FROM room_roles WHERE id = ?) AND is_founder = 0 LIMIT 1) WHERE role_id = ?`).run(id, id);
+  db.prepare(`DELETE FROM room_roles WHERE id = ?`).run(id);
+  return true;
+}
+function transferFounder(roomId, newOwnerId) {
+  const founderRole = db.prepare(`SELECT id FROM room_roles WHERE room_id = ? AND is_founder = 1`).get(roomId);
+  if (founderRole) db.prepare(`UPDATE room_members SET role_id = ? WHERE room_id = ? AND user_id = ?`).run(founderRole.id, roomId, newOwnerId);
+}
+function createRoomChannel(roomId, name, viewRoleIds, writeRoleIds) {
+  return db.prepare(`INSERT INTO room_channels (room_id, name, view_role_ids, write_role_ids, created_at) VALUES (?,?,?,?,?)`).run(roomId, name, viewRoleIds || null, writeRoleIds || null, Date.now()).lastInsertRowid;
+}
+function getRoomChannel(id) { return db.prepare(`SELECT * FROM room_channels WHERE id = ?`).get(id); }
+function getRoomChannels(roomId) {
+  return db.prepare(`SELECT * FROM room_channels WHERE room_id = ? ORDER BY created_at`).all(roomId);
+}
+function updateRoomChannel(id, name, viewRoleIds, writeRoleIds) {
+  db.prepare(`UPDATE room_channels SET name=?, view_role_ids=?, write_role_ids=? WHERE id=?`).run(name, viewRoleIds || null, writeRoleIds || null, id);
+}
+function deleteRoomChannel(id) {
+  db.prepare(`DELETE FROM room_messages WHERE channel_id = ?`).run(id);
+  db.prepare(`DELETE FROM room_channels WHERE id = ?`).run(id);
+}
+function getRoomMessages(channelId, beforeId) {
+  if (beforeId) {
+    return db.prepare(`SELECT m.id, m.body, m.created_at, u.id AS user_id, u.username, u.display_name, u.avatar FROM room_messages m INNER JOIN users u ON u.id = m.user_id WHERE m.channel_id = ? AND m.id < ? ORDER BY m.id DESC LIMIT 50`).all(channelId, beforeId);
+  }
+  return db.prepare(`SELECT m.id, m.body, m.created_at, u.id AS user_id, u.username, u.display_name, u.avatar FROM room_messages m INNER JOIN users u ON u.id = m.user_id WHERE m.channel_id = ? ORDER BY m.id DESC LIMIT 50`).all(channelId).reverse();
+}
+function sendRoomMessage(channelId, userId, body) {
+  return db.prepare(`INSERT INTO room_messages (channel_id, user_id, body, created_at) VALUES (?,?,?,?)`).run(channelId, userId, body, Date.now()).lastInsertRowid;
+}
+function joinDefaultRole(roomId) {
+  return db.prepare(`SELECT id FROM room_roles WHERE room_id = ? AND is_founder = 0 ORDER BY position DESC, id LIMIT 1`).get(roomId);
+}
+function hasRoomPermission(roomId, userId, permBit) {
+  const role = getUserRoomRole(roomId, userId);
+  return role && (role.permissions & permBit) === permBit;
+}
+
 // ---------- theme ----------
 function getUserTheme(userId) {
   const row = db.prepare(`SELECT theme FROM users WHERE id = ?`).get(userId);
@@ -620,4 +763,10 @@ module.exports = {
   getUserTheme, setUserTheme,
   // avatar
   setAvatar, getAvatar,
+  // rooms
+  createRoom, getRoom, getRoomsForUser, getPublicRooms, updateRoom, deleteRoom,
+  isRoomMember, addRoomMember, removeRoomMember, getRoomMembers, getUserRoomRole, countRoomMembers,
+  createRoomRole, getRoomRole, getRoomRoles, updateRoomRole, deleteRoomRole, transferFounder,
+  createRoomChannel, getRoomChannel, getRoomChannels, updateRoomChannel, deleteRoomChannel,
+  getRoomMessages, sendRoomMessage, joinDefaultRole, hasRoomPermission,
 };
