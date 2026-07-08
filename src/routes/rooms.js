@@ -129,6 +129,8 @@ router.post('/:id/delete', (req, res) => {
   if (!room) return res.status(404).send('Room not found');
   const role = getUserRoomRole(room.id, res.locals.currentUser.id);
   if (!role || !role.is_founder) return res.status(403).send('Only founder can delete');
+  if (String(req.body.confirm_delete) !== 'DELETE') return res.status(400).send('Please type DELETE to confirm');
+  if (String(req.body.confirm_name) !== room.name) return res.status(400).send('Room name does not match');
   deleteRoom(room.id);
   res.redirect('/rooms');
 });

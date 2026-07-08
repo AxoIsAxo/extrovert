@@ -1,12 +1,4 @@
 document.addEventListener('DOMContentLoaded', function() {
-  // Delete room confirmation (on settings page too)
-  var deleteForm = document.querySelector('.delete-room-form');
-  if (deleteForm) {
-    deleteForm.addEventListener('submit', function(e) {
-      if (!confirm('Delete this room permanently? This cannot be undone.')) e.preventDefault();
-    });
-  }
-
   var msgArea = document.getElementById('room-messages');
   var sendForm = document.getElementById('room-send-form');
   var channelList = document.getElementById('channel-list');

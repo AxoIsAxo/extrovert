@@ -19,7 +19,12 @@
     <hr>
     <form method="post" action="/rooms/<%= room.id %>/delete" class="delete-room-form">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-      <button class="btn danger">Delete Room</button>
+      <p class="muted" style="color:var(--error)">Danger zone: deleting a room is permanent and irreversible.</p>
+      <label>Type <strong style="color:var(--error)">DELETE</strong> to confirm</label>
+      <input type="text" name="confirm_delete" placeholder="DELETE" required>
+      <label>Type the room name <strong><%= room.name %></strong> to confirm</label>
+      <input type="text" name="confirm_name" placeholder="<%= room.name %>" required>
+      <button class="btn danger" style="margin-top:8px">Delete Room</button>
     </form>
   </div>
   <script src="/static/rooms.js?v=1"></script>
