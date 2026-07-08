@@ -83,8 +83,8 @@ a:hover { color: #a8def5; }
 .feed-sidebar { display: flex; flex-direction: column; gap: 16px; }
 .feed-sidebar .card { padding: 14px; }
 @media (max-width: 1000px) {
-  .feed-layout { grid-template-columns: 1fr; padding: 24px 16px 90px; }
-  .feed-main { grid-column: 1; width: 100%; }
+  .feed-layout { display: flex; flex-direction: column; gap: 16px; padding: 24px 16px 90px; }
+  .feed-main { width: 100%; }
   .feed-sidebar { width: 100%; }
 }
 
@@ -306,6 +306,7 @@ a.conv-row:hover { color: var(--primary); }
   .nav .brand { font-size: 17px; padding: 6px 8px; }
   .nav a, .nav button { font-size: 13px; padding: 6px 10px; }
   .wrap { padding: 14px 10px 80px; }
+  .feed-layout { padding: 14px 10px 80px; gap: 12px; }
   .card { padding: 14px; border-radius: 14px; }
   .post { padding: 14px; border-radius: 14px; }
   .post-head { gap: 10px; }
