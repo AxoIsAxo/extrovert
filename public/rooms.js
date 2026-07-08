@@ -111,6 +111,15 @@ document.addEventListener('DOMContentLoaded', function() {
     messages.forEach(function(m) {
       var div = document.createElement('div');
       div.className = 'room-msg';
+      var bodyDiv = document.createElement('div');
+      bodyDiv.className = 'room-msg-body';
+      var headerDiv = document.createElement('div');
+      headerDiv.className = 'room-msg-header';
+      var color = roleMap[m.user_id] || '#ccc';
+      headerDiv.innerHTML = '<span class="room-msg-author" style="color:' + color + '">' + escHtml(m.display_name || m.username) + '</span><span class="room-msg-time">' + relTime(m.created_at) + '</span>';
+      bodyDiv.appendChild(headerDiv);
+      var rowDiv = document.createElement('div');
+      rowDiv.className = 'room-msg-row';
       var wrap = document.createElement('div');
       wrap.className = 'room-msg-avatar-wrap';
       if (m.avatar) {
@@ -126,18 +135,12 @@ document.addEventListener('DOMContentLoaded', function() {
         letter.textContent = (m.display_name || m.username)[0].toUpperCase();
         wrap.appendChild(letter);
       }
-      div.appendChild(wrap);
-      var bodyDiv = document.createElement('div');
-      bodyDiv.className = 'room-msg-body';
-      var headerDiv = document.createElement('div');
-      headerDiv.className = 'room-msg-header';
-      var color = roleMap[m.user_id] || '#ccc';
-      headerDiv.innerHTML = '<span class="room-msg-author" style="color:' + color + '">' + escHtml(m.display_name || m.username) + '</span><span class="room-msg-time">' + relTime(m.created_at) + '</span>';
-      bodyDiv.appendChild(headerDiv);
+      rowDiv.appendChild(wrap);
       var innerDiv = document.createElement('div');
       innerDiv.className = 'room-msg-body-inner';
       innerDiv.innerHTML = '<span class="room-msg-text">' + escHtml(m.body) + '</span>';
-      bodyDiv.appendChild(innerDiv);
+      rowDiv.appendChild(innerDiv);
+      bodyDiv.appendChild(rowDiv);
       var reportSpan = document.createElement('span');
       reportSpan.className = 'room-msg-report';
       reportSpan.dataset.msgId = m.id;
