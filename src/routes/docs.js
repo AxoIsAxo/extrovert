@@ -12,8 +12,7 @@ router.get('/openapi.json', (req, res) => {
 
 // Serve Swagger UI
 router.get('/docs', (req, res) => {
-  // Helmet's CSP blocks CDN. Remove it, then set our own.
-  res.removeHeader('Content-Security-Policy');
+  // Override CSP for this route to allow Swagger UI CDN assets
   res.set('Content-Security-Policy',
     "default-src 'self'; " +
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; " +
