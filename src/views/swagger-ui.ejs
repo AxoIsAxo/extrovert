@@ -3,16 +3,589 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Extrovert API Documentation</title>
+  <title>Extrovert API &#x2014; Docs</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css">
   <style>
-    html { box-sizing: border-box; overflow: -moz-scrollbars-vertical; overflow-y: scroll; }
-    *, *:before, *:after { box-sizing: inherit; }
-    body { margin: 0; background: #fafafa; }
-    .topbar { display: none; }
+    :root {
+      --primary: #7ec8e3;
+      --on-primary: #003545;
+      --primary-container: #004d64;
+      --on-primary-container: #c2e8ff;
+      --surface: #121214;
+      --surface-dim: #0c0c0e;
+      --surface-bright: #2c2c30;
+      --surface-container: #1c1c1f;
+      --surface-container-low: #18181b;
+      --surface-container-high: #26262a;
+      --surface-container-highest: #303035;
+      --on-surface: #e0dfe3;
+      --on-surface-variant: #b8b7bd;
+      --outline: #808187;
+      --outline-variant: #38383d;
+      --error: #ffb4ab;
+      --error-container: #93000a;
+      --radius-card: 16px;
+      --radius-btn: 20px;
+      --radius-field: 12px;
+    }
+
+    body {
+      margin: 0;
+      background: var(--surface);
+      font-family: -apple-system, BlinkMacSystemFont, "Google Sans", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ---- Top bar ---- */
+    .topbar {
+      display: block;
+      background: var(--surface-container);
+      border-bottom: 1px solid var(--outline-variant);
+    }
+    .topbar .wrapper {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      max-width: 1460px;
+      margin: 0 auto;
+      padding: 0 20px;
+      min-height: 56px;
+    }
+    .topbar .topbar-wrapper { display: flex; align-items: center; gap: 12px; flex: 1; }
+    .topbar .topbar-wrapper .link { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .topbar .topbar-wrapper .link img { display: none; }
+    .topbar .topbar-wrapper .link span {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--on-surface);
+      letter-spacing: -0.3px;
+    }
+    .topbar .download-url-wrapper { display: none; }
+    .topbar .select-label { color: var(--on-surface-variant) !important; font-size: 13px !important; }
+
+    /* ---- Info section ---- */
+    .swagger-ui .info { margin: 30px 0 20px; }
+    .swagger-ui .info .title {
+      color: var(--on-surface);
+      font-weight: 600;
+      letter-spacing: -0.3px;
+      font-size: 28px;
+    }
+    .swagger-ui .info .title small.version-stamp {
+      background: var(--primary-container);
+      color: var(--on-primary-container);
+      border-radius: var(--radius-btn);
+      padding: 4px 14px;
+    }
+    .swagger-ui .info .description p {
+      color: var(--on-surface-variant);
+      font-size: 15px;
+    }
+    .swagger-ui .info a { color: var(--primary); }
+    .swagger-ui .info a:hover { color: #a8def5; }
+    .swagger-ui .info .base-url { color: var(--on-surface-variant); font-size: 13px; }
+    .swagger-ui .info .license a, .swagger-ui .info .contact a { color: var(--primary); }
+    .swagger-ui .info hgroup.main { margin-bottom: 20px; }
+    .swagger-ui .info .info__tos { color: var(--on-surface-variant); }
+    .swagger-ui .info .info__extdocs { color: var(--on-surface-variant); }
+
+    /* ---- Servers ---- */
+    .swagger-ui .servers { margin: 16px 0; }
+    .swagger-ui .servers label { color: var(--on-surface-variant) !important; }
+    .swagger-ui .servers select {
+      background: var(--surface-container);
+      border: 1px solid var(--outline-variant);
+      color: var(--on-surface);
+      border-radius: var(--radius-field);
+      padding: 10px 14px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    .swagger-ui .servers select:focus {
+      border-color: var(--primary);
+      outline: none;
+    }
+
+    /* ---- Scheme section ---- */
+    .swagger-ui .scheme-container {
+      background: var(--surface-container-low);
+      border: 1px solid var(--outline-variant);
+      border-radius: var(--radius-card);
+      box-shadow: none;
+      padding: 16px 24px;
+      margin: 16px 0;
+    }
+    .swagger-ui .scheme-container .auth-wrapper .authorize {
+      background: transparent;
+      border: 1px solid var(--primary);
+      color: var(--primary);
+      border-radius: var(--radius-btn);
+      padding: 8px 20px;
+      font-weight: 600;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    .swagger-ui .scheme-container .auth-wrapper .authorize:hover {
+      background: rgba(126,200,227,.08);
+    }
+    .swagger-ui .scheme-container .auth-wrapper .authorize svg { fill: var(--primary); }
+
+    /* ---- Operation sections ---- */
+    .swagger-ui .opblock-tag {
+      border-bottom: 1px solid var(--outline-variant);
+      padding: 14px 0;
+    }
+    .swagger-ui .opblock-tag:hover { background: transparent; }
+    .swagger-ui .opblock-tag .nostyle {
+      color: var(--on-surface);
+      font-weight: 600;
+      font-size: 18px;
+      letter-spacing: -0.2px;
+    }
+    .swagger-ui .opblock-tag small {
+      color: var(--on-surface-variant);
+      font-size: 14px;
+    }
+
+    .swagger-ui .opblock {
+      border-radius: var(--radius-card);
+      border: 1px solid var(--outline-variant);
+      margin: 0 0 12px;
+      background: var(--surface-container-low);
+      box-shadow: none;
+    }
+    .swagger-ui .opblock .opblock-summary {
+      padding: 10px 16px;
+      border-bottom: none;
+    }
+    .swagger-ui .opblock .opblock-summary-description {
+      color: var(--on-surface-variant);
+      font-size: 14px;
+    }
+    .swagger-ui .opblock.opblock-get { border-color: var(--outline-variant); }
+    .swagger-ui .opblock.opblock-get .opblock-summary-method {
+      background: var(--primary-container);
+      color: var(--on-primary-container);
+      border-radius: var(--radius-field);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 10px;
+      min-width: 58px;
+      text-align: center;
+    }
+    .swagger-ui .opblock.opblock-get .opblock-summary {
+      border-color: transparent;
+    }
+    .swagger-ui .opblock.opblock-post { border-color: var(--outline-variant); }
+    .swagger-ui .opblock.opblock-post .opblock-summary-method {
+      background: var(--tertiary-container, #603b4e);
+      color: var(--on-tertiary-container, #ffd8ed);
+      border-radius: var(--radius-field);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 10px;
+      min-width: 58px;
+      text-align: center;
+    }
+    .swagger-ui .opblock.opblock-delete { border-color: var(--outline-variant); }
+    .swagger-ui .opblock.opblock-delete .opblock-summary-method {
+      background: var(--error-container);
+      color: var(--error);
+      border-radius: var(--radius-field);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 10px;
+      min-width: 58px;
+      text-align: center;
+    }
+    .swagger-ui .opblock.opblock-patch { border-color: var(--outline-variant); }
+    .swagger-ui .opblock.opblock-patch .opblock-summary-method {
+      background: var(--secondary-container, #294857);
+      color: var(--on-secondary-container, #c8e5fa);
+      border-radius: var(--radius-field);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 10px;
+      min-width: 58px;
+      text-align: center;
+    }
+    .swagger-ui .opblock.opblock-put { border-color: var(--outline-variant); }
+    .swagger-ui .opblock.opblock-put .opblock-summary-method {
+      background: var(--tertiary, #e8b8d0);
+      color: var(--on-tertiary, #462537);
+      border-radius: var(--radius-field);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 10px;
+      min-width: 58px;
+      text-align: center;
+    }
+
+    .swagger-ui .opblock .opblock-summary .view-line-link {
+      fill: var(--on-surface-variant);
+    }
+    .swagger-ui .opblock .opblock-summary .opblock-summary-path {
+      color: var(--on-surface);
+      font-size: 14px;
+    }
+    .swagger-ui .opblock .opblock-summary .opblock-summary-path a { color: var(--on-surface); }
+    .swagger-ui .opblock .opblock-summary .opblock-summary-path a:hover { color: var(--primary); }
+    .swagger-ui .opblock .opblock-summary .opblock-summary-path__deprecated { text-decoration: line-through; }
+    .swagger-ui .opblock .opblock-summary .arrow { fill: var(--on-surface-variant); }
+    .swagger-ui .opblock .opblock-section-header {
+      background: var(--surface-container);
+      border-bottom: 1px solid var(--outline-variant);
+      border-radius: var(--radius-card) var(--radius-card) 0 0;
+      padding: 12px 16px;
+      min-height: 44px;
+      box-shadow: none;
+    }
+    .swagger-ui .opblock .opblock-section-header h4 {
+      color: var(--on-surface);
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .swagger-ui .opblock .opblock-section-header .btn {
+      background: transparent;
+      border: 1px solid var(--outline-variant);
+      color: var(--on-surface-variant);
+      border-radius: var(--radius-btn);
+      padding: 6px 16px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .swagger-ui .opblock .opblock-section-header .btn:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    /* ---- Tabs ---- */
+    .swagger-ui .opblock .tab-header { text-align: left; }
+    .swagger-ui .opblock .tab-header .tab-item { color: var(--on-surface-variant); font-size: 14px; }
+    .swagger-ui .opblock .tab-header .tab-item.active h4 span { color: var(--primary); }
+    .swagger-ui .opblock .tab-header .tab-item.active { color: var(--primary); }
+    .swagger-ui .opblock .tab-header .tab-item:first-of-type { padding-left: 0; }
+
+    /* ---- Parameters ---- */
+    .swagger-ui .parameters-container { border: none; }
+    .swagger-ui .parameters-col_name { color: var(--on-surface); font-size: 14px; }
+    .swagger-ui .parameters-col_description { color: var(--on-surface-variant); }
+    .swagger-ui .parameter__name { color: var(--on-surface); font-size: 14px; }
+    .swagger-ui .parameter__name.required { font-weight: 600; }
+    .swagger-ui .parameter__name.required span { color: var(--error); }
+    .swagger-ui .parameter__type { color: var(--on-surface-variant); font-size: 12px; }
+    .swagger-ui .parameter__deprecated { color: var(--error); }
+    .swagger-ui .parameter__in { color: var(--on-surface-variant); font-size: 12px; }
+    .swagger-ui .opblock-description-wrapper p { color: var(--on-surface-variant); }
+    .swagger-ui .opblock-external-docs-wrapper p { color: var(--on-surface-variant); }
+
+    .swagger-ui table thead tr td, .swagger-ui table thead tr th {
+      border-bottom: 1px solid var(--outline-variant);
+      color: var(--on-surface-variant);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .swagger-ui table tbody tr td {
+      border-bottom: 1px solid var(--outline-variant);
+      color: var(--on-surface);
+      font-size: 14px;
+    }
+
+    /* ---- Response ---- */
+    .swagger-ui .responses-inner h4, .swagger-ui .responses-inner h5 {
+      color: var(--on-surface);
+    }
+    .swagger-ui .response-col_status { color: var(--on-surface); }
+    .swagger-ui .response-col_links { color: var(--on-surface-variant); }
+    .swagger-ui .response-col_description__inner div.markdown p {
+      color: var(--on-surface-variant);
+    }
+    .swagger-ui .responses-inner p { color: var(--on-surface-variant); }
+    .swagger-ui .responses-inner .model-box { background: var(--surface-container); border-radius: 12px; border: 1px solid var(--outline-variant); }
+
+    /* ---- Model / Schema ---- */
+    .swagger-ui .model-box { background: transparent; }
+    .swagger-ui .model { color: var(--on-surface); }
+    .swagger-ui .model-title { color: var(--on-surface); }
+    .swagger-ui .model-title .model-title__text { font-weight: 600; }
+    .swagger-ui .model .prop-type { color: var(--on-surface-variant); }
+    .swagger-ui .model .prop-format { color: var(--on-surface-variant); }
+    .swagger-ui .model-control { fill: var(--on-surface-variant); }
+    .swagger-ui .model .property { color: var(--on-surface-variant); }
+    .swagger-ui .model .property .property-item { color: var(--on-surface); }
+    .swagger-ui table.model tr.model-corners { display: none; }
+    .swagger-ui table.model tbody tr td { border-bottom: none; }
+
+    .swagger-ui .model-container {
+      background: var(--surface-container);
+      border-radius: var(--radius-field);
+      border: 1px solid var(--outline-variant);
+      box-shadow: none;
+      margin: 8px 0;
+    }
+
+    /* ---- Markdown / prose ---- */
+    .swagger-ui .markdown p, .swagger-ui .markdown li, .swagger-ui .markdown table {
+      color: var(--on-surface-variant);
+    }
+    .swagger-ui .markdown code {
+      background: var(--surface-container-high);
+      color: var(--primary);
+      border-radius: 6px;
+      padding: 2px 8px;
+      font-size: 13px;
+    }
+    .swagger-ui .markdown a { color: var(--primary); }
+    .swagger-ui .markdown pre {
+      background: var(--surface-dim);
+      border-radius: var(--radius-field);
+      border: 1px solid var(--outline-variant);
+    }
+    .swagger-ui .markdown pre code { background: none; color: var(--on-surface); }
+
+    /* ---- Buttons ---- */
+    .swagger-ui .btn {
+      background: transparent;
+      border: 1px solid var(--primary);
+      color: var(--primary);
+      border-radius: var(--radius-btn);
+      padding: 8px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      box-shadow: none;
+      transition: background .15s ease;
+    }
+    .swagger-ui .btn:hover {
+      background: rgba(126,200,227,.08);
+    }
+    .swagger-ui .btn.execute {
+      background: var(--primary);
+      color: var(--on-primary);
+      border: none;
+    }
+    .swagger-ui .btn.execute:hover {
+      background: var(--primary-container);
+    }
+    .swagger-ui .btn.cancel {
+      border: 1px solid var(--outline-variant);
+      color: var(--on-surface-variant);
+    }
+    .swagger-ui .btn.cancel:hover {
+      border-color: var(--on-surface-variant);
+    }
+
+    /* ---- Inputs ---- */
+    .swagger-ui input[type=text], .swagger-ui input[type=email], .swagger-ui input[type=password] {
+      background: var(--surface-container);
+      border: 1px solid var(--outline-variant);
+      color: var(--on-surface);
+      border-radius: var(--radius-field);
+      padding: 10px 14px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    .swagger-ui input[type=text]:focus, .swagger-ui input[type=email]:focus, .swagger-ui input[type=password]:focus {
+      border-color: var(--primary);
+      border-width: 2px;
+      outline: none;
+      background: rgba(126,200,227,.04);
+    }
+    .swagger-ui textarea {
+      background: var(--surface-container);
+      border: 1px solid var(--outline-variant);
+      color: var(--on-surface);
+      border-radius: var(--radius-field);
+      font-family: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
+      font-size: 13px;
+    }
+    .swagger-ui textarea:focus {
+      border-color: var(--primary);
+      outline: none;
+    }
+    .swagger-ui select {
+      background: var(--surface-container);
+      border: 1px solid var(--outline-variant);
+      color: var(--on-surface);
+      border-radius: var(--radius-field);
+      padding: 8px 12px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    /* ---- Errors / validation ---- */
+    .swagger-ui .errors { color: var(--error); }
+    .swagger-ui .errors-wrapper {
+      background: var(--error-container);
+      border-radius: var(--radius-card);
+      border: 1px solid var(--error);
+      box-shadow: none;
+      margin: 16px 0;
+      padding: 12px 20px;
+    }
+    .swagger-ui .errors-wrapper hgroup { display: flex; align-items: center; gap: 10px; }
+    .swagger-ui .errors-wrapper hgroup h4 { color: var(--error); font-weight: 600; }
+    .swagger-ui .errors-wrapper .errors h4 { color: var(--error); }
+    .swagger-ui .errors-wrapper .errors small { color: var(--error); }
+
+    /* ---- Try-it-out response ---- */
+    .swagger-ui .responses-wrapper .responses-header h4 { color: var(--on-surface); }
+    .swagger-ui .response {
+      border: 1px solid var(--outline-variant);
+      border-radius: var(--radius-card);
+      overflow: hidden;
+    }
+    .swagger-ui .response .response-col_status .response-undocumented { color: var(--on-surface-variant); }
+    .swagger-ui .highlight-code {
+      background: var(--surface-dim);
+      border-radius: 0 0 var(--radius-card) var(--radius-card);
+    }
+    .swagger-ui .highlight-code .lang-react { display: none; }
+    .swagger-ui .highlight-code .copy-to-clipboard {
+      background: var(--surface-container);
+      border: 1px solid var(--outline-variant);
+      color: var(--on-surface-variant);
+      border-radius: var(--radius-btn);
+      padding: 4px 12px;
+      font-size: 12px;
+    }
+    .swagger-ui .highlight-code button:active, .swagger-ui .highlight-code button:focus { outline: none; }
+
+    /* ---- Response body / headers ---- */
+    .swagger-ui .response-col_description__inner pre {
+      background: var(--surface-dim);
+      border-radius: var(--radius-field);
+      border: 1px solid var(--outline-variant);
+      font-size: 13px;
+    }
+    .swagger-ui .response-col_description__inner pre code { color: var(--on-surface); }
+    .swagger-ui .response-col_description__inner span { color: var(--on-surface-variant); }
+
+    /* ---- Headers table ---- */
+    .swagger-ui .response-controls { padding: 8px 16px; }
+    .swagger-ui .response-controls .response-control-media-type {
+      color: var(--on-surface-variant);
+      font-size: 13px;
+    }
+    .swagger-ui .response-controls .response-control-media-type--accept-controller select {
+      background: var(--surface-container);
+      border: 1px solid var(--outline-variant);
+      color: var(--on-surface);
+      border-radius: var(--radius-field);
+    }
+
+    /* ---- Auth modal ---- */
+    .swagger-ui .dialog-ux .backdrop-ux { background: rgba(0,0,0,.6); }
+    .swagger-ui .dialog-ux .modal-ux {
+      background: var(--surface);
+      border: 1px solid var(--outline-variant);
+      border-radius: var(--radius-card);
+      box-shadow: 0 8px 32px rgba(0,0,0,.4);
+    }
+    .swagger-ui .dialog-ux .modal-ux-header {
+      border-bottom: 1px solid var(--outline-variant);
+      padding: 16px 24px;
+    }
+    .swagger-ui .dialog-ux .modal-ux-header h3 {
+      color: var(--on-surface);
+      font-weight: 600;
+      font-size: 18px;
+    }
+    .swagger-ui .dialog-ux .modal-ux-header .close-modal {
+      fill: var(--on-surface-variant);
+    }
+    .swagger-ui .dialog-ux .modal-ux-content h4 { color: var(--on-surface); }
+    .swagger-ui .dialog-ux .modal-ux-content label { color: var(--on-surface-variant); font-size: 13px; }
+    .swagger-ui .dialog-ux .modal-ux-content .auth-btn-wrapper { gap: 8px; }
+    .swagger-ui .auth-btn-wrapper .btn-done {
+      background: var(--primary);
+      color: var(--on-primary);
+      border: none;
+      border-radius: var(--radius-btn);
+      padding: 8px 24px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .swagger-ui .auth-btn-wrapper .btn-done:hover {
+      background: var(--primary-container);
+    }
+    .swagger-ui .auth-btn-wrapper .btn-done:active { transform: scale(.97); }
+
+    /* ---- Webhooks ---- */
+    .swagger-ui .webhooks-section h3 { color: var(--on-surface); }
+
+    /* ---- Loading ---- */
+    .swagger-ui .loading-container { padding: 40px; }
+    .swagger-ui .loading-container .loading { color: var(--on-surface-variant); }
+
+    /* ---- Section headers ---- */
+    .swagger-ui .section-header { background: transparent; }
+    .swagger-ui .section-header h3 { color: var(--on-surface); }
+
+    /* ---- Content type select ---- */
+    .swagger-ui .content-type-wrapper select {
+      background: var(--surface-container);
+      border: 1px solid var(--outline-variant);
+      color: var(--on-surface);
+      border-radius: var(--radius-field);
+      padding: 6px 10px;
+      font-size: 13px;
+      font-family: inherit;
+    }
+
+    /* ---- Global ---- */
+    .swagger-ui .wrapper { max-width: 1460px; margin: 0 auto; padding: 0 24px; }
+    .swagger-ui .opblock-body pre.microlight {
+      background: var(--surface-dim);
+      border-radius: var(--radius-field);
+      border: 1px solid var(--outline-variant);
+      font-size: 13px;
+      color: var(--on-surface);
+    }
+    .swagger-ui .opblock-body pre.microlight code { color: var(--on-surface); }
+    .swagger-ui .opblock-body .opblock-body .opblock-description { padding: 12px 16px; }
+
+    /* ---- Scrollbar ---- */
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: var(--surface-dim); }
+    ::-webkit-scrollbar-thumb { background: var(--surface-container-highest); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--outline); }
+
+    /* ---- Highlight.js / Prism overrides for dark ---- */
+    .swagger-ui .highlight-code .line-numbers { color: var(--outline); }
+    .swagger-ui .highlight-code .string { color: #a8def5; }
+    .swagger-ui .highlight-code .number { color: #f5a8a8; }
+    .swagger-ui .highlight-code .keyword { color: #c8a8f5; }
+    .swagger-ui .highlight-code .boolean { color: #f5c8a8; }
+    .swagger-ui .highlight-code .function { color: #a8e3c8; }
+
+    /* ---- Extrovert logo / branding ---- */
+    .topbar .extrovert-logo {
+      width: 28px; height: 28px;
+      background: var(--primary);
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 14px;
+      color: var(--on-primary);
+      flex: none;
+      text-decoration: none;
+    }
   </style>
 </head>
 <body>
+  <div class="topbar">
+    <div class="wrapper">
+      <div class="topbar-wrapper">
+        <a class="link" href="/">
+          <span class="extrovert-logo">E</span>
+          <span>Extrovert API</span>
+        </a>
+      </div>
+    </div>
+  </div>
   <div id="swagger-ui"></div>
   <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
   <script>
