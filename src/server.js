@@ -218,6 +218,10 @@ app.use('/api/v1', require('./routes/api-v1'));
 // Developer docs (Swagger UI + OpenAPI spec).
 app.use('/developers', require('./routes/docs'));
 
+// Redirect for discoverability.
+app.get('/api/v1/openapi.json', (req, res) => res.redirect('/developers/openapi.json'));
+app.get('/api/v1/docs', (req, res) => res.redirect('/developers/docs'));
+
 app.use((req, res) => {
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'The requested API endpoint does not exist.' });
