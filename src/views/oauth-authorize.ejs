@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Authorize Application — Extrovert</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body style="display:flex;align-items:center;justify-content:center;min-height:100vh">
+  <div class="card" style="max-width:480px;width:100%;padding:32px">
+    <h1 style="margin-bottom:4px"><%- app.name %></h1>
+    <% if (app.website) { %><p style="margin:0 0 16px;font-size:0.85rem"><a href="<%= app.website %>" target="_blank" rel="noopener"><%= app.website %></a></p><% } %>
+    <p style="margin-bottom:16px">This application is requesting access to your Extrovert account:</p>
+
+    <p style="margin-bottom:24px">
+      <strong>Scopes:</strong>
+      <% var scopeList = scopes.split(' ') %>
+      <ul>
+        <% scopeList.forEach(function(s) { %>
+          <li><code><%= s %></code></li>
+        <% }) %>
+      </ul>
+    </p>
+
+    <form method="POST" action="/api/v1/oauth/authorize">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <input type="hidden" name="client_id" value="<%= app.client_id %>">
+      <input type="hidden" name="redirect_uri" value="<%= redirect_uri %>">
+      <input type="hidden" name="scope" value="<%= scopes %>">
+      <input type="hidden" name="state" value="<%= state || '' %>">
+      <input type="hidden" name="code_challenge" value="<%= code_challenge || '' %>">
+      <input type="hidden" name="code_challenge_method" value="<%= code_challenge_method || '' %>">
+
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button type="submit" name="approve" value="no" class="btn" style="background:var(--surface2)">Cancel</button>
+        <button type="submit" name="approve" value="yes" class="btn">Authorize</button>
+      </div>
+    </form>
+  </div>
+</body>
+</html>

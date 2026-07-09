@@ -53,6 +53,16 @@ app.use(helmet({
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(express.json({ limit: '1mb' }));
 
+// CORS for third-party API clients.
+app.use('/api', (req, res, next) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Idempotency-Key, X-CSRF-Token');
+  res.set('Access-Control-Max-Age', '86400');
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  next();
+});
+
 // Session with secure defaults.
 app.use(session({
   store: new SqliteStore(),
@@ -89,9 +99,20 @@ const actionLimiter = rateLimit({
   message: 'Too many requests, please slow down.',
 });
 app.use((req, res, next) => {
-  if (req.method === 'POST') return actionLimiter(req, res, next);
+  if (req.method === 'POST' && !req.path.startsWith('/api/')) return actionLimiter(req, res, next);
   next();
 });
+
+// API rate limiter — applies to all /api/ requests.
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
+  message: { type: 'about:blank', title: 'Too Many Requests', status: 429, detail: 'API rate limit exceeded. See X-RateLimit-* headers for details.' },
+});
+app.use('/api', apiLimiter);
 
 // CSRF middleware — generates and validates tokens per session.
 app.use((req, res, next) => {
@@ -101,7 +122,9 @@ app.use((req, res, next) => {
   }
   res.locals.csrfToken = req.session.csrfToken;
 
-  // Skip CSRF check for multipart forms — multer parses body later in the route.
+  // Skip CSRF check for API routes (Bearer token auth) and multipart forms.
+  if (req.path.startsWith('/api/')) return next();
+
   if (req.method === 'POST' && (
     req.path === '/stickers/upload' ||
     req.path.startsWith('/stickers/upload') ||
@@ -146,6 +169,12 @@ app.use('/uploads', express.static(UPLOAD_DIR, {
     res.set('Content-Disposition', 'inline');
   },
 }));
+app.use('/api-uploads', express.static(path.join(__dirname, '..', 'data', 'api-uploads'), {
+  setHeaders: (res) => {
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.set('Content-Disposition', 'inline');
+  },
+}));
 
 app.locals.relTime = function relTime(ts) {
   const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));
@@ -183,15 +212,28 @@ app.use('/admin', require('./routes/admin'));
 app.use('/stickers', require('./routes/stickers'));
 app.use('/rooms', require('./routes/rooms'));
 
-app.use((req, res) => res.status(404).render('404', { thing: 'page' }));
+// REST API v1.
+app.use('/api/v1', require('./routes/api-v1'));
+
+// Developer docs (Swagger UI + OpenAPI spec).
+app.use('/developers', require('./routes/docs'));
+
+app.use((req, res) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ type: 'about:blank', title: 'Not Found', status: 404, detail: 'The requested API endpoint does not exist.' });
+  }
+  res.status(404).render('404', { thing: 'page' });
+});
 
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
   res.status(500).send('Internal server error');
 });
 
-app.listen(PORT, () => {
-  console.log(`Extrovert is running on http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Extrovert is running on http://localhost:${PORT}`);
+  });
+}
 
 module.exports = app;

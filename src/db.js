@@ -5,7 +5,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 
-const DB_PATH = path.join(__dirname, '..', 'data', 'extrovert.db');
+const DB_PATH = process.env.EXTV_DB_PATH || path.join(__dirname, '..', 'data', 'extrovert.db');
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 const db = new DatabaseSync(DB_PATH);
@@ -190,6 +190,77 @@ function init() {
       status     TEXT NOT NULL DEFAULT 'pending',
       created_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS oauth_apps (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      name          TEXT NOT NULL,
+      description   TEXT NOT NULL DEFAULT '',
+      website       TEXT NOT NULL DEFAULT '',
+      redirect_uris TEXT NOT NULL,
+      client_id     TEXT UNIQUE NOT NULL,
+      client_secret TEXT,
+      scopes        TEXT NOT NULL DEFAULT 'read',
+      owner_id      INTEGER NOT NULL REFERENCES users(id),
+      created_at    INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_oauth_apps_client ON oauth_apps(client_id);
+    CREATE INDEX IF NOT EXISTS idx_oauth_apps_owner ON oauth_apps(owner_id);
+
+    CREATE TABLE IF NOT EXISTS oauth_codes (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      code        TEXT UNIQUE NOT NULL,
+      app_id      INTEGER NOT NULL REFERENCES oauth_apps(id),
+      user_id     INTEGER NOT NULL REFERENCES users(id),
+      scopes      TEXT NOT NULL,
+      code_challenge        TEXT,
+      code_challenge_method TEXT,
+      redirect_uri TEXT NOT NULL,
+      used        INTEGER NOT NULL DEFAULT 0,
+      expires_at  INTEGER NOT NULL,
+      created_at  INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_oauth_codes_code ON oauth_codes(code);
+
+    CREATE TABLE IF NOT EXISTS oauth_tokens (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      token        TEXT UNIQUE NOT NULL,
+      refresh_token TEXT UNIQUE,
+      app_id       INTEGER NOT NULL REFERENCES oauth_apps(id),
+      user_id      INTEGER NOT NULL REFERENCES users(id),
+      scopes       TEXT NOT NULL,
+      expires_at   INTEGER,
+      created_at   INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_oauth_tokens_token ON oauth_tokens(token);
+    CREATE INDEX IF NOT EXISTS idx_oauth_tokens_user ON oauth_tokens(user_id);
+
+    CREATE TABLE IF NOT EXISTS media_attachments (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id    INTEGER NOT NULL REFERENCES users(id),
+      file_path  TEXT NOT NULL,
+      mime_type  TEXT NOT NULL,
+      file_size  INTEGER NOT NULL,
+      width      INTEGER,
+      height     INTEGER,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS idempotency_keys (
+      key         TEXT PRIMARY KEY,
+      response    TEXT NOT NULL,
+      status_code INTEGER NOT NULL,
+      created_at  INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      action     TEXT NOT NULL,
+      actor_id   INTEGER REFERENCES users(id),
+      details    TEXT,
+      ip         TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action, created_at);
   `);
 }
 
@@ -815,6 +886,186 @@ function setUserTheme(userId, theme) {
   db.prepare(`UPDATE users SET theme = ? WHERE id = ?`).run(theme, userId);
 }
 
+// ---------- OAuth Apps ----------
+function createOAuthApp({ name, description, website, redirectUris, clientId, clientSecret, scopes, ownerId }) {
+  const now = Date.now();
+  const res = db.prepare(`
+    INSERT INTO oauth_apps (name, description, website, redirect_uris, client_id, client_secret, scopes, owner_id, created_at)
+    VALUES (?,?,?,?,?,?,?,?,?)
+  `).run(name, description, website, redirectUris, clientId, clientSecret || null, scopes, ownerId, now);
+  return res.lastInsertRowid;
+}
+
+function getOAuthAppByClientId(clientId) {
+  return db.prepare(`SELECT * FROM oauth_apps WHERE client_id = ?`).get(clientId);
+}
+
+function getOAuthAppById(id) {
+  return db.prepare(`SELECT * FROM oauth_apps WHERE id = ?`).get(id);
+}
+
+function getOAuthAppsByOwner(ownerId) {
+  return db.prepare(`SELECT * FROM oauth_apps WHERE owner_id = ? ORDER BY created_at DESC`).all(ownerId);
+}
+
+function getAuthorizedAppsForUser(userId) {
+  return db.prepare(`
+    SELECT DISTINCT a.id, a.name, a.website, a.client_id, a.scopes AS app_scopes,
+           t.scopes AS token_scopes, t.created_at AS authorized_at
+    FROM oauth_tokens t
+    JOIN oauth_apps a ON a.id = t.app_id
+    WHERE t.user_id = ?
+    ORDER BY t.created_at DESC
+  `).all(userId);
+}
+
+function deleteOAuthApp(id) {
+  db.prepare(`DELETE FROM oauth_codes WHERE app_id = ?`).run(id);
+  db.prepare(`DELETE FROM oauth_tokens WHERE app_id = ?`).run(id);
+  db.prepare(`DELETE FROM oauth_apps WHERE id = ?`).run(id);
+}
+
+// ---------- OAuth codes (authorization code flow) ----------
+function createOAuthCode(code, appId, userId, scopes, codeChallenge, codeChallengeMethod, redirectUri) {
+  const now = Date.now();
+  db.prepare(`
+    INSERT INTO oauth_codes (code, app_id, user_id, scopes, code_challenge, code_challenge_method, redirect_uri, expires_at, created_at)
+    VALUES (?,?,?,?,?,?,?,?,?)
+  `).run(code, appId, userId, scopes, codeChallenge || null, codeChallengeMethod || null, redirectUri, now + 600000, now);
+}
+
+function getOAuthCode(code) {
+  return db.prepare(`SELECT * FROM oauth_codes WHERE code = ?`).get(code);
+}
+
+function markOAuthCodeUsed(id) {
+  db.prepare(`UPDATE oauth_codes SET used = 1 WHERE id = ?`).run(id);
+}
+
+// ---------- OAuth2 tokens ----------
+function createOAuthToken(token, refreshToken, appId, userId, scopes, expiresAt) {
+  const now = Date.now();
+  db.prepare(`
+    INSERT INTO oauth_tokens (token, refresh_token, app_id, user_id, scopes, expires_at, created_at)
+    VALUES (?,?,?,?,?,?,?)
+  `).run(token, refreshToken || null, appId, userId, scopes, expiresAt || null, now);
+}
+
+function getOAuthToken(token) {
+  return db.prepare(`SELECT * FROM oauth_tokens WHERE token = ?`).get(token);
+}
+
+function getOAuthTokenByRefresh(refreshToken) {
+  return db.prepare(`SELECT * FROM oauth_tokens WHERE refresh_token = ?`).get(refreshToken);
+}
+
+function revokeOAuthToken(token) {
+  db.prepare(`DELETE FROM oauth_tokens WHERE token = ?`).run(token);
+}
+
+function revokeOAuthTokensForUser(userId, appId) {
+  db.prepare(`DELETE FROM oauth_tokens WHERE user_id = ? AND app_id = ?`).run(userId, appId);
+}
+
+function revokeAllOAuthTokensForUser(userId) {
+  db.prepare(`DELETE FROM oauth_tokens WHERE user_id = ?`).run(userId);
+}
+
+function rotateRefreshToken(oldRefreshToken, newToken, newRefreshToken, expiresAt) {
+  const now = Date.now();
+  const existing = db.prepare(`SELECT * FROM oauth_tokens WHERE refresh_token = ?`).get(oldRefreshToken);
+  if (!existing) return null;
+  db.prepare(`DELETE FROM oauth_tokens WHERE refresh_token = ?`).run(oldRefreshToken);
+  db.prepare(`
+    INSERT INTO oauth_tokens (token, refresh_token, app_id, user_id, scopes, expires_at, created_at)
+    VALUES (?,?,?,?,?,?,?)
+  `).run(newToken, newRefreshToken, existing.app_id, existing.user_id, existing.scopes, expiresAt || null, now);
+  return existing;
+}
+
+// ---------- Media ----------
+function createMediaAttachment(userId, filePath, mimeType, fileSize) {
+  const now = Date.now();
+  const res = db.prepare(`
+    INSERT INTO media_attachments (user_id, file_path, mime_type, file_size, created_at)
+    VALUES (?,?,?,?,?)
+  `).run(userId, filePath, mimeType, fileSize, now);
+  return res.lastInsertRowid;
+}
+
+function getMediaAttachment(id) {
+  return db.prepare(`SELECT * FROM media_attachments WHERE id = ?`).get(id);
+}
+
+function getMediaAttachmentsByUser(userId) {
+  return db.prepare(`SELECT * FROM media_attachments WHERE user_id = ? ORDER BY created_at DESC`).all(userId);
+}
+
+function updateMediaAttachmentDimensions(id, width, height) {
+  db.prepare(`UPDATE media_attachments SET width = ?, height = ? WHERE id = ?`).run(width, height, id);
+}
+
+// ---------- Idempotency keys ----------
+function getIdempotencyKey(key) {
+  return db.prepare(`SELECT * FROM idempotency_keys WHERE key = ?`).get(key);
+}
+
+function setIdempotencyKey(key, response, statusCode) {
+  const now = Date.now();
+  db.prepare(`INSERT OR IGNORE INTO idempotency_keys (key, response, status_code, created_at) VALUES (?,?,?,?)`)
+    .run(key, response, statusCode, now);
+}
+
+// ---------- Search ----------
+function searchUsers(query, limit = 20) {
+  return db.prepare(`
+    SELECT id, username, display_name, avatar, bio
+    FROM users
+    WHERE (username LIKE ? OR display_name LIKE ?) AND banned = 0
+    ORDER BY
+      CASE WHEN username = ? THEN 0
+           WHEN display_name = ? THEN 1
+           WHEN username LIKE ? THEN 2
+           ELSE 3
+      END,
+      username ASC
+    LIMIT ?
+  `).all(`%${query}%`, `%${query}%`, query, query, `${query}%`, limit);
+}
+
+function searchPosts(query, viewerId, limit = 20) {
+  const friendIds = db.prepare(`SELECT followee_id FROM follows WHERE follower_id = ?`).all(viewerId).map(r => r.followee_id);
+  const ids = [viewerId, ...friendIds];
+  const placeholders = ids.map(() => '?').join(',');
+  const foafIds = db.prepare(`
+    SELECT DISTINCT f2.followee_id AS id
+    FROM follows f1
+    JOIN follows f2 ON f2.follower_id = f1.followee_id
+    WHERE f1.follower_id = ? AND f2.followee_id NOT IN (${placeholders})
+  `).all(viewerId, ...ids).map(r => r.id);
+  const allVisible = [...ids, ...foafIds];
+  const visPlaceholders = allVisible.map(() => '?').join(',');
+  return db.prepare(`
+    SELECT p.id, p.type, p.body, p.media_path, p.created_at, p.user_id,
+           u.username, u.display_name, u.avatar
+    FROM posts p
+    JOIN users u ON u.id = p.user_id
+    WHERE p.user_id IN (${visPlaceholders})
+      AND (p.body LIKE ? OR u.display_name LIKE ?)
+    ORDER BY p.created_at DESC
+    LIMIT ?
+  `).all(...allVisible, `%${query}%`, `%${query}%`, limit);
+}
+
+// ---------- Audit log ----------
+function auditLog(action, actorId, details) {
+  const now = Date.now();
+  try {
+    db.prepare(`INSERT INTO audit_log (action, actor_id, details, ip, created_at) VALUES (?,?,?,?,?)`)
+      .run(action, actorId || null, details || '', null, now);
+  } catch {}
+}
+
 module.exports = {
   db,
   // users
@@ -863,4 +1114,21 @@ module.exports = {
   getAllRooms,
   // join requests
   createJoinRequest, getJoinRequests, approveJoinRequest, rejectJoinRequest, hasPendingRequest,
+  // OAuth Apps
+  createOAuthApp, getOAuthAppByClientId, getOAuthAppById, getOAuthAppsByOwner,
+  getAuthorizedAppsForUser, deleteOAuthApp,
+  // OAuth codes
+  createOAuthCode, getOAuthCode, markOAuthCodeUsed,
+  // OAuth tokens
+  createOAuthToken, getOAuthToken, getOAuthTokenByRefresh,
+  revokeOAuthToken, revokeOAuthTokensForUser, revokeAllOAuthTokensForUser,
+  rotateRefreshToken,
+  // media
+  createMediaAttachment, getMediaAttachment, getMediaAttachmentsByUser, updateMediaAttachmentDimensions,
+  // idempotency
+  getIdempotencyKey, setIdempotencyKey,
+  // search
+  searchUsers, searchPosts,
+  // audit
+  auditLog,
 };

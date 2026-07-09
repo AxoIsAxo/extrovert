@@ -5,7 +5,7 @@ const { Store } = require('express-session');
 const path = require('node:path');
 const fs = require('node:fs');
 
-const DB_PATH = path.join(__dirname, '..', 'data', 'sessions.db');
+const DB_PATH = process.env.EXTV_SESSION_DB_PATH || path.join(__dirname, '..', 'data', 'sessions.db');
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 const db = new DatabaseSync(DB_PATH);

@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node scripts/test.js"
+    "test": "node scripts/test.js",
+    "test:api": "node --test scripts/api-test.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
