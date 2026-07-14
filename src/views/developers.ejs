@@ -13,7 +13,7 @@
       <input type="text" name="description">
 
       <label>Website</label>
-      <input type="url" name="website" placeholder="https://example.com">
+      <input type="text" name="website" placeholder="https://example.com">
 
       <label>Redirect URIs *</label>
       <input type="text" name="redirect_uris" placeholder="https://example.com/callback, https://example.com/alt-callback" required>
@@ -34,7 +34,7 @@
         <div style="display:flex;justify-content:space-between;align-items:start">
           <div>
             <strong style="font-size:1.1rem"><%= app.name %></strong>
-            <% if (app.website) { %><br><a href="<%= app.website %>" target="_blank" rel="noopener" style="font-size:0.85rem"><%= app.website %></a><% } %>
+            <% if (app.website) { %><div style="font-size:0.85rem;margin-top:2px"><a href="<%= app.website %>" target="_blank" rel="noopener"><%= app.website %></a></div><% } %>
           </div>
           <form method="post" action="/settings/developers/<%= app.id %>/delete" onsubmit="return confirm('Delete this application? All tokens issued to it will be revoked.')">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
@@ -67,7 +67,7 @@
       <div class="card" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
         <div>
           <strong><%= app.name %></strong>
-          <% if (app.website) { %> &mdash; <a href="<%= app.website %>" target="_blank" rel="noopener" style="font-size:0.85rem"><%= app.website %></a><% } %>
+          <% if (app.website) { %><div style="font-size:0.85rem;margin-top:2px"><a href="<%= app.website %>" target="_blank" rel="noopener"><%= app.website %></a></div><% } %>
           <br><code style="font-size:0.8rem">scopes: <%= app.scopes %></code>
         </div>
         <form method="post" action="/settings/developers/authorized/<%= app.client_id %>/revoke" onsubmit="return confirm('Revoke access for this application?')">
