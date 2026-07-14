@@ -2,6 +2,8 @@
 <div style="max-width:600px;margin:0 auto">
   <h2>Developer Applications</h2>
 
+  <% if (locals.error) { %><div class="flash err"><%= error %></div><% } %>
+
   <div class="card" style="margin-bottom:20px">
     <h3>Register a new application</h3>
     <form method="post" action="/settings/developers">

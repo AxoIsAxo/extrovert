@@ -82,39 +82,48 @@ router.get('/developers', (req, res) => {
   res.render('developers', { apps, authorizedApps });
 });
 
-router.post('/developers', (req, res) => {
+router.post('/developers', (req, res, next) => {
   const user = res.locals.currentUser;
   if (!user) return res.redirect('/login');
 
-  const { name, description, website, redirect_uris, scopes } = req.body;
-  if (!name || !redirect_uris) {
-    return res.render('developers', {
+  try {
+    const { name, description, website, redirect_uris, scopes } = req.body;
+    if (!name || !redirect_uris) {
+      return res.render('developers', {
+        apps: db.getOAuthAppsByOwner(user.id),
+        authorizedApps: db.getAuthorizedAppsForUser(user.id),
+        error: 'Name and Redirect URIs are required.',
+      });
+    }
+
+    const validScopes = scopes
+      ? scopes.split(' ').filter(s => VALID_SCOPES.has(s)).join(' ')
+      : 'read';
+
+    const clientId = crypto.randomBytes(24).toString('hex');
+    const clientSecret = crypto.randomBytes(32).toString('hex');
+    const uris = Array.isArray(redirect_uris) ? redirect_uris.join(',') : redirect_uris;
+
+    db.createOAuthApp({
+      name,
+      description: description || '',
+      website: website || '',
+      redirectUris: uris,
+      clientId,
+      clientSecret,
+      scopes: validScopes,
+      ownerId: user.id,
+    });
+
+    res.redirect('/settings/developers');
+  } catch (err) {
+    console.error('Error registering app:', err);
+    res.render('developers', {
       apps: db.getOAuthAppsByOwner(user.id),
       authorizedApps: db.getAuthorizedAppsForUser(user.id),
-      error: 'Name and Redirect URIs are required.',
+      error: 'Failed to register app: ' + (err.message || 'unknown error'),
     });
   }
-
-  const validScopes = scopes
-    ? scopes.split(' ').filter(s => VALID_SCOPES.has(s)).join(' ')
-    : 'read';
-
-  const clientId = crypto.randomBytes(24).toString('hex');
-  const clientSecret = crypto.randomBytes(32).toString('hex');
-  const uris = Array.isArray(redirect_uris) ? redirect_uris.join(',') : redirect_uris;
-
-  db.createOAuthApp({
-    name,
-    description: description || '',
-    website: website || '',
-    redirectUris: uris,
-    clientId,
-    clientSecret,
-    scopes: validScopes,
-    ownerId: user.id,
-  });
-
-  res.redirect('/settings/developers');
 });
 
 router.post('/developers/:id/delete', (req, res) => {
