@@ -1,0 +1,81 @@
+<%- include('partials/header') %>
+<div style="max-width:600px;margin:0 auto">
+  <h2>Developer Applications</h2>
+
+  <div class="card" style="margin-bottom:20px">
+    <h3>Register a new application</h3>
+    <form method="post" action="/settings/developers">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <label style="display:block;margin-bottom:4px;font-weight:600">Name *</label>
+      <input type="text" name="name" required style="width:100%;padding:10px;margin-bottom:10px">
+
+      <label style="display:block;margin-bottom:4px;font-weight:600">Description</label>
+      <input type="text" name="description" style="width:100%;padding:10px;margin-bottom:10px">
+
+      <label style="display:block;margin-bottom:4px;font-weight:600">Website</label>
+      <input type="url" name="website" placeholder="https://example.com" style="width:100%;padding:10px;margin-bottom:10px">
+
+      <label style="display:block;margin-bottom:4px;font-weight:600">Redirect URIs *</label>
+      <input type="text" name="redirect_uris" placeholder="https://example.com/callback, https://example.com/alt-callback" required style="width:100%;padding:10px;margin-bottom:10px">
+
+      <label style="display:block;margin-bottom:4px;font-weight:600">Scopes (space-separated)</label>
+      <input type="text" name="scopes" placeholder="read profile write" value="read" style="width:100%;padding:10px;margin-bottom:14px">
+
+      <button class="btn" style="width:100%">Register Application</button>
+    </form>
+  </div>
+
+  <% if (apps.length > 0) { %>
+    <h3>Your registered applications</h3>
+    <% apps.forEach(function(app) { %>
+      <div class="card" style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:start">
+          <div>
+            <strong style="font-size:1.1rem"><%= app.name %></strong>
+            <% if (app.website) { %><br><a href="<%= app.website %>" target="_blank" rel="noopener" style="font-size:0.85rem"><%= app.website %></a><% } %>
+          </div>
+          <form method="post" action="/settings/developers/<%= app.id %>/delete" onsubmit="return confirm('Delete this application? All tokens issued to it will be revoked.')">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <button class="btn danger" style="font-size:0.8rem;padding:4px 10px">Delete</button>
+          </form>
+        </div>
+        <details style="margin-top:8px;font-size:0.85rem">
+          <summary style="cursor:pointer;color:var(--accent)">Credentials</summary>
+          <p style="margin:8px 0 4px"><strong>Client ID:</strong></p>
+          <code style="display:block;padding:8px;background:var(--surface2);border-radius:6px;word-break:break-all"><%= app.client_id %></code>
+          <% if (app.client_secret) { %>
+            <p style="margin:8px 0 4px"><strong>Client Secret:</strong> <span style="color:var(--warn)">(shown once — copy it now)</span></p>
+            <code style="display:block;padding:8px;background:var(--surface2);border-radius:6px;word-break:break-all"><%= app.client_secret %></code>
+          <% } %>
+          <p style="margin:8px 0 4px"><strong>Redirect URIs:</strong></p>
+          <code style="display:block;padding:8px;background:var(--surface2);border-radius:6px"><%= app.redirect_uris.join(', ') %></code>
+          <p style="margin:8px 0 4px"><strong>Scopes:</strong> <code><%= app.scopes %></code></p>
+        </details>
+      </div>
+    <% }); %>
+  <% } else { %>
+    <p style="text-align:center;color:var(--text-muted);padding:24px">You haven't registered any applications yet.</p>
+  <% } %>
+
+  <hr style="border:none;border-top:1px solid var(--border);margin:24px 0">
+
+  <h3>Authorized applications</h3>
+  <% if (authorizedApps.length > 0) { %>
+    <% authorizedApps.forEach(function(app) { %>
+      <div class="card" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <strong><%= app.name %></strong>
+          <% if (app.website) { %> &mdash; <a href="<%= app.website %>" target="_blank" rel="noopener" style="font-size:0.85rem"><%= app.website %></a><% } %>
+          <br><code style="font-size:0.8rem">scopes: <%= app.scopes %></code>
+        </div>
+        <form method="post" action="/settings/developers/authorized/<%= app.client_id %>/revoke" onsubmit="return confirm('Revoke access for this application?')">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button class="btn danger" style="font-size:0.8rem;padding:4px 10px">Revoke</button>
+        </form>
+      </div>
+    <% }); %>
+  <% } else { %>
+    <p style="text-align:center;color:var(--text-muted);padding:24px">No authorized applications.</p>
+  <% } %>
+</div>
+<%- include('partials/footer') %>

@@ -215,6 +215,9 @@ app.use('/rooms', require('./routes/rooms'));
 // REST API v1.
 app.use('/api/v1', require('./routes/api-v1'));
 
+// OIDC well-known endpoints.
+app.use('/.well-known', require('./routes/well-known'));
+
 // Developer docs (Swagger UI + OpenAPI spec).
 app.use('/developers', require('./routes/docs'));
 

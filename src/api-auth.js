@@ -3,9 +3,10 @@
 const crypto = require('node:crypto');
 const db = require('./db');
 
-const VALID_SCOPES = new Set(['read', 'write', 'follow', 'media.write', 'notifications', 'read:direct', 'write:direct', 'profile']);
+const VALID_SCOPES = new Set(['openid', 'read', 'write', 'follow', 'media.write', 'notifications', 'read:direct', 'write:direct', 'profile']);
 
 const SCOPE_HIERARCHY = {
+  'openid': ['openid'],
   'read': ['read'],
   'write': ['write'],
   'follow': ['follow'],

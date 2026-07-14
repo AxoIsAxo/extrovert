@@ -9,12 +9,138 @@ const spec = {
 
 ## Authentication
 
-This API uses OAuth 2.0 (Authorization Code flow with PKCE). To get started:
+This API implements **OAuth 2.0** (Authorization Code flow with PKCE) and **OpenID Connect** for third-party authentication.
 
-1. Register an application via \`POST /api/v1/oauth/apps\`
-2. Direct users to \`GET /api/v1/oauth/authorize\` to grant access
-3. Exchange the authorization code for an access token via \`POST /api/v1/oauth/token\`
-4. Use the access token in the \`Authorization: Bearer <token>\` header
+---
+
+### "Login with Extrovert" — Quick Start
+
+To let users sign in to your platform with their Extrovert account:
+
+**1. Register your application**
+
+Send a POST to \`/api/v1/oauth/apps\` (or use the form at \`/settings/developers\`) with your app name and redirect URI(s). Keep the \`client_id\` and \`client_secret\` — you'll need them.
+
+**2. Redirect the user to authorize**
+
+\`\`\`
+GET /api/v1/oauth/authorize?client_id=YOUR_CLIENT_ID&redirect_uri=YOUR_CALLBACK&response_type=code&scope=openid+profile&state=RANDOM_STATE&nonce=RANDOM_NONCE
+\`\`\`
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| \`client_id\` | yes | Your app's client ID |
+| \`redirect_uri\` | yes | Must match one of your registered URIs |
+| \`response_type\` | yes | Must be \`code\` |
+| \`scope\` | yes | Include \`openid\` for OIDC. Add \`profile\` to get name/avatar. |
+| \`state\` | recommended | CSRF protection — echoed back in the redirect |
+| \`nonce\` | recommended | OIDC nonce — **must** match the value in the \`id_token\` |
+| \`code_challenge\` | recommended | PKCE S256 challenge for public clients |
+| \`code_challenge_method\` | recommended | Must be \`S256\` |
+
+**3. Handle the callback**
+
+If the user approves, they're redirected to your \`redirect_uri\`:
+\`\`\`
+YOUR_CALLBACK?code=AUTH_CODE&state=THE_STATE_YOU_SENT
+\`\`\`
+
+Exchange the \`code\` for tokens:
+\`\`\`
+POST /api/v1/oauth/token
+Content-Type: application/json
+
+{
+  "grant_type": "authorization_code",
+  "client_id": "YOUR_CLIENT_ID",
+  "client_secret": "YOUR_CLIENT_SECRET",
+  "code": "AUTH_CODE",
+  "code_verifier": "YOUR_PKCE_VERIFIER",
+  "redirect_uri": "YOUR_CALLBACK"
+}
+\`\`\`
+
+Response:
+\`\`\`json
+{
+  "access_token": "ey...",
+  "token_type": "Bearer",
+  "scope": "openid profile",
+  "expires_in": 86400,
+  "refresh_token": "rt...",
+  "id_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+\`\`\`
+
+If \`openid\` was in the requested scope, the response includes an **\`id_token\`** (a signed JWT).
+
+**4. Verify the ID Token**
+
+Decode and verify the \`id_token\` using the public keys from:
+
+\`\`\`
+GET /.well-known/jwks.json
+\`\`\`
+
+The token is signed with **RS256**. Verify:
+- Signature against the JWKS
+- \`iss\` matches \`https://extrovert.redforged.eu\`
+- \`aud\` matches your \`client_id\`
+- \`exp\` is in the future
+- \`nonce\` matches the one you sent (if you sent one)
+
+**5. Get user info**
+
+Call the UserInfo endpoint with the access token:
+
+\`\`\`
+GET /api/v1/oauth/userinfo
+Authorization: Bearer ACCESS_TOKEN
+\`\`\`
+
+Response:
+\`\`\`json
+{
+  "sub": "42",
+  "preferred_username": "alice",
+  "name": "Alice Johnson",
+  "picture": "/uploads/avatars/abc123.jpg"
+}
+\`\`\`
+
+The \`sub\` claim is the user's unique Extrovert ID. Use this to identify the user in your system.
+
+**6. Token refresh**
+
+When the access token expires (after 24h), use the refresh token:
+
+\`\`\`
+POST /api/v1/oauth/token
+Content-Type: application/json
+
+{
+  "grant_type": "refresh_token",
+  "client_id": "YOUR_CLIENT_ID",
+  "refresh_token": "YOUR_REFRESH_TOKEN"
+}
+\`\`\`
+
+---
+
+### Standard API Access
+
+If you only need API access (not authentication), the OAuth 2.0 flow works without \`openid\` in the scope. Available scopes:
+
+| Scope | Access |
+|-------|--------|
+| \`read\` | Read timelines, posts, profiles |
+| \`write\` | Create/delete posts, like, repost |
+| \`follow\` | Follow/unfollow accounts |
+| \`profile\` | Read/update your profile |
+| \`media.write\` | Upload media |
+| \`notifications\` | Read/manage notifications |
+| \`read:direct\` | Read direct messages |
+| \`write:direct\` | Send direct messages |
 
 ## Rate Limiting
 
@@ -99,6 +225,7 @@ Pass the \`next\` cursor value as the \`?cursor=\` query parameter to get the ne
           { name: 'response_type', in: 'query', required: true, schema: { type: 'string', enum: ['code'] } },
           { name: 'scope', in: 'query', schema: { type: 'string' } },
           { name: 'state', in: 'query', schema: { type: 'string' } },
+          { name: 'nonce', in: 'query', schema: { type: 'string' }, description: 'OIDC nonce — will be included in the id_token' },
           { name: 'code_challenge', in: 'query', schema: { type: 'string' }, description: 'PKCE S256 challenge' },
           { name: 'code_challenge_method', in: 'query', schema: { type: 'string', enum: ['S256', 'plain'] } },
         ],
@@ -134,6 +261,30 @@ Pass the \`next\` cursor value as the \`?cursor=\` query parameter to get the ne
           '200': { description: 'Token response' },
           '400': { description: 'Bad request' },
         },
+      },
+    },
+    '/api/v1/oauth/userinfo': {
+      get: {
+        summary: 'OpenID Connect UserInfo endpoint',
+        tags: ['OAuth'],
+        security: [{ oauth2: ['openid'] }],
+        responses: {
+          '200': { description: 'User claims (sub, preferred_username, name, picture)' },
+        },
+      },
+    },
+    '/.well-known/openid-configuration': {
+      get: {
+        summary: 'OpenID Connect Discovery document',
+        tags: ['OAuth'],
+        responses: { '200': { description: 'OIDC discovery metadata' } },
+      },
+    },
+    '/.well-known/jwks.json': {
+      get: {
+        summary: 'JSON Web Key Set for ID token signature verification',
+        tags: ['OAuth'],
+        responses: { '200': { description: 'JWKS with RS256 public key' } },
       },
     },
     '/api/v1/oauth/revoke': {
@@ -465,6 +616,7 @@ Pass the \`next\` cursor value as the \`?cursor=\` query parameter to get the ne
             tokenUrl: '/api/v1/oauth/token',
             refreshUrl: '/api/v1/oauth/token',
             scopes: {
+              openid: 'OpenID Connect — receive an id_token for authentication',
               read: 'Read your data (timelines, posts, profiles)',
               write: 'Create and delete posts, like, repost',
               follow: 'Follow and unfollow accounts',

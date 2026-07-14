@@ -10,6 +10,7 @@ const db = require('../db');
 const { canView } = require('../network');
 const feed = require('../feed');
 const { requireApiAuth, clientAppAuth, generateToken, VALID_SCOPES } = require('../api-auth');
+const { signIdToken } = require('../oidc');
 
 const router = express.Router();
 
@@ -172,7 +173,7 @@ router.get('/oauth/authorize', (req, res) => {
     return res.redirect('/login?next=' + encodeURIComponent('/api/v1/oauth/authorize?' + new URLSearchParams(req.query).toString()));
   }
 
-  const { client_id, redirect_uri, response_type, scope, state, code_challenge, code_challenge_method } = req.query;
+  const { client_id, redirect_uri, response_type, scope, state, code_challenge, code_challenge_method, nonce } = req.query;
 
   if (response_type !== 'code') {
     return errorResponse(res, 400, 'Bad Request', 'Only response_type=code is supported (Authorization Code flow).');
@@ -198,6 +199,7 @@ router.get('/oauth/authorize', (req, res) => {
     scopes: validScopes,
     code_challenge,
     code_challenge_method,
+    nonce,
     csrfToken: req.session.csrfToken,
   });
 });
@@ -208,7 +210,7 @@ router.post('/oauth/authorize', (req, res) => {
     return errorResponse(res, 401, 'Unauthorized', 'Not logged in.');
   }
 
-  const { client_id, redirect_uri, scope, state, code_challenge, code_challenge_method, approve } = req.body;
+  const { client_id, redirect_uri, scope, state, code_challenge, code_challenge_method, nonce, approve } = req.body;
 
   if (approve !== 'yes') {
     const redirectUrl = new URL(redirect_uri);
@@ -223,7 +225,7 @@ router.post('/oauth/authorize', (req, res) => {
   const code = crypto.randomBytes(32).toString('hex');
   const validScopes = (scope || app.scopes).split(' ').filter(s => VALID_SCOPES.has(s)).join(' ');
 
-  db.createOAuthCode(code, app.id, req.session.userId, validScopes, code_challenge || null, code_challenge_method || null, redirect_uri);
+  db.createOAuthCode(code, app.id, req.session.userId, validScopes, code_challenge || null, code_challenge_method || null, redirect_uri, nonce || null);
 
   const redirectUrl = new URL(redirect_uri);
   redirectUrl.searchParams.set('code', code);
@@ -279,14 +281,33 @@ router.post('/oauth/token', clientAppAuth, (req, res) => {
     db.createOAuthToken(accessToken, refreshToken, app.id, authCode.user_id, authCode.scopes, expiresAt);
     db.auditLog('oauth_token_issued', authCode.user_id, `App "${app.name}"`);
 
-    return res.json({
+    const tokenResponse = {
       access_token: accessToken,
       token_type: 'Bearer',
       scope: authCode.scopes,
       created_at: Math.floor(Date.now() / 1000),
       expires_in: 86400,
       refresh_token: refreshToken,
-    });
+    };
+
+    const scopesSet = new Set(authCode.scopes.split(' '));
+    if (scopesSet.has('openid')) {
+      const user = db.getUserById(authCode.user_id);
+      const idTokenPayload = {
+        sub: String(authCode.user_id),
+        aud: app.client_id,
+        auth_time: Math.floor(Date.now() / 1000),
+      };
+      if (authCode.nonce) idTokenPayload.nonce = authCode.nonce;
+      if (scopesSet.has('profile')) {
+        idTokenPayload.preferred_username = user.username;
+        idTokenPayload.name = user.display_name;
+        if (user.avatar) idTokenPayload.picture = '/uploads/' + user.avatar;
+      }
+      tokenResponse.id_token = signIdToken(idTokenPayload);
+    }
+
+    return res.json(tokenResponse);
   }
 
   if (grant_type === 'refresh_token') {
@@ -357,6 +378,21 @@ router.post('/oauth/authorized_apps/:appId/revoke', (req, res) => {
   db.revokeOAuthTokensForUser(req.session.userId, appId);
   db.auditLog('oauth_app_access_revoked', req.session.userId, `App id: ${appId}`);
   res.json({ ok: true });
+});
+
+// OIDC UserInfo endpoint
+router.get('/oauth/userinfo', requireApiAuth('openid'), (req, res) => {
+  const scopesSet = new Set(req.apiToken.scopes.split(' '));
+  const user = req.apiUser;
+  const info = {
+    sub: String(user.id),
+  };
+  if (scopesSet.has('profile')) {
+    info.preferred_username = user.username;
+    info.name = user.display_name;
+    if (user.avatar) info.picture = '/uploads/' + user.avatar;
+  }
+  res.json(info);
 });
 
 // ======== Accounts ========

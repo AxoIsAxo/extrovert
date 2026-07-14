@@ -212,6 +212,7 @@ function init() {
       app_id      INTEGER NOT NULL REFERENCES oauth_apps(id),
       user_id     INTEGER NOT NULL REFERENCES users(id),
       scopes      TEXT NOT NULL,
+      nonce       TEXT,
       code_challenge        TEXT,
       code_challenge_method TEXT,
       redirect_uri TEXT NOT NULL,
@@ -279,6 +280,7 @@ try { db.exec(`ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0`
 try { db.exec(`ALTER TABLE users ADD COLUMN banned INTEGER NOT NULL DEFAULT 0`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN avatar TEXT`); } catch {}
 try { db.exec(`ALTER TABLE rooms ADD COLUMN is_public INTEGER NOT NULL DEFAULT 1`); } catch {}
+try { db.exec(`ALTER TABLE oauth_codes ADD COLUMN nonce TEXT`); } catch {}
 try { db.exec(`CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, reporter_id INTEGER NOT NULL REFERENCES users(id), reported_user_id INTEGER NOT NULL REFERENCES users(id), message_id INTEGER NOT NULL, message_body TEXT NOT NULL, channel_id INTEGER NOT NULL, room_id INTEGER NOT NULL, reason TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL)`); } catch {}
 try { db.exec(`CREATE TABLE IF NOT EXISTS join_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, room_id INTEGER NOT NULL REFERENCES rooms(id), user_id INTEGER NOT NULL REFERENCES users(id), status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL)`); } catch {}
 // Fix stale referred_by links for users whose referrer no longer has a referral code.
@@ -926,12 +928,12 @@ function deleteOAuthApp(id) {
 }
 
 // ---------- OAuth codes (authorization code flow) ----------
-function createOAuthCode(code, appId, userId, scopes, codeChallenge, codeChallengeMethod, redirectUri) {
+function createOAuthCode(code, appId, userId, scopes, codeChallenge, codeChallengeMethod, redirectUri, nonce) {
   const now = Date.now();
   db.prepare(`
-    INSERT INTO oauth_codes (code, app_id, user_id, scopes, code_challenge, code_challenge_method, redirect_uri, expires_at, created_at)
-    VALUES (?,?,?,?,?,?,?,?,?)
-  `).run(code, appId, userId, scopes, codeChallenge || null, codeChallengeMethod || null, redirectUri, now + 600000, now);
+    INSERT INTO oauth_codes (code, app_id, user_id, scopes, nonce, code_challenge, code_challenge_method, redirect_uri, expires_at, created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?)
+  `).run(code, appId, userId, scopes, nonce || null, codeChallenge || null, codeChallengeMethod || null, redirectUri, now + 600000, now);
 }
 
 function getOAuthCode(code) {

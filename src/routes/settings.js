@@ -1,7 +1,10 @@
 'use strict';
 
 const express = require('express');
-const { getUserTheme, setUserTheme, getCustomization, setCustomization, deleteUser } = require('../db');
+const crypto = require('node:crypto');
+const db = require('../db');
+const { getUserTheme, setUserTheme, getCustomization, setCustomization, deleteUser } = db;
+const { VALID_SCOPES } = require('../api-auth');
 
 const router = express.Router();
 
@@ -68,6 +71,74 @@ router.post('/delete', (req, res) => {
   req.session.destroy(() => {
     res.redirect('/');
   });
+});
+
+// Developer OAuth app management
+router.get('/developers', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.redirect('/login');
+  const apps = db.getOAuthAppsByOwner(user.id);
+  const authorizedApps = db.getAuthorizedAppsForUser(user.id);
+  res.render('developers', { apps, authorizedApps });
+});
+
+router.post('/developers', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.redirect('/login');
+
+  const { name, description, website, redirect_uris, scopes } = req.body;
+  if (!name || !redirect_uris) {
+    return res.render('developers', {
+      apps: db.getOAuthAppsByOwner(user.id),
+      authorizedApps: db.getAuthorizedAppsForUser(user.id),
+      error: 'Name and Redirect URIs are required.',
+    });
+  }
+
+  const validScopes = scopes
+    ? scopes.split(' ').filter(s => VALID_SCOPES.has(s)).join(' ')
+    : 'read';
+
+  const clientId = crypto.randomBytes(24).toString('hex');
+  const clientSecret = crypto.randomBytes(32).toString('hex');
+  const uris = Array.isArray(redirect_uris) ? redirect_uris.join(',') : redirect_uris;
+
+  db.createOAuthApp({
+    name,
+    description: description || '',
+    website: website || '',
+    redirectUris: uris,
+    clientId,
+    clientSecret,
+    scopes: validScopes,
+    ownerId: user.id,
+  });
+
+  res.redirect('/settings/developers');
+});
+
+router.post('/developers/:id/delete', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.redirect('/login');
+
+  const appId = parseInt(req.params.id, 10);
+  const app = db.getOAuthAppById(appId);
+  if (!app || app.owner_id !== user.id) {
+    return res.status(404).send('App not found.');
+  }
+  db.deleteOAuthApp(appId);
+  res.redirect('/settings/developers');
+});
+
+router.post('/developers/authorized/:clientId/revoke', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.redirect('/login');
+
+  const app = db.getOAuthAppByClientId(req.params.clientId);
+  if (app) {
+    db.revokeOAuthTokensForUser(user.id, app.id);
+  }
+  res.redirect('/settings/developers');
 });
 
 module.exports = router;
