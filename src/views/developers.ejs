@@ -38,7 +38,7 @@
             <strong style="font-size:1.1rem"><%= app.name %></strong>
             <% if (app.website) { %><div style="font-size:0.85rem;margin-top:2px"><a href="<%= app.website %>" target="_blank" rel="noopener"><%= app.website %></a></div><% } %>
           </div>
-          <form method="post" action="/settings/developers/<%= app.id %>/delete" onsubmit="return confirm('Delete this application? All tokens issued to it will be revoked.')">
+          <form method="post" action="/settings/developers/<%= app.id %>/delete" data-confirm="Delete this application? All tokens issued to it will be revoked.">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
             <button class="btn danger" style="font-size:0.8rem;padding:4px 10px;min-height:auto">Delete</button>
           </form>
@@ -72,7 +72,7 @@
           <% if (app.website) { %><div style="font-size:0.85rem;margin-top:2px"><a href="<%= app.website %>" target="_blank" rel="noopener"><%= app.website %></a></div><% } %>
           <br><code style="font-size:0.8rem">scopes: <%= app.scopes %></code>
         </div>
-        <form method="post" action="/settings/developers/authorized/<%= app.client_id %>/revoke" onsubmit="return confirm('Revoke access for this application?')">
+        <form method="post" action="/settings/developers/authorized/<%= app.client_id %>/revoke" data-confirm="Revoke access for this application?">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
           <button class="btn danger" style="font-size:0.8rem;padding:4px 10px;min-height:auto">Revoke</button>
         </form>

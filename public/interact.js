@@ -5,6 +5,8 @@ document.addEventListener('DOMContentLoaded', function(){
 
   document.addEventListener('submit', function(e){
     var form = e.target;
+    var confirmMsg = form.getAttribute('data-confirm');
+    if (confirmMsg && !confirm(confirmMsg)) { e.preventDefault(); return; }
     var action = form.getAttribute('action') || '';
     var m = action.match(/^\/posts\/(\d+)\/(like|share|repost|follow-from|comment|delete)$/);
     var chatM = action.match(/^\/chats\/([^/]+)\/send$/);
