@@ -24,7 +24,7 @@
         key,
         { name: 'AES-GCM', length: 256 },
         true,
-        ['wrapKey', 'unwrapKey']
+        ['wrapKey', 'unwrapKey', 'encrypt', 'decrypt']
       );
     });
   }
@@ -221,7 +221,7 @@
     if (kekB64) {
       try { var jwk = JSON.parse(atob(kekB64)); } catch (e) { kekPromise = Promise.resolve(null); }
       if (!kekPromise) {
-        kekPromise = crypto.subtle.importKey('jwk', jwk, { name: 'AES-GCM', length: 256 }, false, ['unwrapKey']).catch(function () { return null; });
+        kekPromise = crypto.subtle.importKey('jwk', jwk, { name: 'AES-GCM', length: 256 }, false, ['unwrapKey', 'decrypt']).catch(function () { return null; });
       }
     } else {
       kekPromise = Promise.resolve(null);
