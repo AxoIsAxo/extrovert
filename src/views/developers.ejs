@@ -6,22 +6,24 @@
     <h3>Register a new application</h3>
     <form method="post" action="/settings/developers">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-      <label style="display:block;margin-bottom:4px;font-weight:600">Name *</label>
-      <input type="text" name="name" required style="width:100%;padding:10px;margin-bottom:10px">
+      <label>Name *</label>
+      <input type="text" name="name" required>
 
-      <label style="display:block;margin-bottom:4px;font-weight:600">Description</label>
-      <input type="text" name="description" style="width:100%;padding:10px;margin-bottom:10px">
+      <label>Description</label>
+      <input type="text" name="description">
 
-      <label style="display:block;margin-bottom:4px;font-weight:600">Website</label>
-      <input type="url" name="website" placeholder="https://example.com" style="width:100%;padding:10px;margin-bottom:10px">
+      <label>Website</label>
+      <input type="url" name="website" placeholder="https://example.com">
 
-      <label style="display:block;margin-bottom:4px;font-weight:600">Redirect URIs *</label>
-      <input type="text" name="redirect_uris" placeholder="https://example.com/callback, https://example.com/alt-callback" required style="width:100%;padding:10px;margin-bottom:10px">
+      <label>Redirect URIs *</label>
+      <input type="text" name="redirect_uris" placeholder="https://example.com/callback, https://example.com/alt-callback" required>
 
-      <label style="display:block;margin-bottom:4px;font-weight:600">Scopes (space-separated)</label>
-      <input type="text" name="scopes" placeholder="read profile write" value="read" style="width:100%;padding:10px;margin-bottom:14px">
+      <label>Scopes (space-separated)</label>
+      <input type="text" name="scopes" placeholder="read profile write" value="read">
 
-      <button class="btn" style="width:100%">Register Application</button>
+      <div style="margin-top:18px">
+        <button class="btn" style="width:100%">Register Application</button>
+      </div>
     </form>
   </div>
 
@@ -36,28 +38,28 @@
           </div>
           <form method="post" action="/settings/developers/<%= app.id %>/delete" onsubmit="return confirm('Delete this application? All tokens issued to it will be revoked.')">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-            <button class="btn danger" style="font-size:0.8rem;padding:4px 10px">Delete</button>
+            <button class="btn danger" style="font-size:0.8rem;padding:4px 10px;min-height:auto">Delete</button>
           </form>
         </div>
         <details style="margin-top:8px;font-size:0.85rem">
-          <summary style="cursor:pointer;color:var(--accent)">Credentials</summary>
+          <summary style="cursor:pointer;color:var(--primary)">Credentials</summary>
           <p style="margin:8px 0 4px"><strong>Client ID:</strong></p>
-          <code style="display:block;padding:8px;background:var(--surface2);border-radius:6px;word-break:break-all"><%= app.client_id %></code>
+          <code style="display:block;padding:8px;background:var(--surface-container-high);border-radius:var(--radius-field);word-break:break-all"><%= app.client_id %></code>
           <% if (app.client_secret) { %>
-            <p style="margin:8px 0 4px"><strong>Client Secret:</strong> <span style="color:var(--warn)">(shown once — copy it now)</span></p>
-            <code style="display:block;padding:8px;background:var(--surface2);border-radius:6px;word-break:break-all"><%= app.client_secret %></code>
+            <p style="margin:8px 0 4px"><strong>Client Secret:</strong> <span style="color:var(--on-surface-variant);font-size:0.85rem">(shown once — copy it now)</span></p>
+            <code style="display:block;padding:8px;background:var(--surface-container-high);border-radius:var(--radius-field);word-break:break-all"><%= app.client_secret %></code>
           <% } %>
           <p style="margin:8px 0 4px"><strong>Redirect URIs:</strong></p>
-          <code style="display:block;padding:8px;background:var(--surface2);border-radius:6px"><%= app.redirect_uris.join(', ') %></code>
+          <code style="display:block;padding:8px;background:var(--surface-container-high);border-radius:var(--radius-field)"><%= app.redirect_uris.join(', ') %></code>
           <p style="margin:8px 0 4px"><strong>Scopes:</strong> <code><%= app.scopes %></code></p>
         </details>
       </div>
     <% }); %>
   <% } else { %>
-    <p style="text-align:center;color:var(--text-muted);padding:24px">You haven't registered any applications yet.</p>
+    <p style="text-align:center;color:var(--on-surface-variant);padding:24px">You haven't registered any applications yet.</p>
   <% } %>
 
-  <hr style="border:none;border-top:1px solid var(--border);margin:24px 0">
+  <hr style="border:none;border-top:1px solid var(--outline-variant);margin:24px 0">
 
   <h3>Authorized applications</h3>
   <% if (authorizedApps.length > 0) { %>
@@ -70,12 +72,12 @@
         </div>
         <form method="post" action="/settings/developers/authorized/<%= app.client_id %>/revoke" onsubmit="return confirm('Revoke access for this application?')">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <button class="btn danger" style="font-size:0.8rem;padding:4px 10px">Revoke</button>
+          <button class="btn danger" style="font-size:0.8rem;padding:4px 10px;min-height:auto">Revoke</button>
         </form>
       </div>
     <% }); %>
   <% } else { %>
-    <p style="text-align:center;color:var(--text-muted);padding:24px">No authorized applications.</p>
+    <p style="text-align:center;color:var(--on-surface-variant);padding:24px">No authorized applications.</p>
   <% } %>
 </div>
 <%- include('partials/footer') %>
