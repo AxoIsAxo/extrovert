@@ -32,10 +32,12 @@
   /* ---- Wrap an RSA private key with a KEK (exportable KEK) ---- */
   function wrapPrivateKey(privateKey, kek) {
     var iv = crypto.getRandomValues(new Uint8Array(12));
-    return crypto.subtle.wrapKey('pkcs8', privateKey, kek, { name: 'AES-GCM', iv: iv }).then(function (wrapped) {
-      var combined = new Uint8Array(iv.length + wrapped.byteLength);
+    return crypto.subtle.exportKey('pkcs8', privateKey).then(function (exported) {
+      return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, kek, exported);
+    }).then(function (encrypted) {
+      var combined = new Uint8Array(iv.length + encrypted.byteLength);
       combined.set(iv);
-      combined.set(new Uint8Array(wrapped), iv.length);
+      combined.set(new Uint8Array(encrypted), iv.length);
       return uint8ArrayToBase64(combined);
     });
   }
@@ -78,9 +80,10 @@
       if (data.publicKey) myPublicKeyPem = data.publicKey;
       if (data.encryptedPrivateKey && kek) {
         var combined = Uint8Array.from(atob(data.encryptedPrivateKey), function (c) { return c.charCodeAt(0); });
-        return crypto.subtle.unwrapKey('pkcs8', combined.slice(12), kek, { name: 'AES-GCM', iv: combined.slice(0, 12) },
-          { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['decrypt'])
-          .then(function (priv) { myPrivateKey = priv; });
+        return crypto.subtle.decrypt({ name: 'AES-GCM', iv: combined.slice(0, 12) }, kek, combined.slice(12))
+          .then(function (decrypted) {
+            return crypto.subtle.importKey('pkcs8', decrypted, { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['decrypt']);
+          }).then(function (priv) { myPrivateKey = priv; });
       } else if (!data.publicKey && kek) {
         // No keys exist yet (existing user before E2EE) — generate on the spot
         return generateAndUpload(kek);
