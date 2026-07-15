@@ -55,16 +55,22 @@ document.addEventListener('DOMContentLoaded', function() {
       input.type = 'text';
       input.className = 'room-msg-edit-input';
       input.value = currentText;
-      input.style.width = '80%';
       textSpan.replaceWith(input);
       editBtn.textContent = 'Save';
       editBtn.classList.add('room-msg-save');
       editBtn.classList.remove('room-msg-edit');
+      // Add cancel button
+      var cancelBtn = document.createElement('span');
+      cancelBtn.className = 'room-msg-cancel';
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.style.cssText = 'cursor:pointer;font-size:11px;padding:0 6px;color:var(--text-muted)';
+      editBtn.parentNode.insertBefore(cancelBtn, editBtn.nextSibling);
       input.focus();
       // Cancel on Escape
       input.addEventListener('keydown', function(ev) {
-        if (ev.key === 'Escape') cancelEditRoomMsg(msgDiv, editBtn, currentText);
+        if (ev.key === 'Escape') { cancelEditRoomMsg(msgDiv, editBtn, currentText); ev.preventDefault(); }
       });
+      cancelBtn.addEventListener('click', function() { cancelEditRoomMsg(msgDiv, editBtn, currentText); });
       return;
     }
     var saveBtn = e.target.closest('.room-msg-save');
@@ -248,6 +254,8 @@ document.addEventListener('DOMContentLoaded', function() {
       span.textContent = originalText;
       input.replaceWith(span);
     }
+    var cancelBtn = msgDiv.querySelector('.room-msg-cancel');
+    if (cancelBtn) cancelBtn.remove();
     btn.textContent = 'Edit';
     btn.classList.remove('room-msg-save');
     btn.classList.add('room-msg-edit');

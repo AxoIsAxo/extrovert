@@ -423,6 +423,19 @@ a.conv-row:hover { color: var(--primary); }
 .edit-comment-btn, .edit-post-btn { cursor:pointer; }
 
 /* Inline editing fields - match surrounding content styles */
+.inline-edit-btns .inline-save-btn {
+  background: var(--primary); color: var(--on-primary); border: none;
+  border-radius: var(--radius-btn); font-weight: 600; font-family: inherit;
+  transition: box-shadow var(--t);
+}
+.inline-edit-btns .inline-save-btn:hover { box-shadow: 0 2px 6px var(--shadow); }
+.inline-edit-btns .inline-save-btn:disabled { opacity: 0.6; cursor: default; }
+.inline-edit-btns .inline-cancel-btn {
+  background: transparent; color: var(--on-surface-variant); border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-btn); font-family: inherit; font-weight: 500;
+}
+.inline-edit-btns .inline-cancel-btn:hover { border-color: var(--primary); color: var(--primary); background: rgba(126,200,227,.06); }
+
 .inline-edit-input.post-body-edit {
   width: 100%; box-sizing: border-box; margin-bottom: 14px;
   font-size: 15px; line-height: 1.55; font-family: inherit;

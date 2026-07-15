@@ -183,21 +183,51 @@ document.addEventListener('DOMContentLoaded', function(){
     }
     input.className = 'inline-edit-input ' + className;
     input.value = origText;
-    input.className = 'inline-edit-input';
     el.replaceWith(input);
+
+    // Save and Cancel buttons
+    var btnWrap = document.createElement('span');
+    btnWrap.className = 'inline-edit-btns';
+    btnWrap.style.cssText = 'display:inline-flex;gap:4px;margin-left:4px;vertical-align:middle';
+    if (multiline) {
+      btnWrap.style.cssText = 'display:flex;gap:6px;margin-top:6px';
+    }
+
+    var saveBtn = document.createElement('button');
+    saveBtn.className = 'btn inline-save-btn';
+    saveBtn.textContent = 'Save';
+    saveBtn.type = 'button';
+    saveBtn.style.cssText = 'font-size:12px;padding:4px 12px;cursor:pointer';
+    saveBtn.addEventListener('click', function() { finish(true); });
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn ghost inline-cancel-btn';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.type = 'button';
+    cancelBtn.style.cssText = 'font-size:12px;padding:4px 12px;cursor:pointer';
+    cancelBtn.addEventListener('click', function() { finish(false); });
+
+    btnWrap.appendChild(saveBtn);
+    btnWrap.appendChild(cancelBtn);
+    input.parentNode.insertBefore(btnWrap, input.nextSibling);
+
     input.focus();
-    input.setSelectionRange(input.value.length, input.value.length);
+    if (!multiline) input.setSelectionRange(input.value.length, input.value.length);
 
     function finish(save) {
       if (save) {
         var val = input.value.trim();
         if (val && val !== origText) {
+          saveBtn.disabled = true;
+          saveBtn.textContent = 'Saving…';
           saveFn(val, function() {
             var span = document.createElement(el.tagName);
             span.className = el.className;
             span.textContent = val;
-            input.replaceWith(span);
+            restore(span);
           }, function() {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save';
             input.value = origText;
             cancel();
           });
@@ -211,8 +241,13 @@ document.addEventListener('DOMContentLoaded', function(){
       var span = document.createElement(el.tagName);
       span.className = el.className;
       span.textContent = origText;
-      input.replaceWith(span);
+      restore(span);
       if (cancelFn) cancelFn();
+    }
+
+    function restore(span) {
+      input.replaceWith(span);
+      btnWrap.remove();
     }
 
     input.addEventListener('keydown', function(ev) {
@@ -255,9 +290,6 @@ document.addEventListener('DOMContentLoaded', function(){
       if (!bodyEl || !dataEl) return;
       var action = dataEl.dataset.action;
       var csrf = dataEl.dataset.csrf;
-      editPostBtn.textContent = 'Saving…';
-      editPostBtn.disabled = true;
-
       replaceWithInput(bodyEl, 'post-body-edit', true,
         function(val, onSuccess) {
           fetch(action, {
@@ -265,14 +297,8 @@ document.addEventListener('DOMContentLoaded', function(){
             headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
             body: 'body=' + encodeURIComponent(val) + '&_csrf=' + encodeURIComponent(csrf),
           }).then(function(r){ return r.json(); }).then(function(d){
-            editPostBtn.textContent = 'Edit';
-            editPostBtn.disabled = false;
             if (d.ok) { onSuccess(); } else { location.reload(); }
           });
-        },
-        function() {
-          editPostBtn.textContent = 'Edit';
-          editPostBtn.disabled = false;
         }
       );
       return;
@@ -350,9 +376,6 @@ document.addEventListener('DOMContentLoaded', function(){
       var action = dataEl.dataset.action;
       var csrf = dataEl.dataset.csrf;
       var origText = bubble.textContent;
-      editMsgBtn.textContent = 'Saving…';
-      editMsgBtn.disabled = true;
-
       replaceWithInput(bubble, 'chat-bubble-edit', false,
         function(val, onSuccess) {
           fetch(action, {
@@ -360,14 +383,8 @@ document.addEventListener('DOMContentLoaded', function(){
             headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
             body: 'body=' + encodeURIComponent(val) + '&_csrf=' + encodeURIComponent(csrf),
           }).then(function(r){ return r.json(); }).then(function(d){
-            editMsgBtn.textContent = 'Edit';
-            editMsgBtn.disabled = false;
             if (d.ok) { onSuccess(); } else { location.reload(); }
           });
-        },
-        function() {
-          editMsgBtn.textContent = 'Edit';
-          editMsgBtn.disabled = false;
         }
       );
       return;
