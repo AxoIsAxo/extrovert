@@ -35,7 +35,7 @@ document.addEventListener('DOMContentLoaded', function(){
               var img = document.createElement('img');
               img.src = s.file_path;
               img.alt = 'sticker';
-              img.style.cssText = 'width:60px;height:60px;object-fit:contain;border-radius:6px;cursor:pointer;background:var(--bg2)';
+              img.style.cssText = 'width:60px;height:60px;object-fit:contain;border-radius:var(--radius);cursor:pointer;background:var(--surface-2)';
               img.addEventListener('click', function(){
                 var input = document.getElementById(targetId.replace('popup','input'));
                 var form = input ? input.closest('form') : null;
@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', function(){
       var pos = img.getBoundingClientRect();
       var menu = document.createElement('div');
       menu.className = 'sticker-add-menu';
-      menu.style.cssText = 'position:fixed;top:'+(pos.bottom+4)+'px;left:'+Math.max(4,pos.left)+'px;background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:999;overflow:hidden;font-size:13px;min-width:140px';
+      menu.style.cssText = 'position:fixed;top:'+(pos.bottom+4)+'px;left:'+Math.max(4,pos.left)+'px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:999;overflow:hidden;font-size:13px;min-width:140px';
       var btn = document.createElement('button');
       btn.textContent = 'Add to my stickers';
       btn.style.cssText = 'display:block;width:100%;padding:10px 18px;border:none;background:none;color:var(--text);cursor:pointer;text-align:left;white-space:nowrap';

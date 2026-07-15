@@ -37,11 +37,11 @@
   <div class="card">
     <h3>Roles</h3>
     <% roles.forEach(function(r) { %>
-      <div style="padding:12px 0;border-bottom:1px solid var(--border)">
+      <div style="padding:12px 0;border-bottom:2px solid var(--border-light)">
         <div style="display:flex;justify-content:space-between;align-items:center">
           <div>
             <strong style="color:<%= r.color %>"><%= r.name %></strong>
-            <% if (r.is_founder) { %><span class="badge" style="background:#ffd70022;color:#ffd700;padding:2px 8px;border-radius:4px;font-size:11px">Founder</span><% } %>
+            <% if (r.is_founder) { %><span class="badge" style="background:var(--accent-light);color:var(--accent);padding:2px 8px;border-radius:var(--radius-sm);font-size:11px">Founder</span><% } %>
           </div>
           <% if (!r.is_founder) { %>
             <div style="display:flex;gap:4px">

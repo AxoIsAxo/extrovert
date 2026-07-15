@@ -63,7 +63,7 @@
     <% } %>
     <% if (item.isOwn) { %>
       <button class="btn ghost edit-post-btn" data-post-id="<%= item.id %>" style="margin-left:auto">Edit</button>
-      <a class="btn ghost" href="/posts/<%= item.interactId %>/delete" style="color:#c33">Delete</a>
+      <a class="btn ghost danger" href="/posts/<%= item.interactId %>/delete">Delete</a>
     <% } %>
   </div>
   <% if (item.isOwn) { %>
@@ -103,7 +103,7 @@
       <input type="text" name="body" id="sticker-input-<%= item.interactId %>" placeholder="Add a comment…" maxlength="1000" required>
       <button>Comment</button>
       <button class="btn ghost sticker-btn" data-target="sticker-popup-<%= item.interactId %>" type="button" style="font-size:18px;padding:4px 8px">😀</button>
-      <div id="sticker-popup-<%= item.interactId %>" style="display:none;position:absolute;bottom:100%;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.15)"></div>
+      <div id="sticker-popup-<%= item.interactId %>" style="display:none;position:absolute;bottom:100%;right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.15)"></div>
     </form>
   </div>
   <% } %>

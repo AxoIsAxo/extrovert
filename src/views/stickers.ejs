@@ -9,7 +9,7 @@
     </form>
     <div style="display:flex;flex-wrap:wrap;gap:8px">
       <% stickers.forEach(function(s){ %>
-        <img src="<%= s.file_path %>" class="sticker-thumb" alt="sticker" style="width:80px;height:80px;object-fit:contain;border-radius:8px;background:var(--bg2)">
+        <img src="<%= s.file_path %>" class="sticker-thumb" alt="sticker" style="width:80px;height:80px;object-fit:contain;border-radius:var(--radius-lg);background:var(--surface-2)">
       <% }) %>
       <% if (stickers.length === 0) { %>
         <p class="muted">No stickers yet.</p>

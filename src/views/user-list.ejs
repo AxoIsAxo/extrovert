@@ -30,6 +30,7 @@
         </div>
         <% if (locals.currentUser && u.id !== currentUser.id) { %>
           <form method="post" action="<%= u.following ? '/unfollow' : '/follow' %>/<%= u.username %>">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
             <button class="btn <%= u.following ? 'ghost' : '' %>"><%= u.following ? 'Following' : 'Follow' %></button>
           </form>
         <% } %>

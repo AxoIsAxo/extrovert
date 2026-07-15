@@ -46,22 +46,22 @@
         <details style="margin-top:8px;font-size:0.85rem">
           <summary style="cursor:pointer;color:var(--primary)">Credentials</summary>
           <p style="margin:8px 0 4px"><strong>Client ID:</strong></p>
-          <code style="display:block;padding:8px;background:var(--surface-container-high);border-radius:var(--radius-field);word-break:break-all"><%= app.client_id %></code>
-          <% if (app.client_secret) { %>
-            <p style="margin:8px 0 4px"><strong>Client Secret:</strong> <span style="color:var(--on-surface-variant);font-size:0.85rem">(shown once — copy it now)</span></p>
-            <code style="display:block;padding:8px;background:var(--surface-container-high);border-radius:var(--radius-field);word-break:break-all"><%= app.client_secret %></code>
-          <% } %>
-          <p style="margin:8px 0 4px"><strong>Redirect URIs:</strong></p>
-          <code style="display:block;padding:8px;background:var(--surface-container-high);border-radius:var(--radius-field)"><%= app.redirect_uris %></code>
+          <code style="display:block;padding:8px;background:var(--surface-3);border-radius:var(--radius);word-break:break-all"><%= app.client_id %></code>
+           <% if (app.client_secret) { %>
+            <p style="margin:8px 0 4px"><strong>Client Secret:</strong> <span style="color:var(--text-secondary);font-size:0.85rem">(shown once — copy it now)</span></p>
+            <code style="display:block;padding:8px;background:var(--surface-3);border-radius:var(--radius);word-break:break-all"><%= app.client_secret %></code>
+           <% } %>
+           <p style="margin:8px 0 4px"><strong>Redirect URIs:</strong></p>
+          <code style="display:block;padding:8px;background:var(--surface-3);border-radius:var(--radius)"><%= app.redirect_uris %></code>
           <p style="margin:8px 0 4px"><strong>Scopes:</strong> <code><%= app.scopes %></code></p>
         </details>
       </div>
     <% }); %>
   <% } else { %>
-    <p style="text-align:center;color:var(--on-surface-variant);padding:24px">You haven't registered any applications yet.</p>
+    <p style="text-align:center;color:var(--text-secondary);padding:24px">You haven't registered any applications yet.</p>
   <% } %>
 
-  <hr style="border:none;border-top:1px solid var(--outline-variant);margin:24px 0">
+  <hr style="border:none;border-top:2px solid var(--border-light);margin:24px 0">
 
   <h3>Authorized applications</h3>
   <% if (authorizedApps.length > 0) { %>
@@ -79,7 +79,7 @@
       </div>
     <% }); %>
   <% } else { %>
-    <p style="text-align:center;color:var(--on-surface-variant);padding:24px">No authorized applications.</p>
+    <p style="text-align:center;color:var(--text-secondary);padding:24px">No authorized applications.</p>
   <% } %>
 </div>
 <%- include('partials/footer') %>

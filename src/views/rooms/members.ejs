@@ -21,7 +21,7 @@
     <div class="card">
       <h3>Pending Requests (<%= requests.length %>)</h3>
       <% requests.forEach(function(r) { %>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:2px solid var(--border-light)">
           <div style="display:flex;align-items:center;gap:8px">
             <% if (r.avatar) { %><img src="<%= r.avatar %>" alt="" class="avatar-img"><% } else { %><div class="avatar"><%= (r.display_name || '?').slice(0,1).toUpperCase() %></div><% } %>
             <span><%= r.display_name %> <small class="muted">@<%= r.username %></small></span>
@@ -38,7 +38,7 @@
   <div class="card">
     <h3>Members (<%= members.length %>)</h3>
     <% members.forEach(function(m) { %>
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:2px solid var(--border-light)">
         <div style="display:flex;align-items:center;gap:8px">
           <% var mRole = roles.find(function(r) { return r.id === m.role_id; }); %>
           <% if (m.avatar) { %><img src="<%= m.avatar %>" alt="" class="avatar-img"><% } else { %><div class="avatar"><%= (m.display_name || '?').slice(0,1).toUpperCase() %></div><% } %>

@@ -3,11 +3,11 @@
     <h2 style="margin-top:0">Delete account?</h2>
     <p style="margin-bottom:24px">This will permanently delete your account, all your posts, comments, likes, messages, and every other trace. This <strong>cannot be undone</strong>.</p>
 
-    <hr style="border:none;border-top:1px solid var(--border);margin-bottom:24px">
+    <hr style="border:none;border-top:2px solid var(--border-light);margin:24px 0">
 
     <form method="post" action="/settings/delete" style="display:inline">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-      <button class="btn" style="background:#c33;color:#fff">Yes, delete my account</button>
+      <button class="btn danger">Yes, delete my account</button>
     </form>
     <a class="btn ghost" href="/settings" style="margin-left:8px">Cancel</a>
   </div>

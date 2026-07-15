@@ -11,7 +11,7 @@
       <div style="display:flex;flex-wrap:wrap;gap:4px">
         <% if (stickers.length) { %>
           <% stickers.forEach(function(s){ %>
-            <img src="<%= s.file_path %>" alt="" style="width:56px;height:56px;object-fit:contain;border-radius:6px;background:var(--surface-container-high)">
+            <img src="<%= s.file_path %>" alt="" style="width:56px;height:56px;object-fit:contain;border-radius:var(--radius);background:var(--surface-3)">
           <% }) %>
         <% } else { %>
           <p class="muted" style="font-size:12px;margin:0">No stickers yet.</p>
@@ -49,8 +49,8 @@
       <% if (discoverResults.length) { %>
         <div style="margin-top:8px">
           <% discoverResults.forEach(function(r){ %>
-            <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border)">
-              <% if (r.avatar) { %><img src="<%= r.avatar %>" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover"><% } else { %><div style="width:28px;height:28px;border-radius:50%;background:var(--primary-container);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0"><%= r.username.slice(0,1).toUpperCase() %></div><% } %>
+            <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:2px solid var(--border-light)">
+              <% if (r.avatar) { %><img src="<%= r.avatar %>" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover"><% } else { %><div style="width:28px;height:28px;border-radius:50%;background:var(--primary-light);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0"><%= r.username.slice(0,1).toUpperCase() %></div><% } %>
               <div style="flex:1;min-width:0;font-size:13px">
                 <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><%= r.display_name %></div>
                 <small class="muted">@<%= r.username %></small>
@@ -63,8 +63,8 @@
       <h5 style="margin:12px 0 6px;font-size:13px">Friends of friends</h5>
       <% if (suggested.length) { %>
         <% suggested.forEach(function(r){ %>
-          <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border)">
-            <% if (r.avatar) { %><img src="<%= r.avatar %>" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover"><% } else { %><div style="width:28px;height:28px;border-radius:50%;background:var(--secondary-container);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0"><%= r.username.slice(0,1).toUpperCase() %></div><% } %>
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:2px solid var(--border-light)">
+            <% if (r.avatar) { %><img src="<%= r.avatar %>" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover"><% } else { %><div style="width:28px;height:28px;border-radius:50%;background:var(--secondary-light);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0"><%= r.username.slice(0,1).toUpperCase() %></div><% } %>
             <div style="flex:1;min-width:0;font-size:13px">
               <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><%= r.display_name %></div>
               <small class="muted">@<%= r.username %></small>

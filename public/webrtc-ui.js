@@ -38,8 +38,8 @@
       '<div style="font-size:2rem;font-weight:700" id="call-incoming-label">Incoming call...</div>' +
       '<div style="font-size:1.2rem;color:var(--text-muted)" id="call-incoming-from"></div>' +
       '<div style="display:flex;gap:16px;margin-top:8px">' +
-        '<button id="call-answer-btn" style="padding:12px 32px;background:#22c55e;color:#fff;border:none;border-radius:8px;font-size:1.1rem;cursor:pointer">Answer</button>' +
-        '<button id="call-decline-btn" style="padding:12px 32px;background:#ef4444;color:#fff;border:none;border-radius:8px;font-size:1.1rem;cursor:pointer">Decline</button>' +
+        '<button id="call-answer-btn" style="padding:12px 32px;background:#22c55e;color:#fff;border:none;border-radius:var(--radius-lg);font-size:1.1rem;cursor:pointer">Answer</button>' +
+        '<button id="call-decline-btn" style="padding:12px 32px;background:var(--danger);color:#fff;border:none;border-radius:var(--radius-lg);font-size:1.1rem;cursor:pointer">Decline</button>' +
       '</div>';
     document.body.appendChild(incomingOverlay);
 
@@ -64,7 +64,7 @@
   function createActiveCallBar() {
     activeCallBar = document.createElement('div');
     activeCallBar.id = 'call-active-bar';
-    activeCallBar.style.cssText = 'display:none;position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--border);z-index:9998;padding:8px 16px;align-items:center;justify-content:space-between';
+    activeCallBar.style.cssText = 'display:none;position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);z-index:9998;padding:8px 16px;align-items:center;justify-content:space-between';
     activeCallBar.innerHTML =
       '<div style="display:flex;align-items:center;gap:12px">' +
         '<span style="font-size:1.2rem">🔊</span>' +
@@ -74,8 +74,8 @@
         '</div>' +
       '</div>' +
       '<div style="display:flex;align-items:center;gap:8px">' +
-        '<button id="call-mute-btn" style="padding:8px 16px;background:var(--surface-container);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:0.9rem">Mute</button>' +
-        '<button id="call-hangup-btn" style="padding:8px 24px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:0.9rem;font-weight:600">Hang Up</button>' +
+        '<button id="call-mute-btn" style="padding:8px 16px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;font-size:0.9rem">Mute</button>' +
+        '<button id="call-hangup-btn" style="padding:8px 24px;background:var(--danger);color:#fff;border:none;border-radius:var(--radius);cursor:pointer;font-size:0.9rem;font-weight:600">Hang Up</button>' +
       '</div>';
     document.body.appendChild(activeCallBar);
 
@@ -83,7 +83,7 @@
     document.getElementById('call-mute-btn').addEventListener('click', function () {
       muted = ExtrovertCall.toggleMute();
       this.textContent = muted ? 'Unmute' : 'Mute';
-      this.style.background = muted ? '#ef4444' : 'var(--surface-container)';
+      this.style.background = muted ? 'var(--danger)' : 'var(--surface-2)';
       this.style.color = muted ? '#fff' : '';
     });
 

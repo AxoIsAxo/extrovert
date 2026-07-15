@@ -21,11 +21,11 @@
         <a class="btn ghost" href="/rooms/<%= room.id %>">Back</a>
       </div>
     </form>
-    <hr>
+    <hr style="border:none;border-top:2px solid var(--border-light);margin:24px 0">
     <form method="post" action="/rooms/<%= room.id %>/delete" class="delete-room-form">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-      <p class="muted" style="color:var(--error)">Danger zone: deleting a room is permanent and irreversible.</p>
-      <label>Type <strong style="color:var(--error)">DELETE</strong> to confirm</label>
+      <p class="muted" style="color:var(--danger)">Danger zone: deleting a room is permanent and irreversible.</p>
+      <label>Type <strong style="color:var(--danger)">DELETE</strong> to confirm</label>
       <input type="text" name="confirm_delete" placeholder="DELETE" required>
       <label>Type the room name <strong><%= room.name %></strong> to confirm</label>
       <input type="text" name="confirm_name" placeholder="<%= room.name %>" required>

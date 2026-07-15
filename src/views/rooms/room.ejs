@@ -77,7 +77,7 @@
 <div class="report-overlay" id="report-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center">
   <div class="card" style="max-width:400px;width:90%">
     <h3 style="margin-top:0">Report Message</h3>
-    <div id="report-message-preview" style="padding:8px;background:var(--surface-container);border-radius:8px;margin-bottom:12px;font-style:italic"></div>
+    <div id="report-message-preview" style="padding:8px;background:var(--surface-2);border-radius:var(--radius-lg);margin-bottom:12px;font-style:italic"></div>
     <form id="report-form">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <input type="hidden" name="message_id" id="report-msg-id" value="">
