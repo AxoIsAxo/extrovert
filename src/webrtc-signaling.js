@@ -63,8 +63,9 @@ function lookupUserFromRequest(req) {
   if (!SESSION_SECRET) { console.log('lookupUser: no SESSION_SECRET'); return null; }
   if (!sessionDb) { console.log('lookupUser: no sessionDb'); return null; }
   const cookies = parseCookies(req.headers.cookie);
-  const signedSid = cookies['connect.sid'];
-  if (!signedSid) { console.log('lookupUser: no connect.sid cookie'); return null; }
+  const rawSid = cookies['connect.sid'];
+  if (!rawSid) { console.log('lookupUser: no connect.sid cookie'); return null; }
+  const signedSid = decodeURIComponent(rawSid);
   const sid = unsignSessionId(signedSid, SESSION_SECRET);
   if (!sid) { console.log('lookupUser: unsign failed for', signedSid.substring(0, 20)); return null; }
   const session = getSession(sid);
