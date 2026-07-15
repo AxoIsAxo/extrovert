@@ -80,20 +80,31 @@
   <div class="post-comments">
     <% (item.comments || []).forEach(function(c){ %>
       <div class="comment" data-comment-id="<%= c.id %>">
-        <b><%= c.display_name %></b> <span class="post-handle">@<%= c.username %></span>
-        <span class="post-time">· <%= time(c.created_at) %></span>
-        <% if (c.edited_at) { %><a href="/posts/<%= c.id %>/history?type=comment&post_id=<%= item.interactId %>" class="edited-link" title="<%= new Date(c.edited_at).toLocaleString() %>">(edited)</a><% } %><br>
+        <div class="comment-head">
+          <div>
+            <b><%= c.display_name %></b> <span class="post-handle">@<%= c.username %></span>
+            <span class="post-time">· <%= time(c.created_at) %></span>
+            <% if (c.edited_at) { %><a href="/posts/<%= c.id %>/history?type=comment&post_id=<%= item.interactId %>" class="edited-link" title="<%= new Date(c.edited_at).toLocaleString() %>">(edited)</a><% } %>
+          </div>
+          <% if (u && c.user_id === u.id) { %>
+            <div class="comment-menu-container">
+              <button class="comment-menu-btn">⋮</button>
+              <div class="comment-menu" style="display:none">
+                <button class="edit-comment-btn">Edit</button>
+                <form method="post" action="/posts/<%= item.interactId %>/comments/<%= c.id %>/delete" class="delete-comment-form">
+                  <input type="hidden" name="_csrf" value="<%= _token %>">
+                  <button class="delete-comment-btn">Delete</button>
+                </form>
+              </div>
+            </div>
+          <% } %>
+        </div>
         <span class="comment-body"><% if (c.body && c.body.startsWith('/uploads/stickers/')) { %>
           <img src="<%= c.body %>" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker">
         <% } else { %>
           <%= c.body %>
         <% } %></span>
         <% if (u && c.user_id === u.id) { %>
-          <button class="btn ghost edit-comment-btn" style="font-size:11px;padding:1px 6px">Edit</button>
-          <form method="post" action="/posts/<%= item.interactId %>/comments/<%= c.id %>/delete" class="delete-comment-form" style="display:inline">
-            <input type="hidden" name="_csrf" value="<%= _token %>">
-            <button class="btn ghost delete-comment-btn" type="submit" style="font-size:11px;padding:1px 6px;color:#c33">Delete</button>
-          </form>
           <form class="edit-comment-form" method="post" action="/posts/<%= item.interactId %>/comments/<%= c.id %>/edit" style="display:none;margin-top:4px">
             <input type="hidden" name="_csrf" value="<%= _token %>">
             <input type="text" name="body" value="<%= c.body %>" maxlength="1000" style="width:80%">

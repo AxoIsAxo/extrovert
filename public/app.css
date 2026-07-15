@@ -421,6 +421,17 @@ a.conv-row:hover { color: var(--primary); }
 .room-msg-edit-input { background:var(--surface-container-high); color:var(--on-surface); border:1px solid var(--outline-variant); border-radius:4px; padding:2px 6px; }
 .edit-msg-btn { cursor:pointer; }
 .edit-comment-btn, .edit-post-btn { cursor:pointer; }
+.comment-head { display:flex; align-items:flex-start; justify-content:space-between; gap:4px; }
+.comment-menu-container { position:relative; flex-shrink:0; }
+.comment-menu-btn { background:none; border:none; cursor:pointer; color:var(--text-muted); font-size:16px; line-height:1; padding:0 4px; border-radius:4px; }
+.comment-menu-btn:hover { background:var(--surface-container-high); color:var(--on-surface); }
+.comment-menu { position:absolute; right:0; top:100%; background:var(--card); border:1px solid var(--border); border-radius:8px; z-index:50; min-width:90px; box-shadow:0 2px 8px rgba(0,0,0,.25); overflow:hidden; }
+.comment-menu button, .comment-menu form { display:block; width:100%; }
+.comment-menu .edit-comment-btn, .comment-menu .delete-comment-btn { background:none; border:none; padding:6px 12px; cursor:pointer; text-align:left; font-size:13px; color:var(--on-surface); width:100%; }
+.comment-menu .edit-comment-btn:hover { background:var(--surface-container-high); }
+.comment-menu .delete-comment-btn { color:var(--danger); }
+.comment-menu .delete-comment-btn:hover { background:var(--surface-container-high); }
+.comment-menu form { margin:0; }
 
 @media (max-width: 600px) {
   .room-layout { flex-direction: column; height: auto; border-radius: 0; border: none; }

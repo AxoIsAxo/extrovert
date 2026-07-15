@@ -125,9 +125,8 @@ document.addEventListener('DOMContentLoaded', function(){
     var t = typeof timeFn === 'function' ? timeFn(c.created_at) : new Date(c.created_at).toLocaleString();
     var sticker = c.body && c.body.indexOf('/uploads/stickers/') !== -1;
     var editedHtml = c.edited_at ? ' <a href="/posts/' + c.id + '/history?type=comment&post_id=' + postIdVal + '" class="edited-link">(edited)</a>' : '';
-    var ownEditHtml = ' <button class="btn ghost edit-comment-btn" style="font-size:11px;padding:1px 6px">Edit</button>';
-    var deleteFormHtml = '<form method="post" action="/posts/' + postIdVal + '/comments/' + c.id + '/delete" class="delete-comment-form" style="display:inline"><input type="hidden" name="_csrf" value="' + csrfToken + '"><button class="btn ghost delete-comment-btn" type="submit" style="font-size:11px;padding:1px 6px;color:#c33">Delete</button></form>';
-    div.innerHTML = '<b>' + esc(c.display_name) + '</b> <span class="post-handle">@' + esc(c.username) + '</span> <span class="post-time">· ' + t + '</span>' + editedHtml + '<br><span class="comment-body">' + (sticker ? '<img src="' + esc(c.body) + '" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker">' : esc(c.body)) + '</span>' + ownEditHtml + deleteFormHtml + '<form class="edit-comment-form" method="post" action="/posts/' + postIdVal + '/comments/' + c.id + '/edit" style="display:none;margin-top:4px"><input type="hidden" name="_csrf" value="' + csrfToken + '"><input type="text" name="body" value="' + esc(c.body) + '" maxlength="1000" style="width:80%"><button class="btn" type="submit" style="font-size:11px;padding:2px 8px">Save</button><button class="btn ghost cancel-edit-comment" type="button" style="font-size:11px;padding:2px 8px">Cancel</button></form>';
+    var ownMenuHtml = '<div class="comment-menu-container"><button class="comment-menu-btn">⋮</button><div class="comment-menu" style="display:none"><button class="edit-comment-btn">Edit</button><form method="post" action="/posts/' + postIdVal + '/comments/' + c.id + '/delete" class="delete-comment-form"><input type="hidden" name="_csrf" value="' + csrfToken + '"><button class="delete-comment-btn">Delete</button></form></div></div>';
+    div.innerHTML = '<div class="comment-head"><div><b>' + esc(c.display_name) + '</b> <span class="post-handle">@' + esc(c.username) + '</span> <span class="post-time">· ' + t + '</span>' + editedHtml + '</div>' + ownMenuHtml + '</div><span class="comment-body">' + (sticker ? '<img src="' + esc(c.body) + '" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker">' : esc(c.body)) + '</span><form class="edit-comment-form" method="post" action="/posts/' + postIdVal + '/comments/' + c.id + '/edit" style="display:none;margin-top:4px"><input type="hidden" name="_csrf" value="' + csrfToken + '"><input type="text" name="body" value="' + esc(c.body) + '" maxlength="1000" style="width:80%"><button class="btn" type="submit" style="font-size:11px;padding:2px 8px">Save</button><button class="btn ghost cancel-edit-comment" type="button" style="font-size:11px;padding:2px 8px">Cancel</button></form>';
     if (form) commentsDiv.insertBefore(div, form);
     else commentsDiv.appendChild(div);
     // Update comment count in stats.
@@ -166,8 +165,30 @@ document.addEventListener('DOMContentLoaded', function(){
     return d.innerHTML;
   }
 
+  // Close all comment menus
+  function closeCommentMenus() {
+    document.querySelectorAll('.comment-menu').forEach(function(m){ m.style.display = 'none'; });
+  }
+
   // Edit post / comment / chat message toggles
   document.addEventListener('click', function(e){
+    // Close menus on outside click
+    if (!e.target.closest('.comment-menu-container')) {
+      closeCommentMenus();
+    }
+
+    var commentMenuBtn = e.target.closest('.comment-menu-btn');
+    if (commentMenuBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      var menu = commentMenuBtn.parentNode.querySelector('.comment-menu');
+      if (!menu) return;
+      var isOpen = menu.style.display !== 'none';
+      closeCommentMenus();
+      menu.style.display = isOpen ? 'none' : 'block';
+      return;
+    }
+
     var editPostBtn = e.target.closest('.edit-post-btn');
     if (editPostBtn) {
       e.preventDefault();
@@ -188,6 +209,7 @@ document.addEventListener('DOMContentLoaded', function(){
       var commentDiv = editCommentBtn.closest('.comment');
       var form = commentDiv ? commentDiv.querySelector('.edit-comment-form') : null;
       if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+      closeCommentMenus();
       return;
     }
     var cancelEditComment = e.target.closest('.cancel-edit-comment');
@@ -199,6 +221,7 @@ document.addEventListener('DOMContentLoaded', function(){
     var deleteCommentBtn = e.target.closest('.delete-comment-btn');
     if (deleteCommentBtn) {
       e.preventDefault();
+      closeCommentMenus();
       if (!confirm('Delete this comment?')) return;
       var form = deleteCommentBtn.closest('.delete-comment-form');
       var commentDiv = deleteCommentBtn.closest('.comment');
