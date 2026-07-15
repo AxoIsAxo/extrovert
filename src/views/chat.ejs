@@ -27,12 +27,7 @@
             <% } %>
           </div>
           <% if (m.from_id === currentUser.id) { %>
-            <form class="edit-msg-form" method="post" action="/chats/<%= other.username %>/edit/<%= m.id %>" style="display:none;margin-top:2px">
-              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-              <input type="text" name="body" value="<%= m.body %>" maxlength="2000" style="width:80%">
-              <button class="btn" type="submit" style="font-size:11px;padding:2px 8px">Save</button>
-              <button class="btn ghost cancel-edit-msg" type="button" style="font-size:11px;padding:2px 8px">Cancel</button>
-            </form>
+            <input type="hidden" class="edit-msg-data" value="<%= m.body %>" data-csrf="<%= csrfToken %>" data-action="/chats/<%= other.username %>/edit/<%= m.id %>">
           <% } %>
         </div>
       <% }) %>

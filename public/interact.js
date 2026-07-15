@@ -126,7 +126,8 @@ document.addEventListener('DOMContentLoaded', function(){
     var sticker = c.body && c.body.indexOf('/uploads/stickers/') !== -1;
     var editedHtml = c.edited_at ? ' <a href="/posts/' + c.id + '/history?type=comment&post_id=' + postIdVal + '" class="edited-link">(edited)</a>' : '';
     var ownMenuHtml = '<div class="comment-menu-container"><button class="comment-menu-btn">⋮</button><div class="comment-menu" style="display:none"><button class="edit-comment-btn">Edit</button><form method="post" action="/posts/' + postIdVal + '/comments/' + c.id + '/delete" class="delete-comment-form"><input type="hidden" name="_csrf" value="' + csrfToken + '"><button class="delete-comment-btn">Delete</button></form></div></div>';
-    div.innerHTML = '<div class="comment-head"><div><b>' + esc(c.display_name) + '</b> <span class="post-handle">@' + esc(c.username) + '</span> <span class="post-time">· ' + t + '</span>' + editedHtml + '</div>' + ownMenuHtml + '</div><span class="comment-body">' + (sticker ? '<img src="' + esc(c.body) + '" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker">' : esc(c.body)) + '</span><form class="edit-comment-form" method="post" action="/posts/' + postIdVal + '/comments/' + c.id + '/edit" style="display:none;margin-top:4px"><input type="hidden" name="_csrf" value="' + csrfToken + '"><input type="text" name="body" value="' + esc(c.body) + '" maxlength="1000" style="width:80%"><button class="btn" type="submit" style="font-size:11px;padding:2px 8px">Save</button><button class="btn ghost cancel-edit-comment" type="button" style="font-size:11px;padding:2px 8px">Cancel</button></form>';
+    var dataHtml = '<input type="hidden" class="edit-comment-data" value="' + esc(c.body) + '" data-csrf="' + csrfToken + '" data-action="/posts/' + postIdVal + '/comments/' + c.id + '/edit">';
+    div.innerHTML = '<div class="comment-head"><div><b>' + esc(c.display_name) + '</b> <span class="post-handle">@' + esc(c.username) + '</span> <span class="post-time">· ' + t + '</span>' + editedHtml + '</div>' + ownMenuHtml + '</div><span class="comment-body">' + (sticker ? '<img src="' + esc(c.body) + '" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker">' : esc(c.body)) + '</span>' + dataHtml;
     if (form) commentsDiv.insertBefore(div, form);
     else commentsDiv.appendChild(div);
     // Update comment count in stats.
@@ -170,6 +171,61 @@ document.addEventListener('DOMContentLoaded', function(){
     document.querySelectorAll('.comment-menu').forEach(function(m){ m.style.display = 'none'; });
   }
 
+  // Inline editing helpers
+  function replaceWithInput(el, multiline, saveFn, cancelFn) {
+    var origText = el.textContent;
+    var input;
+    if (multiline) {
+      input = document.createElement('textarea');
+      input.style.cssText = 'width:100%;min-height:80px;background:var(--surface-container-high);color:var(--on-surface);border:1px solid var(--outline-variant);border-radius:8px;padding:0.5rem;';
+    } else {
+      input = document.createElement('input');
+      input.type = 'text';
+      input.style.cssText = 'width:80%;background:var(--surface-container-high);color:var(--on-surface);border:1px solid var(--outline-variant);border-radius:4px;padding:2px 6px;';
+    }
+    input.value = origText;
+    input.className = 'inline-edit-input';
+    el.replaceWith(input);
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+
+    function finish(save) {
+      if (save) {
+        var val = input.value.trim();
+        if (val && val !== origText) {
+          saveFn(val, function() {
+            var span = document.createElement(el.tagName);
+            span.className = el.className;
+            span.textContent = val;
+            input.replaceWith(span);
+          }, function() {
+            input.value = origText;
+            cancel();
+          });
+          return;
+        }
+      }
+      cancel();
+    }
+
+    function cancel() {
+      var span = document.createElement(el.tagName);
+      span.className = el.className;
+      span.textContent = origText;
+      input.replaceWith(span);
+      if (cancelFn) cancelFn();
+    }
+
+    input.addEventListener('keydown', function(ev) {
+      if (ev.key === 'Escape') { finish(false); ev.preventDefault(); }
+      if (ev.key === 'Enter' && !multiline) { finish(true); ev.preventDefault(); }
+    });
+    input.addEventListener('blur', function() {
+      setTimeout(function() { if (!input.parentNode) return; finish(false); }, 200);
+    });
+    return { input, finish, cancel };
+  }
+
   // Edit post / comment / chat message toggles
   document.addEventListener('click', function(e){
     // Close menus on outside click
@@ -189,35 +245,69 @@ document.addEventListener('DOMContentLoaded', function(){
       return;
     }
 
+    // --- Inline post editing ---
     var editPostBtn = e.target.closest('.edit-post-btn');
     if (editPostBtn) {
       e.preventDefault();
       var postEl = editPostBtn.closest('.post');
-      var form = postEl ? postEl.querySelector('.edit-post-form') : null;
-      if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+      if (!postEl || postEl.querySelector('.inline-edit-input')) return;
+      var bodyEl = postEl.querySelector('.post-body');
+      var dataEl = postEl.querySelector('.edit-post-data');
+      if (!bodyEl || !dataEl) return;
+      var action = dataEl.dataset.action;
+      var csrf = dataEl.dataset.csrf;
+      editPostBtn.textContent = 'Saving…';
+      editPostBtn.disabled = true;
+
+      replaceWithInput(bodyEl, true,
+        function(val, onSuccess) {
+          fetch(action, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
+            body: 'body=' + encodeURIComponent(val) + '&_csrf=' + encodeURIComponent(csrf),
+          }).then(function(r){ return r.json(); }).then(function(d){
+            editPostBtn.textContent = 'Edit';
+            editPostBtn.disabled = false;
+            if (d.ok) { onSuccess(); } else { location.reload(); }
+          });
+        },
+        function() {
+          editPostBtn.textContent = 'Edit';
+          editPostBtn.disabled = false;
+        }
+      );
       return;
     }
-    var cancelEditPost = e.target.closest('.cancel-edit-post');
-    if (cancelEditPost) {
-      var form = cancelEditPost.closest('.edit-post-form');
-      if (form) form.style.display = 'none';
-      return;
-    }
+
+    // --- Inline comment editing ---
     var editCommentBtn = e.target.closest('.edit-comment-btn');
     if (editCommentBtn) {
       e.preventDefault();
-      var commentDiv = editCommentBtn.closest('.comment');
-      var form = commentDiv ? commentDiv.querySelector('.edit-comment-form') : null;
-      if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
       closeCommentMenus();
+      var commentDiv = editCommentBtn.closest('.comment');
+      if (!commentDiv || commentDiv.querySelector('.inline-edit-input')) return;
+      var bodyEl = commentDiv.querySelector('.comment-body');
+      var dataEl = commentDiv.querySelector('.edit-comment-data');
+      if (!bodyEl || !dataEl) return;
+      var action = dataEl.dataset.action;
+      var csrf = dataEl.dataset.csrf;
+      var origText = bodyEl.textContent;
+
+      var r = replaceWithInput(bodyEl, false,
+        function(val, onSuccess) {
+          fetch(action, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
+            body: 'body=' + encodeURIComponent(val) + '&_csrf=' + encodeURIComponent(csrf),
+          }).then(function(r){ return r.json(); }).then(function(d){
+            if (d.ok) { onSuccess(); } else { r.cancel(); }
+          });
+        }
+      );
       return;
     }
-    var cancelEditComment = e.target.closest('.cancel-edit-comment');
-    if (cancelEditComment) {
-      var form = cancelEditComment.closest('.edit-comment-form');
-      if (form) form.style.display = 'none';
-      return;
-    }
+
+    // --- Delete comment ---
     var deleteCommentBtn = e.target.closest('.delete-comment-btn');
     if (deleteCommentBtn) {
       e.preventDefault();
@@ -248,61 +338,40 @@ document.addEventListener('DOMContentLoaded', function(){
       });
       return;
     }
+
+    // --- Inline DM editing ---
     var editMsgBtn = e.target.closest('.edit-msg-btn');
     if (editMsgBtn) {
       e.preventDefault();
       var msgDiv = editMsgBtn.closest('.chat-msg');
-      var form = msgDiv ? msgDiv.querySelector('.edit-msg-form') : null;
-      if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
-      return;
-    }
-    var cancelEditMsg = e.target.closest('.cancel-edit-msg');
-    if (cancelEditMsg) {
-      var form = cancelEditMsg.closest('.edit-msg-form');
-      if (form) form.style.display = 'none';
-      return;
-    }
-  });
+      if (!msgDiv || msgDiv.querySelector('.inline-edit-input')) return;
+      var bubble = msgDiv.querySelector('.chat-bubble');
+      var dataEl = msgDiv.querySelector('.edit-msg-data');
+      if (!bubble || !dataEl) return;
+      var action = dataEl.dataset.action;
+      var csrf = dataEl.dataset.csrf;
+      var origText = bubble.textContent;
+      editMsgBtn.textContent = 'Saving…';
+      editMsgBtn.disabled = true;
 
-  // XHR submit for edit forms
-  document.addEventListener('submit', function(e){
-    var form = e.target;
-    if (form.classList.contains('edit-post-form')) {
-      e.preventDefault();
-      var action = form.getAttribute('action');
-      var textarea = form.querySelector('textarea');
-      if (!textarea || !textarea.value.trim()) return;
-      fetch(action, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrfToken },
-        body: new URLSearchParams(Array.from(new FormData(form))),
-      }).then(function(r){ return r.json(); }).then(function(d){
-        if (d.ok) location.reload();
-      });
-    } else if (form.classList.contains('edit-comment-form')) {
-      e.preventDefault();
-      var action = form.getAttribute('action');
-      var input = form.querySelector('input[name="body"]');
-      if (!input || !input.value.trim()) return;
-      fetch(action, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrfToken },
-        body: new URLSearchParams(Array.from(new FormData(form))),
-      }).then(function(r){ return r.json(); }).then(function(d){
-        if (d.ok) location.reload();
-      });
-    } else if (form.classList.contains('edit-msg-form')) {
-      e.preventDefault();
-      var action = form.getAttribute('action');
-      var input = form.querySelector('input[name="body"]');
-      if (!input || !input.value.trim()) return;
-      fetch(action, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrfToken },
-        body: new URLSearchParams(Array.from(new FormData(form))),
-      }).then(function(r){ return r.json(); }).then(function(d){
-        if (d.ok) location.reload();
-      });
+      replaceWithInput(bubble, false,
+        function(val, onSuccess) {
+          fetch(action, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
+            body: 'body=' + encodeURIComponent(val) + '&_csrf=' + encodeURIComponent(csrf),
+          }).then(function(r){ return r.json(); }).then(function(d){
+            editMsgBtn.textContent = 'Edit';
+            editMsgBtn.disabled = false;
+            if (d.ok) { onSuccess(); } else { location.reload(); }
+          });
+        },
+        function() {
+          editMsgBtn.textContent = 'Edit';
+          editMsgBtn.disabled = false;
+        }
+      );
+      return;
     }
   });
 

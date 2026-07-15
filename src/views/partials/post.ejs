@@ -67,14 +67,7 @@
     <% } %>
   </div>
   <% if (item.isOwn) { %>
-    <form class="edit-post-form" method="post" action="/posts/<%= item.interactId %>/edit" style="display:none;margin-top:8px">
-      <input type="hidden" name="_csrf" value="<%= _token %>">
-      <textarea name="body" maxlength="5000" style="width:100%;min-height:80px"><%= item.body %></textarea>
-      <div style="display:flex;gap:8px;margin-top:4px">
-        <button class="btn" type="submit">Save</button>
-        <button class="btn ghost cancel-edit-post" type="button">Cancel</button>
-      </div>
-    </form>
+    <input type="hidden" class="edit-post-data" value="<%= item.body %>" data-csrf="<%= _token %>" data-action="/posts/<%= item.interactId %>/edit">
   <% } %>
 
   <div class="post-comments">
@@ -105,12 +98,7 @@
           <%= c.body %>
         <% } %></span>
         <% if (u && c.user_id === u.id) { %>
-          <form class="edit-comment-form" method="post" action="/posts/<%= item.interactId %>/comments/<%= c.id %>/edit" style="display:none;margin-top:4px">
-            <input type="hidden" name="_csrf" value="<%= _token %>">
-            <input type="text" name="body" value="<%= c.body %>" maxlength="1000" style="width:80%">
-            <button class="btn" type="submit" style="font-size:11px;padding:2px 8px">Save</button>
-            <button class="btn ghost cancel-edit-comment" type="button" style="font-size:11px;padding:2px 8px">Cancel</button>
-          </form>
+          <input type="hidden" class="edit-comment-data" value="<%= c.body %>" data-csrf="<%= _token %>" data-action="/posts/<%= item.interactId %>/comments/<%= c.id %>/edit">
         <% } %>
       </div>
     <% }) %>
