@@ -1,29 +1,29 @@
 :root, [data-theme="dark"] {
-  --bg: #1a1511;
-  --surface: #241e18;
-  --surface-2: #2e2720;
-  --surface-3: #393028;
+  --bg: #12100e;
+  --surface: #1a1714;
+  --surface-2: #221f1b;
+  --surface-3: #2c2823;
   --text: #e8e0d6;
   --text-secondary: #a0988e;
   --text-muted: #7a7268;
   --primary: #d4815a;
-  --primary-light: #3a2818;
+  --primary-light: #2a1d14;
   --primary-dark: #e8a080;
   --secondary: #8fa57a;
-  --secondary-light: #2a3020;
+  --secondary-light: #1c2218;
   --accent: #d4a352;
-  --accent-light: #3a3018;
+  --accent-light: #2a2414;
   --danger: #e86050;
-  --danger-light: #3a1a18;
+  --danger-light: #2a1412;
   --border: #4a3e34;
-  --border-light: #3a3228;
-  --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  --shadow-offset: 4px 4px 0 rgba(0, 0, 0, 0.3);
-  --radius: 6px;
-  --radius-sm: 4px;
-  --radius-lg: 10px;
+  --border-light: #2e2823;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-offset: 4px 4px 0 rgba(0, 0, 0, 0.35);
+  --radius: 4px;
+  --radius-sm: 3px;
+  --radius-lg: 8px;
   --radius-full: 9999px;
-  --t: 0.2s ease;
+  --t: 0.15s ease;
 }
 
 [data-theme="light"] {
