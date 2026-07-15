@@ -953,16 +953,6 @@ function hasPendingRequest(roomId, userId) {
   return !!db.prepare(`SELECT 1 FROM join_requests WHERE room_id = ? AND user_id = ? AND status = 'pending'`).get(roomId, userId);
 }
 
-// ---------- theme ----------
-function getUserTheme(userId) {
-  const row = db.prepare(`SELECT theme FROM users WHERE id = ?`).get(userId);
-  return row ? row.theme : 'default';
-}
-
-function setUserTheme(userId, theme) {
-  db.prepare(`UPDATE users SET theme = ? WHERE id = ?`).run(theme, userId);
-}
-
 // ---------- OAuth Apps ----------
 function createOAuthApp({ name, description, website, redirectUris, clientId, clientSecret, scopes, ownerId }) {
   const now = Date.now();
@@ -1177,8 +1167,6 @@ module.exports = {
   setReferralCode, getUserByReferralCode, getReferralCount, getReferralCode, getReferrerIp,
   // stickers
   addSticker, getMyStickers,
-  // theme
-  getUserTheme, setUserTheme,
   // avatar
   setAvatar, getAvatar,
   // rooms
