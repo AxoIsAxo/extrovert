@@ -291,6 +291,7 @@ try { db.exec(`ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0`
 try { db.exec(`ALTER TABLE users ADD COLUMN banned INTEGER NOT NULL DEFAULT 0`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN avatar TEXT`); } catch {}
 try { db.exec(`ALTER TABLE rooms ADD COLUMN is_public INTEGER NOT NULL DEFAULT 1`); } catch {}
+try { db.exec(`ALTER TABLE room_channels ADD COLUMN type TEXT NOT NULL DEFAULT 'text'`); } catch {}
 try { db.exec(`ALTER TABLE posts ADD COLUMN edited_at INTEGER`); } catch {}
 try { db.exec(`ALTER TABLE comments ADD COLUMN edited_at INTEGER`); } catch {}
 try { db.exec(`ALTER TABLE messages ADD COLUMN edited_at INTEGER`); } catch {}
@@ -871,8 +872,9 @@ function transferFounder(roomId, newOwnerId) {
   const founderRole = db.prepare(`SELECT id FROM room_roles WHERE room_id = ? AND is_founder = 1`).get(roomId);
   if (founderRole) db.prepare(`UPDATE room_members SET role_id = ? WHERE room_id = ? AND user_id = ?`).run(founderRole.id, roomId, newOwnerId);
 }
-function createRoomChannel(roomId, name, viewRoleIds, writeRoleIds) {
-  return db.prepare(`INSERT INTO room_channels (room_id, name, view_role_ids, write_role_ids, created_at) VALUES (?,?,?,?,?)`).run(roomId, name, viewRoleIds || null, writeRoleIds || null, Date.now()).lastInsertRowid;
+function createRoomChannel(roomId, name, viewRoleIds, writeRoleIds, type) {
+  type = type || 'text';
+  return db.prepare(`INSERT INTO room_channels (room_id, name, view_role_ids, write_role_ids, type, created_at) VALUES (?,?,?,?,?,?)`).run(roomId, name, viewRoleIds || null, writeRoleIds || null, type, Date.now()).lastInsertRowid;
 }
 function getRoomChannel(id) { return db.prepare(`SELECT * FROM room_channels WHERE id = ?`).get(id); }
 function getRoomChannels(roomId) {

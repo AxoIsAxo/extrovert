@@ -11,6 +11,7 @@ const { canView } = require('../network');
 const feed = require('../feed');
 const { requireApiAuth, clientAppAuth, generateToken, VALID_SCOPES } = require('../api-auth');
 const { signIdToken } = require('../oidc');
+const { getOnlineUsers, getUserPresence } = require('../webrtc-signaling');
 
 const router = express.Router();
 
@@ -772,6 +773,18 @@ router.get('/search', requireApiAuth('read'), (req, res) => {
       return serializePost(p, author, req.apiUser.id);
     }),
   });
+});
+
+// ----- Calls / Presence -----
+
+router.get('/calls/presence', requireApiAuth, (req, res) => {
+  const users = getOnlineUsers(req.apiUser.id);
+  responseEnvelope(res, users);
+});
+
+router.get('/calls/presence/:username', requireApiAuth, (req, res) => {
+  const presence = getUserPresence(req.params.username);
+  res.json(presence);
 });
 
 module.exports = router;

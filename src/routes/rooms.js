@@ -184,7 +184,8 @@ router.post('/:id/channels/create', (req, res) => {
   }
   const viewRoles = rolesToJson(req.body.view_roles);
   const writeRoles = rolesToJson(req.body.write_roles);
-  createRoomChannel(room.id, name, viewRoles, writeRoles);
+  const channelType = String(req.body.type || 'text').trim();
+  createRoomChannel(room.id, name, viewRoles, writeRoles, channelType);
   res.redirect('/rooms/' + room.id + '/channels');
 });
 

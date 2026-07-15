@@ -8,8 +8,10 @@ const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 
+const { WebSocketServer } = require('ws');
 const SqliteStore = require('./session-store');
 const { optionalAuth, requireAuth } = require('./auth');
+const { initSignaling } = require('./webrtc-signaling');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -43,7 +45,7 @@ app.use(helmet({
       imgSrc: ["'self'", "http:", "https:"],
       mediaSrc: ["'self'"],
       scriptSrc: ["'self'"],
-      connectSrc: ["'self'"],
+      connectSrc: ["'self'", "ws:", "wss:"],
       frameAncestors: ["'none'"],
     },
   },
@@ -237,10 +239,21 @@ app.use((err, req, res, next) => {
   res.status(500).send('Internal server error');
 });
 
-if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`Extrovert is running on http://localhost:${PORT}`);
+const server = app.listen(PORT, () => {
+  console.log(`Extrovert is running on http://localhost:${PORT}`);
+});
+
+const wss = new WebSocketServer({ noServer: true });
+initSignaling(wss);
+
+server.on('upgrade', (req, socket, head) => {
+  if (req.url !== '/ws') {
+    socket.destroy();
+    return;
+  }
+  wss.handleUpgrade(req, socket, head, (ws) => {
+    wss.emit('connection', ws, req);
   });
-}
+});
 
 module.exports = app;

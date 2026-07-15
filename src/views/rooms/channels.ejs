@@ -12,6 +12,11 @@
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <label>Channel name</label>
       <input type="text" name="name" maxlength="40" required>
+      <label>Channel type</label>
+      <select name="type" style="margin-bottom:8px">
+        <option value="text">Text</option>
+        <option value="voice">Voice</option>
+      </select>
       <label>Role restrictions <span class="muted">(leave blank for everyone)</span></label>
       <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:8px">
         <div>

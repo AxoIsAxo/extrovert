@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const { getUserPresence } = require('../webrtc-signaling');
 const {
   db, getUserByUsername, getUserById, areMutualFollowers,
   sendMessage, getConversations, getMessages, markConversationRead,
@@ -21,6 +22,10 @@ router.get('/', (req, res) => {
   const user = res.locals.currentUser;
   if (!user) return res.redirect('/login');
   const conversations = getConversations(user.id);
+  conversations.forEach(function(c) {
+    const p = getUserPresence(c.username);
+    c.online = p.online;
+  });
   res.render('chats', { conversations });
 });
 

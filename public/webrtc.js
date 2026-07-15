@@ -1,0 +1,347 @@
+(function () {
+  'use strict';
+
+  var STUN_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+
+  var ws = null;
+  var reconnectTimeout = null;
+  var reconnectAttempts = 0;
+
+  var state = {
+    callState: 'idle',
+    peerConnections: {},
+    localStream: null,
+    peerUsername: null,
+    channelId: null,
+    channelMembers: {},
+    callStartTime: null,
+  };
+
+  var listeners = {};
+
+  function on(event, fn) {
+    if (!listeners[event]) listeners[event] = [];
+    listeners[event].push(fn);
+  }
+
+  function off(event, fn) {
+    if (!listeners[event]) return;
+    listeners[event] = listeners[event].filter(function (f) { return f !== fn; });
+  }
+
+  function emit(event) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    var fns = listeners[event];
+    if (!fns) return;
+    for (var i = 0; i < fns.length; i++) {
+      try { fns[i].apply(null, args); } catch (e) { console.error('webrtc listener error:', e); }
+    }
+  }
+
+  function wsUrl() {
+    var proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return proto + '//' + window.location.host + '/ws';
+  }
+
+  function connect() {
+    if (ws && ws.readyState === WebSocket.OPEN) return;
+    try { ws = new WebSocket(wsUrl()); } catch (e) { scheduleReconnect(); return; }
+
+    ws.onopen = function () {
+      reconnectAttempts = 0;
+      send({ type: 'ping' });
+    };
+
+    ws.onmessage = function (e) {
+      var msg;
+      try { msg = JSON.parse(e.data); } catch { return; }
+      handleMessage(msg);
+    };
+
+    ws.onclose = function () {
+      cleanupAll();
+      scheduleReconnect();
+    };
+
+    ws.onerror = function () {};
+  }
+
+  function scheduleReconnect() {
+    if (reconnectTimeout) return;
+    reconnectAttempts++;
+    var delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+    reconnectTimeout = setTimeout(function () {
+      reconnectTimeout = null;
+      connect();
+    }, delay);
+  }
+
+  function send(data) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try { ws.send(JSON.stringify(data)); } catch {}
+    }
+  }
+
+  function handleMessage(msg) {
+    switch (msg.type) {
+      case 'pong':
+        break;
+
+      case 'incoming_call':
+        state.callState = 'ringing';
+        state.peerUsername = msg.from;
+        state.channelId = msg.channel_id || null;
+        emit('incoming_call', msg.from, msg.from_display || msg.from, msg.sdp, msg.channel_id);
+        break;
+
+      case 'call_answered':
+        state.callState = 'connected';
+        state.callStartTime = Date.now();
+        setRemoteDescription(msg.from, msg.sdp);
+        emit('call_connected', msg.from);
+        break;
+
+      case 'ice_candidate':
+        if (msg.candidate && state.peerConnections[msg.from]) {
+          try {
+            state.peerConnections[msg.from].addIceCandidate(new RTCIceCandidate(msg.candidate));
+          } catch {}
+        }
+        break;
+
+      case 'call_ended':
+        if (state.callState !== 'idle') {
+          emit('call_ended', msg.from);
+          endCallInternal();
+        }
+        break;
+
+      case 'call_declined':
+        emit('call_declined', msg.from);
+        endCallInternal();
+        break;
+
+      case 'user_busy':
+        emit('call_declined', msg.from);
+        endCallInternal();
+        break;
+
+      case 'user_online':
+        emit('user_online', msg.username, msg.display_name);
+        break;
+
+      case 'user_offline':
+        emit('user_offline', msg.username);
+        break;
+
+      case 'channel_joined':
+        state.channelId = msg.channel_id;
+        state.callState = 'connected';
+        state.callStartTime = Date.now();
+        emit('channel_joined', msg.channel_id, msg.members);
+        break;
+
+      case 'user_joined_channel':
+        emit('user_joined_channel', msg.channel_id, msg.username, msg.display_name);
+        break;
+
+      case 'user_left_channel':
+        closePeerConnection(msg.username);
+        emit('user_left_channel', msg.channel_id, msg.username);
+        break;
+
+      case 'error':
+        emit('error', msg.message);
+        break;
+    }
+  }
+
+  function getMedia() {
+    if (state.localStream) return Promise.resolve(state.localStream);
+    return navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+      .then(function (stream) {
+        state.localStream = stream;
+        return stream;
+      });
+  }
+
+  function createPeerConnection(username) {
+    if (state.peerConnections[username]) return Promise.resolve(state.peerConnections[username]);
+
+    var pc = new RTCPeerConnection({ iceServers: STUN_SERVERS });
+
+    pc.onicecandidate = function (e) {
+      if (e.candidate) {
+        var target = state.channelId ? username : state.peerUsername;
+        send({ type: 'ice_candidate', to: target, candidate: e.candidate.toJSON(), channel_id: state.channelId || undefined, room_id: state.channelId ? '1' : undefined });
+      }
+    };
+
+    pc.ontrack = function (e) {
+      emit('remote_stream', username, e.streams[0]);
+    };
+
+    pc.oniceconnectionstatechange = function () {
+      if (state.callState !== 'idle' && (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed')) {
+        emit('call_ended', username);
+        endCallInternal();
+      }
+    };
+
+    if (state.localStream) {
+      state.localStream.getTracks().forEach(function (track) {
+        pc.addTrack(track, state.localStream);
+      });
+    }
+
+    state.peerConnections[username] = pc;
+    return Promise.resolve(pc);
+  }
+
+  function closePeerConnection(username) {
+    var pc = state.peerConnections[username];
+    if (pc) {
+      pc.close();
+      delete state.peerConnections[username];
+    }
+  }
+
+  function setRemoteDescription(username, sdp) {
+    var pc = state.peerConnections[username];
+    if (!pc) return;
+    pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(sdp))).catch(function () {});
+  }
+
+  function startCall(username) {
+    if (state.callState !== 'idle') return;
+    state.callState = 'calling';
+    state.peerUsername = username;
+
+    getMedia().then(function () {
+      return createPeerConnection(username);
+    }).then(function (pc) {
+      return pc.createOffer().then(function (offer) {
+        return pc.setLocalDescription(offer);
+      }).then(function () {
+        send({
+          type: 'call_offer',
+          to: username,
+          sdp: JSON.stringify(pc.localDescription),
+        });
+        emit('calling', username);
+      });
+    }).catch(function (err) {
+      state.callState = 'idle';
+      emit('error', 'Failed to start call: ' + err.message);
+    });
+  }
+
+  function answerCall(username, sdp) {
+    if (state.callState !== 'ringing') return;
+    state.peerUsername = username;
+
+    getMedia().then(function () {
+      return createPeerConnection(username);
+    }).then(function (pc) {
+      return pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(sdp))).then(function () {
+        return pc.createAnswer();
+      }).then(function (answer) {
+        return pc.setLocalDescription(answer);
+      }).then(function () {
+        state.callState = 'connected';
+        state.callStartTime = Date.now();
+        send({
+          type: 'call_answer',
+          to: username,
+          sdp: JSON.stringify(pc.localDescription),
+        });
+        emit('call_connected', username);
+      });
+    }).catch(function (err) {
+      state.callState = 'idle';
+      emit('error', 'Failed to answer call: ' + err.message);
+    });
+  }
+
+  function declineCall(username) {
+    send({ type: 'call_decline', to: username });
+    state.callState = 'idle';
+    state.peerUsername = null;
+  }
+
+  function endCall() {
+    send({ type: 'call_end', to: state.peerUsername || '', channel_id: state.channelId || undefined, room_id: state.channelId ? '1' : undefined });
+    endCallInternal();
+  }
+
+  function endCallInternal() {
+    state.callState = 'idle';
+    state.peerUsername = null;
+    state.channelId = null;
+    state.callStartTime = null;
+    state.channelMembers = {};
+    Object.keys(state.peerConnections).forEach(closePeerConnection);
+    state.peerConnections = {};
+    if (state.localStream) {
+      state.localStream.getTracks().forEach(function (t) { t.stop(); });
+      state.localStream = null;
+    }
+  }
+
+  function cleanupAll() {
+    endCallInternal();
+  }
+
+  function joinChannel(roomId, channelId) {
+    send({ type: 'join_channel', room_id: roomId, channel_id: channelId });
+  }
+
+  function leaveChannel(channelId) {
+    send({ type: 'leave_channel', channel_id: channelId });
+    endCallInternal();
+  }
+
+  function initiateCallToMember(username) {
+    if (state.peerConnections[username]) return;
+    getMedia().then(function () {
+      return createPeerConnection(username);
+    }).then(function (pc) {
+      return pc.createOffer().then(function (offer) {
+        return pc.setLocalDescription(offer);
+      }).then(function () {
+        send({
+          type: 'call_offer',
+          to: username,
+          sdp: JSON.stringify(pc.localDescription),
+          channel_id: state.channelId,
+          room_id: '1',
+        });
+      });
+    }).catch(function () {});
+  }
+
+  function toggleMute() {
+    if (!state.localStream) return true;
+    var audioTrack = state.localStream.getAudioTracks()[0];
+    if (!audioTrack) return true;
+    audioTrack.enabled = !audioTrack.enabled;
+    return audioTrack.enabled;
+  }
+
+  function getState() { return state; }
+
+  window.ExtrovertCall = {
+    on: on,
+    off: off,
+    connect: connect,
+    startCall: startCall,
+    answerCall: answerCall,
+    declineCall: declineCall,
+    endCall: endCall,
+    joinChannel: joinChannel,
+    leaveChannel: leaveChannel,
+    initiateCallToMember: initiateCallToMember,
+    toggleMute: toggleMute,
+    getState: getState,
+  };
+})();

@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', function() {
   channelList.addEventListener('click', function(e) {
     var link = e.target.closest('.room-channel');
     if (!link) return;
+    if (link.dataset.channelType === 'voice') return;
     e.preventDefault();
     channelList.querySelectorAll('.room-channel').forEach(function(c) { c.classList.remove('active'); });
     link.classList.add('active');
