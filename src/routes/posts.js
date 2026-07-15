@@ -10,6 +10,7 @@ const {
   sharePost, hasReposted, recordFollowFromPost, isFollowing,
   createNotification, deletePost,
   editPost, editComment, getEditHistory,
+  deleteComment,
 } = require('../db');
 const { canView } = require('../network');
 
@@ -151,6 +152,20 @@ router.post('/:id/comments/:cid/edit', (req, res) => {
   const body = String(req.body.body || '').trim().slice(0, 1000);
   if (!body) return req.xhr ? res.json({ error: 'body required' }) : res.redirect(back(req, '/'));
   const ok = editComment(Number(req.params.cid), user.id, body);
+  if (!ok) return req.xhr ? res.json({ error: 'not found or not yours' }) : res.status(404).send('Comment not found or not yours.');
+  if (req.xhr) return res.json({ ok: true });
+  res.redirect(back(req, '/posts/' + req.params.id));
+});
+
+// Delete a comment.
+router.post('/:id/comments/:cid/delete', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return req.xhr ? res.json({ error: 'not logged in' }) : res.redirect('/login');
+  const token = req.body._csrf || req.headers['x-csrf-token'];
+  if (!token || token !== req.session.csrfToken) {
+    return res.status(403).send('CSRF validation failed');
+  }
+  const ok = deleteComment(Number(req.params.cid), user.id);
   if (!ok) return req.xhr ? res.json({ error: 'not found or not yours' }) : res.status(404).send('Comment not found or not yours.');
   if (req.xhr) return res.json({ ok: true });
   res.redirect(back(req, '/posts/' + req.params.id));

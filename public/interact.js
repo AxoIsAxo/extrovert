@@ -126,7 +126,8 @@ document.addEventListener('DOMContentLoaded', function(){
     var sticker = c.body && c.body.indexOf('/uploads/stickers/') !== -1;
     var editedHtml = c.edited_at ? ' <a href="/posts/' + c.id + '/history?type=comment&post_id=' + postIdVal + '" class="edited-link">(edited)</a>' : '';
     var ownEditHtml = ' <button class="btn ghost edit-comment-btn" style="font-size:11px;padding:1px 6px">Edit</button>';
-    div.innerHTML = '<b>' + esc(c.display_name) + '</b> <span class="post-handle">@' + esc(c.username) + '</span> <span class="post-time">· ' + t + '</span>' + editedHtml + '<br><span class="comment-body">' + (sticker ? '<img src="' + esc(c.body) + '" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker">' : esc(c.body)) + '</span>' + ownEditHtml + '<form class="edit-comment-form" method="post" action="/posts/' + postIdVal + '/comments/' + c.id + '/edit" style="display:none;margin-top:4px"><input type="hidden" name="_csrf" value="' + csrfToken + '"><input type="text" name="body" value="' + esc(c.body) + '" maxlength="1000" style="width:80%"><button class="btn" type="submit" style="font-size:11px;padding:2px 8px">Save</button><button class="btn ghost cancel-edit-comment" type="button" style="font-size:11px;padding:2px 8px">Cancel</button></form>';
+    var deleteFormHtml = '<form method="post" action="/posts/' + postIdVal + '/comments/' + c.id + '/delete" class="delete-comment-form" style="display:inline"><input type="hidden" name="_csrf" value="' + csrfToken + '"><button class="btn ghost delete-comment-btn" type="submit" style="font-size:11px;padding:1px 6px;color:#c33">Delete</button></form>';
+    div.innerHTML = '<b>' + esc(c.display_name) + '</b> <span class="post-handle">@' + esc(c.username) + '</span> <span class="post-time">· ' + t + '</span>' + editedHtml + '<br><span class="comment-body">' + (sticker ? '<img src="' + esc(c.body) + '" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker">' : esc(c.body)) + '</span>' + ownEditHtml + deleteFormHtml + '<form class="edit-comment-form" method="post" action="/posts/' + postIdVal + '/comments/' + c.id + '/edit" style="display:none;margin-top:4px"><input type="hidden" name="_csrf" value="' + csrfToken + '"><input type="text" name="body" value="' + esc(c.body) + '" maxlength="1000" style="width:80%"><button class="btn" type="submit" style="font-size:11px;padding:2px 8px">Save</button><button class="btn ghost cancel-edit-comment" type="button" style="font-size:11px;padding:2px 8px">Cancel</button></form>';
     if (form) commentsDiv.insertBefore(div, form);
     else commentsDiv.appendChild(div);
     // Update comment count in stats.
@@ -193,6 +194,35 @@ document.addEventListener('DOMContentLoaded', function(){
     if (cancelEditComment) {
       var form = cancelEditComment.closest('.edit-comment-form');
       if (form) form.style.display = 'none';
+      return;
+    }
+    var deleteCommentBtn = e.target.closest('.delete-comment-btn');
+    if (deleteCommentBtn) {
+      e.preventDefault();
+      if (!confirm('Delete this comment?')) return;
+      var form = deleteCommentBtn.closest('.delete-comment-form');
+      var commentDiv = deleteCommentBtn.closest('.comment');
+      var postEl = commentDiv ? commentDiv.closest('.post') : null;
+      fetch(form.getAttribute('action'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrfToken },
+        body: new URLSearchParams(Array.from(new FormData(form))),
+      }).then(function(r){ return r.json(); }).then(function(d){
+        if (d.ok) {
+          if (commentDiv) commentDiv.remove();
+          var stats = postEl ? postEl.querySelector('.post-stats') : null;
+          if (stats) {
+            var spans = stats.querySelectorAll('span');
+            for (var i = 0; i < spans.length; i++) {
+              var m2 = spans[i].textContent.match(/💬\s*(\d+)/);
+              if (m2) {
+                spans[i].textContent = '💬 ' + Math.max(0, parseInt(m2[1],10) - 1);
+                break;
+              }
+            }
+          }
+        }
+      });
       return;
     }
     var editMsgBtn = e.target.closest('.edit-msg-btn');

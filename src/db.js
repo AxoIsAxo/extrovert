@@ -484,6 +484,13 @@ function editPost(postId, userId, newBody) {
   return true;
 }
 
+function deleteComment(commentId, userId) {
+  const comment = db.prepare(`SELECT * FROM comments WHERE id = ? AND user_id = ?`).get(commentId, userId);
+  if (!comment) return false;
+  db.prepare(`DELETE FROM comments WHERE id = ?`).run(commentId);
+  return true;
+}
+
 function editComment(commentId, userId, newBody) {
   const comment = db.prepare(`SELECT * FROM comments WHERE id = ? AND user_id = ?`).get(commentId, userId);
   if (!comment) return false;
@@ -1147,7 +1154,7 @@ module.exports = {
   // comments
   addComment, commentsForPost,
   // edit history
-  editPost, editComment, editMessage, editRoomMessage, getEditHistory,
+  editPost, editComment, editMessage, editRoomMessage, getEditHistory, deleteComment,
   // shares
   sharePost, hasShared, hasReposted,
   // customization
