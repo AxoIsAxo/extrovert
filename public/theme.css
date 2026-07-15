@@ -1,4 +1,32 @@
-:root {
+:root, [data-theme="dark"] {
+  --bg: #1a1511;
+  --surface: #241e18;
+  --surface-2: #2e2720;
+  --surface-3: #393028;
+  --text: #e8e0d6;
+  --text-secondary: #a0988e;
+  --text-muted: #7a7268;
+  --primary: #d4815a;
+  --primary-light: #3a2818;
+  --primary-dark: #e8a080;
+  --secondary: #8fa57a;
+  --secondary-light: #2a3020;
+  --accent: #d4a352;
+  --accent-light: #3a3018;
+  --danger: #e86050;
+  --danger-light: #3a1a18;
+  --border: #4a3e34;
+  --border-light: #3a3228;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-offset: 4px 4px 0 rgba(0, 0, 0, 0.3);
+  --radius: 6px;
+  --radius-sm: 4px;
+  --radius-lg: 10px;
+  --radius-full: 9999px;
+  --t: 0.2s ease;
+}
+
+[data-theme="light"] {
   --bg: #f7f3ee;
   --surface: #ffffff;
   --surface-2: #f0ece6;
@@ -19,11 +47,6 @@
   --border-light: #d6cec4;
   --shadow: 0 2px 8px rgba(61, 50, 38, 0.1);
   --shadow-offset: 4px 4px 0 rgba(61, 50, 38, 0.12);
-  --radius: 6px;
-  --radius-sm: 4px;
-  --radius-lg: 10px;
-  --radius-full: 9999px;
-  --t: 0.2s ease;
 }
 
 * { box-sizing: border-box; }
@@ -63,6 +86,7 @@ a:hover { color: var(--primary-dark); text-decoration: underline; }
   font-weight: 600; text-decoration: none;
 }
 .nav a:hover, .nav button:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+.theme-btn { font-size: 18px; line-height: 1; padding: 8px 10px !important; }
 
 .wrap { max-width: 680px; margin: 0 auto; padding: 32px 20px 90px; }
 .feed-wrap { max-width: 100%; padding: 0; }
