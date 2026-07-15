@@ -49,21 +49,26 @@
 
     ws.onopen = function () {
       reconnectAttempts = 0;
+      console.log('WebRTC WS connected');
       send({ type: 'ping' });
     };
 
     ws.onmessage = function (e) {
       var msg;
       try { msg = JSON.parse(e.data); } catch { return; }
+      console.log('WS recv:', msg.type, msg.from || '');
       handleMessage(msg);
     };
 
-    ws.onclose = function () {
+    ws.onclose = function (event) {
+      console.log('WebRTC WS closed:', event.code, event.reason);
       cleanupAll();
       scheduleReconnect();
     };
 
-    ws.onerror = function () {};
+    ws.onerror = function (err) {
+      console.error('WebRTC WS error');
+    };
   }
 
   function scheduleReconnect() {
@@ -78,7 +83,10 @@
 
   function send(data) {
     if (ws && ws.readyState === WebSocket.OPEN) {
+      console.log('WS send:', data.type, data.to || '');
       try { ws.send(JSON.stringify(data)); } catch {}
+    } else {
+      console.log('WS send FAILED (not open):', data.type, data.to || '');
     }
   }
 
@@ -88,6 +96,10 @@
         break;
 
       case 'incoming_call':
+        if (state.callState === 'calling') {
+          Object.keys(state.peerConnections).forEach(closePeerConnection);
+          state.peerConnections = {};
+        }
         state.callState = 'ringing';
         state.peerUsername = msg.from;
         state.channelId = msg.channel_id || null;
@@ -213,7 +225,10 @@
   }
 
   function startCall(username) {
-    if (state.callState !== 'idle') return;
+    if (state.callState !== 'idle') {
+      console.log('startCall ignored: state is', state.callState);
+      return;
+    }
     state.callState = 'calling';
     state.peerUsername = username;
 
@@ -223,6 +238,10 @@
       return pc.createOffer().then(function (offer) {
         return pc.setLocalDescription(offer);
       }).then(function () {
+        if (state.callState !== 'calling') {
+          console.log('startCall aborted: state changed to', state.callState);
+          return;
+        }
         send({
           type: 'call_offer',
           to: username,
@@ -231,13 +250,18 @@
         emit('calling', username);
       });
     }).catch(function (err) {
-      state.callState = 'idle';
+      if (state.callState === 'calling') {
+        state.callState = 'idle';
+      }
       emit('error', 'Failed to start call: ' + err.message);
     });
   }
 
   function answerCall(username, sdp) {
-    if (state.callState !== 'ringing') return;
+    if (state.callState !== 'ringing') {
+      console.log('answerCall ignored: state is', state.callState);
+      return;
+    }
     state.peerUsername = username;
 
     getMedia().then(function () {
@@ -248,6 +272,7 @@
       }).then(function (answer) {
         return pc.setLocalDescription(answer);
       }).then(function () {
+        if (state.callState !== 'ringing') return;
         state.callState = 'connected';
         state.callStartTime = Date.now();
         send({
@@ -258,7 +283,9 @@
         emit('call_connected', username);
       });
     }).catch(function (err) {
-      state.callState = 'idle';
+      if (state.callState === 'ringing') {
+        state.callState = 'idle';
+      }
       emit('error', 'Failed to answer call: ' + err.message);
     });
   }

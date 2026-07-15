@@ -167,9 +167,11 @@ function initSignaling(wss) {
   wss.on('connection', (ws, req) => {
     const user = lookupUserFromRequest(req);
     if (!user) {
+      console.log('WS auth failed: no user from request', req.headers.cookie ? 'cookie present' : 'no cookie');
       ws.close(4001, 'Unauthorized');
       return;
     }
+    console.log('WS connected:', user.username, '(id:', user.id + ')');
 
     const existing = clients.get(user.id);
     if (existing) {
@@ -210,6 +212,7 @@ function initSignaling(wss) {
           break;
 
         case 'call_offer':
+          console.log('WS msg call_offer from', user.username, 'to', msg.to, 'channel:', msg.channel_id);
           if (msg.channel_id) {
             const members = voiceChannels.get(msg.channel_id);
             if (members) {
@@ -218,6 +221,7 @@ function initSignaling(wss) {
                 if (msg.to) {
                   const target = clients.get(otherId);
                   if (target && target.username === msg.to) {
+                    console.log('  -> forwarding incoming_call to', target.username);
                     try {
                       target.ws.send(JSON.stringify({
                         type: 'incoming_call',
@@ -233,13 +237,18 @@ function initSignaling(wss) {
             }
           } else {
             const target = findUserByUsername(msg.to);
-            if (!target) break;
+            if (!target) {
+              console.log('  -> target not found (offline?)');
+              break;
+            }
             if (target.inCall) {
+              console.log('  -> target busy');
               try {
                 ws.send(JSON.stringify({ type: 'user_busy', from: msg.to }));
               } catch {}
               break;
             }
+            console.log('  -> forwarding incoming_call to', target.username);
             try {
               target.ws.send(JSON.stringify({
                 type: 'incoming_call',
@@ -253,11 +262,13 @@ function initSignaling(wss) {
           break;
 
         case 'call_answer':
+          console.log('WS msg call_answer from', user.username, 'to', msg.to);
           if (msg.channel_id) {
             routeToChannelMember(msg, user, 'call_answered');
           } else {
             const target = findUserByUsername(msg.to);
             if (target) {
+              console.log('  -> forwarding call_answered to', target.username);
               try {
                 target.ws.send(JSON.stringify({
                   type: 'call_answered',
@@ -267,11 +278,14 @@ function initSignaling(wss) {
                 }));
               } catch {}
               clientData.inCall = true;
+            } else {
+              console.log('  -> target not found');
             }
           }
           break;
 
         case 'ice_candidate':
+          console.log('WS msg ice_candidate from', user.username, 'to', msg.to);
           if (msg.channel_id) {
             routeToChannelMember(msg, user, 'ice_candidate');
           } else {
@@ -289,11 +303,13 @@ function initSignaling(wss) {
           break;
 
         case 'call_end':
+          console.log('WS msg call_end from', user.username);
           if (msg.channel_id) {
             routeToChannelMember(msg, user, 'call_ended');
           } else {
             const target = findUserByUsername(msg.to);
             if (target) {
+              console.log('  -> forwarding call_ended to', target.username);
               try {
                 target.ws.send(JSON.stringify({
                   type: 'call_ended',
@@ -306,6 +322,7 @@ function initSignaling(wss) {
           break;
 
         case 'call_decline':
+          console.log('WS msg call_decline from', user.username);
           if (msg.channel_id) {
             routeToChannelMember(msg, user, 'call_declined');
           } else {
