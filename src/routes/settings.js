@@ -3,7 +3,7 @@
 const express = require('express');
 const crypto = require('node:crypto');
 const db = require('../db');
-const { deleteUser } = db;
+const { getUserTheme, setUserTheme, deleteUser } = db;
 const { VALID_SCOPES } = require('../api-auth');
 
 const router = express.Router();
@@ -11,7 +11,16 @@ const router = express.Router();
 router.get('/', (req, res) => {
   const user = res.locals.currentUser;
   if (!user) return res.redirect('/login');
-  res.render('settings');
+  const theme = getUserTheme(user.id);
+  res.render('settings', { theme });
+});
+
+router.post('/', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.redirect('/login');
+  const theme = req.body.theme === 'light' ? 'light' : 'dark';
+  setUserTheme(user.id, theme);
+  res.redirect('/settings');
 });
 
 // Account deletion.

@@ -192,10 +192,11 @@ app.use(optionalAuth);
 // Expose user data to all templates.
 app.use((req, res, next) => {
   if (res.locals.currentUser) {
-    const { countUnreadNotifications, countUnreadMessages, getPendingReports } = require('./db');
+    const { countUnreadNotifications, countUnreadMessages, getUserTheme, getPendingReports } = require('./db');
     res.locals.unreadCount = countUnreadNotifications(res.locals.currentUser.id);
     res.locals.unreadMessages = countUnreadMessages(res.locals.currentUser.id);
     res.locals.pendingReports = res.locals.currentUser.is_admin ? getPendingReports().length : 0;
+    res.locals.theme = getUserTheme(res.locals.currentUser.id);
   }
   next();
 });

@@ -86,7 +86,6 @@ a:hover { color: var(--primary-dark); text-decoration: underline; }
   font-weight: 600; text-decoration: none;
 }
 .nav a:hover, .nav button:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
-.theme-btn { font-size: 18px; line-height: 1; padding: 8px 10px !important; }
 
 .wrap { max-width: 680px; margin: 0 auto; padding: 32px 20px 90px; }
 .feed-wrap { max-width: 100%; padding: 0; }

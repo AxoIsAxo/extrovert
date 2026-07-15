@@ -953,6 +953,19 @@ function hasPendingRequest(roomId, userId) {
   return !!db.prepare(`SELECT 1 FROM join_requests WHERE room_id = ? AND user_id = ? AND status = 'pending'`).get(roomId, userId);
 }
 
+// ---------- theme ----------
+function getUserTheme(userId) {
+  const row = db.prepare(`SELECT theme FROM users WHERE id = ?`).get(userId);
+  if (!row) return 'dark';
+  const t = row.theme;
+  if (t === 'light' || t === 'dark') return t;
+  return 'dark';
+}
+
+function setUserTheme(userId, theme) {
+  db.prepare(`UPDATE users SET theme = ? WHERE id = ?`).run(theme, userId);
+}
+
 // ---------- OAuth Apps ----------
 function createOAuthApp({ name, description, website, redirectUris, clientId, clientSecret, scopes, ownerId }) {
   const now = Date.now();
@@ -1169,6 +1182,8 @@ module.exports = {
   addSticker, getMyStickers,
   // avatar
   setAvatar, getAvatar,
+  // theme
+  getUserTheme, setUserTheme,
   // rooms
   createRoom, getRoom, getRoomsForUser, getAvailableRooms, updateRoom, deleteRoom,
   isRoomMember, addRoomMember, removeRoomMember, getRoomMembers, getUserRoomRole, countRoomMembers,
