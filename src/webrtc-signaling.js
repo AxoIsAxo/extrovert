@@ -60,15 +60,19 @@ function getSession(sid) {
 }
 
 function lookupUserFromRequest(req) {
-  if (!SESSION_SECRET || !sessionDb) return null;
+  if (!SESSION_SECRET) { console.log('lookupUser: no SESSION_SECRET'); return null; }
+  if (!sessionDb) { console.log('lookupUser: no sessionDb'); return null; }
   const cookies = parseCookies(req.headers.cookie);
   const signedSid = cookies['connect.sid'];
-  if (!signedSid) return null;
+  if (!signedSid) { console.log('lookupUser: no connect.sid cookie'); return null; }
   const sid = unsignSessionId(signedSid, SESSION_SECRET);
-  if (!sid) return null;
+  if (!sid) { console.log('lookupUser: unsign failed for', signedSid.substring(0, 20)); return null; }
   const session = getSession(sid);
-  if (!session || !session.userId) return null;
-  return getUserById(session.userId);
+  if (!session) { console.log('lookupUser: no session for sid', sid.substring(0, 10)); return null; }
+  if (!session.userId) { console.log('lookupUser: session has no userId', JSON.stringify(session).substring(0, 100)); return null; }
+  const user = getUserById(session.userId);
+  if (!user) { console.log('lookupUser: no user for userId', session.userId); return null; }
+  return user;
 }
 
 function isMutualFollowerOnline(aId, bId) {

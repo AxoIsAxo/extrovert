@@ -74,6 +74,10 @@
   function scheduleReconnect() {
     if (reconnectTimeout) return;
     reconnectAttempts++;
+    if (reconnectAttempts > 20) {
+      console.log('WebRTC WS: max reconnect attempts reached, stopping');
+      return;
+    }
     var delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
     reconnectTimeout = setTimeout(function () {
       reconnectTimeout = null;

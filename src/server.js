@@ -73,7 +73,7 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    secure: IS_PROD,
+    secure: process.env.EXTV_COOKIE_SECURE === 'false' ? false : IS_PROD,
     sameSite: 'lax',
     maxAge: 1000 * 60 * 60 * 24 * 30,
   },
