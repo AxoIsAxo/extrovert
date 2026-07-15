@@ -92,11 +92,7 @@
             </div>
           <% } %>
         </div>
-        <span class="comment-body"><% if (c.body && c.body.startsWith('/uploads/stickers/')) { %>
-          <img src="<%= c.body %>" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker">
-        <% } else { %>
-          <%= c.body %>
-        <% } %></span>
+        <span class="comment-body"><% if (c.body && c.body.startsWith('/uploads/stickers/')) { %><img src="<%= c.body %>" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker"><% } else { %><%= c.body %><% } %></span>
         <% if (u && c.user_id === u.id) { %>
           <input type="hidden" class="edit-comment-data" value="<%= c.body %>" data-csrf="<%= _token %>" data-action="/posts/<%= item.interactId %>/comments/<%= c.id %>/edit">
         <% } %>

@@ -173,7 +173,7 @@ document.addEventListener('DOMContentLoaded', function(){
 
   // Inline editing helpers
   function replaceWithInput(el, className, multiline, saveFn, cancelFn) {
-    var origText = el.textContent;
+    var origText = el.textContent.trim();
     var input;
     if (multiline) {
       input = document.createElement('textarea');
@@ -290,7 +290,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if (!bodyEl || !dataEl) return;
       var action = dataEl.dataset.action;
       var csrf = dataEl.dataset.csrf;
-      var origText = bodyEl.textContent;
+      var origText = bodyEl.textContent.trim();
 
       var r = replaceWithInput(bodyEl, 'comment-body-edit', false,
         function(val, onSuccess) {
