@@ -172,17 +172,16 @@ document.addEventListener('DOMContentLoaded', function(){
   }
 
   // Inline editing helpers
-  function replaceWithInput(el, multiline, saveFn, cancelFn) {
+  function replaceWithInput(el, className, multiline, saveFn, cancelFn) {
     var origText = el.textContent;
     var input;
     if (multiline) {
       input = document.createElement('textarea');
-      input.style.cssText = 'width:100%;min-height:80px;background:var(--surface-container-high);color:var(--on-surface);border:1px solid var(--outline-variant);border-radius:8px;padding:0.5rem;';
     } else {
       input = document.createElement('input');
       input.type = 'text';
-      input.style.cssText = 'width:80%;background:var(--surface-container-high);color:var(--on-surface);border:1px solid var(--outline-variant);border-radius:4px;padding:2px 6px;';
     }
+    input.className = 'inline-edit-input ' + className;
     input.value = origText;
     input.className = 'inline-edit-input';
     el.replaceWith(input);
@@ -259,7 +258,7 @@ document.addEventListener('DOMContentLoaded', function(){
       editPostBtn.textContent = 'Saving…';
       editPostBtn.disabled = true;
 
-      replaceWithInput(bodyEl, true,
+      replaceWithInput(bodyEl, 'post-body-edit', true,
         function(val, onSuccess) {
           fetch(action, {
             method: 'POST',
@@ -293,7 +292,7 @@ document.addEventListener('DOMContentLoaded', function(){
       var csrf = dataEl.dataset.csrf;
       var origText = bodyEl.textContent;
 
-      var r = replaceWithInput(bodyEl, false,
+      var r = replaceWithInput(bodyEl, 'comment-body-edit', false,
         function(val, onSuccess) {
           fetch(action, {
             method: 'POST',
@@ -354,7 +353,7 @@ document.addEventListener('DOMContentLoaded', function(){
       editMsgBtn.textContent = 'Saving…';
       editMsgBtn.disabled = true;
 
-      replaceWithInput(bubble, false,
+      replaceWithInput(bubble, 'chat-bubble-edit', false,
         function(val, onSuccess) {
           fetch(action, {
             method: 'POST',

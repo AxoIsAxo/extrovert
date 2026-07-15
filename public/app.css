@@ -421,6 +421,31 @@ a.conv-row:hover { color: var(--primary); }
 .room-msg-edit-input { background:var(--surface-container-high); color:var(--on-surface); border:1px solid var(--outline-variant); border-radius:4px; padding:2px 6px; }
 .edit-msg-btn { cursor:pointer; }
 .edit-comment-btn, .edit-post-btn { cursor:pointer; }
+
+/* Inline editing fields - match surrounding content styles */
+.inline-edit-input.post-body-edit {
+  width: 100%; box-sizing: border-box; margin-bottom: 14px;
+  font-size: 15px; line-height: 1.55; font-family: inherit;
+  background: var(--surface-container); color: var(--on-surface);
+  border: 1px solid var(--outline-variant); border-radius: 8px; padding: 8px 12px;
+  resize: vertical; min-height: 80px;
+}
+.inline-edit-input.comment-body-edit {
+  width: 100%; box-sizing: border-box; max-width: 400px;
+  font-size: 14px; font-family: inherit;
+  background: var(--surface-container); color: var(--on-surface);
+  border: 1px solid var(--outline-variant); border-radius: 6px; padding: 4px 8px;
+  margin-right: 4px; vertical-align: middle;
+}
+.inline-edit-input.chat-bubble-edit {
+  font-size: inherit; font-family: inherit; line-height: 1.45;
+  background: var(--surface-container); color: var(--on-surface);
+  border: 1px solid var(--outline-variant); border-radius: 18px; padding: 10px 16px;
+  width: 100%; box-sizing: border-box;
+}
+.chat-msg.own .inline-edit-input.chat-bubble-edit {
+  background: var(--primary-container); color: var(--on-primary-container);
+}
 .comment-head { display:flex; align-items:flex-start; justify-content:space-between; gap:4px; }
 .comment-menu-container { position:relative; flex-shrink:0; }
 .comment-menu-btn { background:none; border:none; cursor:pointer; color:var(--text-muted); font-size:16px; line-height:1; padding:0 4px; border-radius:4px; }
