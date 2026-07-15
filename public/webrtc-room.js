@@ -27,13 +27,28 @@
     ExtrovertCall.on('user_joined_channel', onUserJoinedChannel);
     ExtrovertCall.on('user_left_channel', onUserLeftChannel);
     ExtrovertCall.on('incoming_call', onVoiceIncomingCall);
+    ExtrovertCall.on('remote_stream', onVoiceRemoteStream);
   });
+
+  var remoteAudioEl = null;
+
+  function createRemoteAudioEl() {
+    if (!remoteAudioEl) {
+      remoteAudioEl = document.createElement('audio');
+      remoteAudioEl.autoplay = true;
+      remoteAudioEl.playsinline = true;
+      remoteAudioEl.style.display = 'none';
+      document.body.appendChild(remoteAudioEl);
+      remoteAudioEl.play().catch(function () {});
+    }
+  }
 
   function toggleVoiceChannel(channelId) {
     if (joinedChannelId === channelId) {
       leaveVoiceChannel();
     } else {
       if (joinedChannelId) leaveVoiceChannel();
+      createRemoteAudioEl();
       ExtrovertCall.joinChannel(getRoomId(), channelId);
     }
   }
@@ -48,6 +63,12 @@
       var count = document.getElementById('voice-count-' + joinedChannelId);
       if (count) count.textContent = '0';
       joinedChannelId = null;
+    }
+    if (remoteAudioEl) {
+      remoteAudioEl.pause();
+      remoteAudioEl.srcObject = null;
+      remoteAudioEl.remove();
+      remoteAudioEl = null;
     }
   }
 
@@ -86,6 +107,12 @@
     var el = document.getElementById('voice-member-' + channelId + '-' + username);
     if (el) el.remove();
     updateVoiceCount(channelId);
+  }
+
+  function onVoiceRemoteStream(username, stream) {
+    if (remoteAudioEl) {
+      remoteAudioEl.srcObject = stream;
+    }
   }
 
   function onVoiceIncomingCall(username, displayName, sdp, channelId) {

@@ -24,6 +24,7 @@
     ExtrovertCall.on('call_declined', onCallDeclined);
     ExtrovertCall.on('user_online', onUserOnline);
     ExtrovertCall.on('user_offline', onUserOffline);
+    ExtrovertCall.on('remote_stream', onRemoteStream);
     ExtrovertCall.on('error', onError);
 
     ExtrovertCall.connect();
@@ -44,6 +45,7 @@
 
     document.getElementById('call-answer-btn').addEventListener('click', function () {
       if (pendingIncoming) {
+        createRemoteAudioEl();
         ExtrovertCall.answerCall(pendingIncoming.username, pendingIncoming.sdp);
         pendingIncoming = null;
         hideIncomingOverlay();
@@ -94,9 +96,23 @@
     document.querySelectorAll('.call-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var username = btn.dataset.username;
-        if (username) ExtrovertCall.startCall(username);
+        if (username) {
+          createRemoteAudioEl();
+          ExtrovertCall.startCall(username);
+        }
       });
     });
+  }
+
+  function createRemoteAudioEl() {
+    if (!remoteAudioEl) {
+      remoteAudioEl = document.createElement('audio');
+      remoteAudioEl.autoplay = true;
+      remoteAudioEl.playsinline = true;
+      remoteAudioEl.style.display = 'none';
+      document.body.appendChild(remoteAudioEl);
+      remoteAudioEl.play().catch(function () {});
+    }
   }
 
   function onIncomingCall(username, displayName, sdp) {
@@ -130,11 +146,13 @@
     hideIncomingOverlay();
     hideActiveCallBar();
     stopCallTimer();
+    cleanupRemoteAudio();
   }
 
   function onCallDeclined(username) {
     stopRinging();
     hideIncomingOverlay();
+    cleanupRemoteAudio();
   }
 
   function onUserOnline(username, displayName) {
@@ -147,6 +165,14 @@
     onlineStatuses[username] = false;
     updateOnlineDots();
     updateCallButtons();
+  }
+
+  var remoteAudioEl = null;
+
+  function onRemoteStream(username, stream) {
+    if (remoteAudioEl) {
+      remoteAudioEl.srcObject = stream;
+    }
   }
 
   function onError(message) {
@@ -195,6 +221,15 @@
 
   function hideActiveCallBar() {
     activeCallBar.style.display = 'none';
+  }
+
+  function cleanupRemoteAudio() {
+    if (remoteAudioEl) {
+      remoteAudioEl.pause();
+      remoteAudioEl.srcObject = null;
+      remoteAudioEl.remove();
+      remoteAudioEl = null;
+    }
   }
 
   function startCallTimer() {
