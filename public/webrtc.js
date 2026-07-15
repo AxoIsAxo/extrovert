@@ -265,13 +265,22 @@
 
   function declineCall(username) {
     send({ type: 'call_decline', to: username });
+    emit('call_declined', username);
     state.callState = 'idle';
     state.peerUsername = null;
   }
 
   function endCall() {
-    send({ type: 'call_end', to: state.peerUsername || '', channel_id: state.channelId || undefined, room_id: state.channelId ? '1' : undefined });
-    endCallInternal();
+    if (state.channelId) {
+      send({ type: 'leave_channel', channel_id: state.channelId });
+      emit('call_ended', '');
+      endCallInternal();
+    } else {
+      var peer = state.peerUsername || '';
+      send({ type: 'call_end', to: peer });
+      emit('call_ended', peer);
+      endCallInternal();
+    }
   }
 
   function endCallInternal() {

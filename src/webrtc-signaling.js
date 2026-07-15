@@ -37,7 +37,7 @@ function unsignSessionId(signedValue, secret) {
   if (!match) return null;
   const sid = match[1];
   const sig = match[2];
-  const expected = crypto.createHmac('sha256', secret).update('s:' + sid).digest('base64').replace(/=+$/, '');
+  const expected = crypto.createHmac('sha256', secret).update(sid).digest('base64').replace(/=+$/, '');
   try {
     if (crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
       return sid;
@@ -140,6 +140,29 @@ function removeFromVoiceChannels(userId) {
   if (client) client.inCall = false;
 }
 
+function routeToChannelMember(msg, user, forwardType) {
+  const members = voiceChannels.get(msg.channel_id);
+  if (!members) return;
+  for (const otherId of members) {
+    if (otherId === user.id) continue;
+    if (msg.to) {
+      const target = clients.get(otherId);
+      if (target && target.username === msg.to) {
+        try {
+          target.ws.send(JSON.stringify({
+            type: forwardType,
+            from: user.username,
+            from_display: user.display_name,
+            sdp: msg.sdp,
+            candidate: msg.candidate,
+            channel_id: msg.channel_id,
+          }));
+        } catch {}
+      }
+    }
+  }
+}
+
 function initSignaling(wss) {
   wss.on('connection', (ws, req) => {
     const user = lookupUserFromRequest(req);
@@ -195,9 +218,15 @@ function initSignaling(wss) {
                 if (msg.to) {
                   const target = clients.get(otherId);
                   if (target && target.username === msg.to) {
-                    const forward = { ...msg, from: user.username, from_display: user.display_name };
-                    delete forward.to;
-                    try { target.ws.send(JSON.stringify(forward)); } catch {}
+                    try {
+                      target.ws.send(JSON.stringify({
+                        type: 'incoming_call',
+                        from: user.username,
+                        from_display: user.display_name,
+                        sdp: msg.sdp,
+                        channel_id: msg.channel_id,
+                      }));
+                    } catch {}
                   }
                 }
               }
@@ -211,40 +240,84 @@ function initSignaling(wss) {
               } catch {}
               break;
             }
-            const forward = { ...msg, from: user.username, from_display: user.display_name };
-            delete forward.to;
-            try { target.ws.send(JSON.stringify(forward)); } catch {}
+            try {
+              target.ws.send(JSON.stringify({
+                type: 'incoming_call',
+                from: user.username,
+                from_display: user.display_name,
+                sdp: msg.sdp,
+              }));
+            } catch {}
             clientData.inCall = true;
           }
           break;
 
         case 'call_answer':
-        case 'ice_candidate':
-        case 'call_end':
-        case 'call_decline':
           if (msg.channel_id) {
-            const members = voiceChannels.get(msg.channel_id);
-            if (members) {
-              for (const otherId of members) {
-                if (otherId === user.id) continue;
-                if (msg.to) {
-                  const target = clients.get(otherId);
-                  if (target && target.username === msg.to) {
-                    const forward = { ...msg, from: user.username, from_display: user.display_name };
-                    delete forward.to;
-                    try { target.ws.send(JSON.stringify(forward)); } catch {}
-                  }
-                }
-              }
-            }
+            routeToChannelMember(msg, user, 'call_answered');
           } else {
             const target = findUserByUsername(msg.to);
-            if (!target) break;
-            const forward = { ...msg, from: user.username, from_display: user.display_name };
-            delete forward.to;
-            try { target.ws.send(JSON.stringify(forward)); } catch {}
-            if (msg.type === 'call_answered' || msg.type === 'call_end' || msg.type === 'call_decline') {
-              clientData.inCall = msg.type === 'call_answered';
+            if (target) {
+              try {
+                target.ws.send(JSON.stringify({
+                  type: 'call_answered',
+                  from: user.username,
+                  from_display: user.display_name,
+                  sdp: msg.sdp,
+                }));
+              } catch {}
+              clientData.inCall = true;
+            }
+          }
+          break;
+
+        case 'ice_candidate':
+          if (msg.channel_id) {
+            routeToChannelMember(msg, user, 'ice_candidate');
+          } else {
+            const target = findUserByUsername(msg.to);
+            if (target) {
+              try {
+                target.ws.send(JSON.stringify({
+                  type: 'ice_candidate',
+                  from: user.username,
+                  candidate: msg.candidate,
+                }));
+              } catch {}
+            }
+          }
+          break;
+
+        case 'call_end':
+          if (msg.channel_id) {
+            routeToChannelMember(msg, user, 'call_ended');
+          } else {
+            const target = findUserByUsername(msg.to);
+            if (target) {
+              try {
+                target.ws.send(JSON.stringify({
+                  type: 'call_ended',
+                  from: user.username,
+                }));
+              } catch {}
+              clientData.inCall = false;
+            }
+          }
+          break;
+
+        case 'call_decline':
+          if (msg.channel_id) {
+            routeToChannelMember(msg, user, 'call_declined');
+          } else {
+            const target = findUserByUsername(msg.to);
+            if (target) {
+              try {
+                target.ws.send(JSON.stringify({
+                  type: 'call_declined',
+                  from: user.username,
+                }));
+              } catch {}
+              clientData.inCall = false;
             }
           }
           break;
@@ -321,15 +394,13 @@ function initSignaling(wss) {
       const c = clients.get(user.id);
       if (c && c.ws === ws) {
         clients.delete(user.id);
-        if (c.inCall) {
-          for (const [otherId, other] of clients) {
-            if (other.inCall) {
-              try {
-                other.ws.send(JSON.stringify({
-                  type: 'call_ended', from: user.username,
-                }));
-              } catch {}
-            }
+        for (const [otherId, other] of clients) {
+          if (other.inCall) {
+            try {
+              other.ws.send(JSON.stringify({
+                type: 'call_ended', from: user.username,
+              }));
+            } catch {}
           }
         }
         broadcastPresence(user.id, 'user_offline');
