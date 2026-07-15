@@ -152,7 +152,9 @@
   function onCallDeclined(username) {
     stopRinging();
     hideIncomingOverlay();
+    hideActiveCallBar();
     cleanupRemoteAudio();
+    stopCallTimer();
   }
 
   function onUserOnline(username, displayName) {
