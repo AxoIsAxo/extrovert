@@ -43,8 +43,53 @@ document.addEventListener('DOMContentLoaded', function() {
     }).catch(function() { input.disabled = false; });
   });
 
-  // Report buttons: delegation on msgArea for server-rendered and AJAX messages
+  // Edit button: delegation
   msgArea.addEventListener('click', function(e) {
+    var editBtn = e.target.closest('.room-msg-edit');
+    if (editBtn) {
+      var msgDiv = editBtn.closest('.room-msg');
+      var textSpan = msgDiv.querySelector('.room-msg-text');
+      var currentText = textSpan.textContent;
+      // Replace text with input field
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'room-msg-edit-input';
+      input.value = currentText;
+      input.style.width = '80%';
+      textSpan.replaceWith(input);
+      editBtn.textContent = 'Save';
+      editBtn.classList.add('room-msg-save');
+      editBtn.classList.remove('room-msg-edit');
+      input.focus();
+      // Cancel on Escape
+      input.addEventListener('keydown', function(ev) {
+        if (ev.key === 'Escape') cancelEditRoomMsg(msgDiv, editBtn, currentText);
+      });
+      return;
+    }
+    var saveBtn = e.target.closest('.room-msg-save');
+    if (saveBtn) {
+      var msgDiv = saveBtn.closest('.room-msg');
+      var input = msgDiv.querySelector('.room-msg-edit-input');
+      if (!input) return;
+      var newBody = input.value.trim();
+      if (!newBody) return;
+      var msgId = saveBtn.dataset.msgId;
+      var cid = sendForm ? sendForm.dataset.channelId : '';
+      var csrf = getCsrf();
+      fetch('/rooms/' + roomId() + '/channels/' + cid + '/messages/' + msgId + '/edit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
+        body: 'body=' + encodeURIComponent(newBody)
+      }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.ok) {
+          loadMessages(cid);
+        } else {
+          cancelEditRoomMsg(msgDiv, saveBtn, newBody);
+        }
+      });
+      return;
+    }
     var delBtn = e.target.closest('.room-msg-delete');
     if (delBtn) {
       var msgId = delBtn.dataset.msgId;
@@ -158,10 +203,24 @@ document.addEventListener('DOMContentLoaded', function() {
       textSpan.className = 'room-msg-text';
       textSpan.textContent = m.body;
       innerDiv.appendChild(textSpan);
+      if (m.edited_at) {
+        var editedSpan = document.createElement('span');
+        editedSpan.className = 'edited-indicator';
+        editedSpan.textContent = '(edited)';
+        editedSpan.title = new Date(m.edited_at).toLocaleString();
+        innerDiv.appendChild(editedSpan);
+      }
       rowDiv.appendChild(innerDiv);
       bodyDiv.appendChild(rowDiv);
       var actionsDiv = document.createElement('div');
       actionsDiv.className = 'room-msg-actions';
+      if (m.user_id === currentUserId) {
+        var editSpan = document.createElement('span');
+        editSpan.className = 'room-msg-edit';
+        editSpan.dataset.msgId = m.id;
+        editSpan.textContent = 'Edit';
+        actionsDiv.appendChild(editSpan);
+      }
       if (m.user_id === currentUserId || data.canDelete) {
         var delSpan = document.createElement('span');
         delSpan.className = 'room-msg-delete';
@@ -179,6 +238,19 @@ document.addEventListener('DOMContentLoaded', function() {
       msgArea.appendChild(div);
     });
     msgArea.scrollTop = msgArea.scrollHeight;
+  }
+
+  function cancelEditRoomMsg(msgDiv, btn, originalText) {
+    var input = msgDiv.querySelector('.room-msg-edit-input');
+    if (input) {
+      var span = document.createElement('span');
+      span.className = 'room-msg-text';
+      span.textContent = originalText;
+      input.replaceWith(span);
+    }
+    btn.textContent = 'Edit';
+    btn.classList.remove('room-msg-save');
+    btn.classList.add('room-msg-edit');
   }
 
   function escHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }

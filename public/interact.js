@@ -116,12 +116,17 @@ document.addEventListener('DOMContentLoaded', function(){
   function addCommentHtml(postEl, c, timeFn){
     var commentsDiv = postEl.querySelector('.post-comments');
     if (!commentsDiv) return;
+    var form = commentsDiv.querySelector('.comment-form');
+    var postIdMatch = form ? form.getAttribute('action').match(/\/posts\/(\d+)/) : null;
+    var postIdVal = postIdMatch ? postIdMatch[1] : '';
     var div = document.createElement('div');
     div.className = 'comment';
+    div.dataset.commentId = c.id;
     var t = typeof timeFn === 'function' ? timeFn(c.created_at) : new Date(c.created_at).toLocaleString();
     var sticker = c.body && c.body.indexOf('/uploads/stickers/') !== -1;
-    div.innerHTML = '<b>' + esc(c.display_name) + '</b> <span class="post-handle">@' + esc(c.username) + '</span> <span class="post-time">· ' + t + '</span><br>' + (sticker ? '<img src="' + esc(c.body) + '" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker">' : esc(c.body));
-    var form = commentsDiv.querySelector('.comment-form');
+    var editedHtml = c.edited_at ? ' <a href="/posts/' + c.id + '/history?type=comment&post_id=' + postIdVal + '" class="edited-link">(edited)</a>' : '';
+    var ownEditHtml = ' <button class="btn ghost edit-comment-btn" style="font-size:11px;padding:1px 6px">Edit</button>';
+    div.innerHTML = '<b>' + esc(c.display_name) + '</b> <span class="post-handle">@' + esc(c.username) + '</span> <span class="post-time">· ' + t + '</span>' + editedHtml + '<br><span class="comment-body">' + (sticker ? '<img src="' + esc(c.body) + '" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker">' : esc(c.body)) + '</span>' + ownEditHtml + '<form class="edit-comment-form" method="post" action="/posts/' + postIdVal + '/comments/' + c.id + '/edit" style="display:none;margin-top:4px"><input type="hidden" name="_csrf" value="' + csrfToken + '"><input type="text" name="body" value="' + esc(c.body) + '" maxlength="1000" style="width:80%"><button class="btn" type="submit" style="font-size:11px;padding:2px 8px">Save</button><button class="btn ghost cancel-edit-comment" type="button" style="font-size:11px;padding:2px 8px">Cancel</button></form>';
     if (form) commentsDiv.insertBefore(div, form);
     else commentsDiv.appendChild(div);
     // Update comment count in stats.
@@ -159,6 +164,94 @@ document.addEventListener('DOMContentLoaded', function(){
     d.appendChild(document.createTextNode(s));
     return d.innerHTML;
   }
+
+  // Edit post / comment / chat message toggles
+  document.addEventListener('click', function(e){
+    var editPostBtn = e.target.closest('.edit-post-btn');
+    if (editPostBtn) {
+      e.preventDefault();
+      var postEl = editPostBtn.closest('.post');
+      var form = postEl ? postEl.querySelector('.edit-post-form') : null;
+      if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+      return;
+    }
+    var cancelEditPost = e.target.closest('.cancel-edit-post');
+    if (cancelEditPost) {
+      var form = cancelEditPost.closest('.edit-post-form');
+      if (form) form.style.display = 'none';
+      return;
+    }
+    var editCommentBtn = e.target.closest('.edit-comment-btn');
+    if (editCommentBtn) {
+      e.preventDefault();
+      var commentDiv = editCommentBtn.closest('.comment');
+      var form = commentDiv ? commentDiv.querySelector('.edit-comment-form') : null;
+      if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+      return;
+    }
+    var cancelEditComment = e.target.closest('.cancel-edit-comment');
+    if (cancelEditComment) {
+      var form = cancelEditComment.closest('.edit-comment-form');
+      if (form) form.style.display = 'none';
+      return;
+    }
+    var editMsgBtn = e.target.closest('.edit-msg-btn');
+    if (editMsgBtn) {
+      e.preventDefault();
+      var msgDiv = editMsgBtn.closest('.chat-msg');
+      var form = msgDiv ? msgDiv.querySelector('.edit-msg-form') : null;
+      if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+      return;
+    }
+    var cancelEditMsg = e.target.closest('.cancel-edit-msg');
+    if (cancelEditMsg) {
+      var form = cancelEditMsg.closest('.edit-msg-form');
+      if (form) form.style.display = 'none';
+      return;
+    }
+  });
+
+  // XHR submit for edit forms
+  document.addEventListener('submit', function(e){
+    var form = e.target;
+    if (form.classList.contains('edit-post-form')) {
+      e.preventDefault();
+      var action = form.getAttribute('action');
+      var textarea = form.querySelector('textarea');
+      if (!textarea || !textarea.value.trim()) return;
+      fetch(action, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrfToken },
+        body: new URLSearchParams(Array.from(new FormData(form))),
+      }).then(function(r){ return r.json(); }).then(function(d){
+        if (d.ok) location.reload();
+      });
+    } else if (form.classList.contains('edit-comment-form')) {
+      e.preventDefault();
+      var action = form.getAttribute('action');
+      var input = form.querySelector('input[name="body"]');
+      if (!input || !input.value.trim()) return;
+      fetch(action, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrfToken },
+        body: new URLSearchParams(Array.from(new FormData(form))),
+      }).then(function(r){ return r.json(); }).then(function(d){
+        if (d.ok) location.reload();
+      });
+    } else if (form.classList.contains('edit-msg-form')) {
+      e.preventDefault();
+      var action = form.getAttribute('action');
+      var input = form.querySelector('input[name="body"]');
+      if (!input || !input.value.trim()) return;
+      fetch(action, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrfToken },
+        body: new URLSearchParams(Array.from(new FormData(form))),
+      }).then(function(r){ return r.json(); }).then(function(d){
+        if (d.ok) location.reload();
+      });
+    }
+  });
 
   function showToast(msg){
     var el = document.createElement('div');

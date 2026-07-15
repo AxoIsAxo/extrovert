@@ -9,6 +9,7 @@ const {
   toggleLike, addComment, commentsForPost, hasLiked, hasShared,
   sharePost, hasReposted, recordFollowFromPost, isFollowing,
   createNotification, deletePost,
+  editPost, editComment, getEditHistory,
 } = require('../db');
 const { canView } = require('../network');
 
@@ -116,11 +117,43 @@ router.post('/:id/comment', (req, res) => {
       createNotification({ userId: ctx.content.user_id, type: 'comment', actorId: ctx.user.id, postId: ctx.content.id });
     }
     if (req.xhr) {
-      const c = db.prepare(`SELECT c.id, c.body, c.created_at, u.display_name, u.username FROM comments c JOIN users u ON u.id = c.user_id WHERE c.id = ?`).get(commentId);
+      const c = db.prepare(`SELECT c.id, c.body, c.created_at, c.edited_at, c.user_id, u.display_name, u.username FROM comments c JOIN users u ON u.id = c.user_id WHERE c.id = ?`).get(commentId);
       return res.json({ comment: c });
     }
   }
   res.redirect(back(req, '/'));
+});
+
+// Edit a post.
+router.post('/:id/edit', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return req.xhr ? res.json({ error: 'not logged in' }) : res.redirect('/login');
+  const token = req.body._csrf || req.headers['x-csrf-token'];
+  if (!token || token !== req.session.csrfToken) {
+    return res.status(403).send('CSRF validation failed');
+  }
+  const body = String(req.body.body || '').trim();
+  if (!body) return req.xhr ? res.json({ error: 'body required' }) : res.redirect(back(req, '/'));
+  const ok = editPost(Number(req.params.id), user.id, body);
+  if (!ok) return req.xhr ? res.json({ error: 'not found or not yours' }) : res.status(404).send('Post not found or not yours.');
+  if (req.xhr) return res.json({ ok: true });
+  res.redirect(back(req, '/posts/' + req.params.id));
+});
+
+// Edit a comment.
+router.post('/:id/comments/:cid/edit', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return req.xhr ? res.json({ error: 'not logged in' }) : res.redirect('/login');
+  const token = req.body._csrf || req.headers['x-csrf-token'];
+  if (!token || token !== req.session.csrfToken) {
+    return res.status(403).send('CSRF validation failed');
+  }
+  const body = String(req.body.body || '').trim().slice(0, 1000);
+  if (!body) return req.xhr ? res.json({ error: 'body required' }) : res.redirect(back(req, '/'));
+  const ok = editComment(Number(req.params.cid), user.id, body);
+  if (!ok) return req.xhr ? res.json({ error: 'not found or not yours' }) : res.status(404).send('Comment not found or not yours.');
+  if (req.xhr) return res.json({ ok: true });
+  res.redirect(back(req, '/posts/' + req.params.id));
 });
 
 // View a single post (shareable link).
@@ -140,6 +173,7 @@ router.get('/:id', (req, res) => {
     id: post.id, interactId,
     type: content.type, body: content.body, mediaPath: content.media_path,
     createdAt: post.created_at,
+    editedAt: content.edited_at,
     isRepost: post.type === 'repost',
     reposterName: reposter?.display_name, reposterUsername: reposter?.username,
     authorId: author.id, authorUsername: author.username, authorName: author.display_name,
@@ -187,6 +221,18 @@ router.post('/:id/follow-from', (req, res) => {
   }
   if (req.xhr) return res.json({ ok: true });
   res.redirect(back(req, '/'));
+});
+
+// View edit history for a post or comment.
+router.get('/:id/history', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.redirect('/login');
+  const entityType = req.query.type || 'post';
+  const entityId = entityType === 'comment' ? Number(req.params.id) : Number(req.params.id);
+  const history = getEditHistory(entityType, entityId);
+  const post = getPostById(entityType === 'comment' ? Number(req.query.post_id || 0) : Number(req.params.id));
+  if (post && !canView(user.id, post.user_id)) return res.redirect('/');
+  res.render('edit-history', { entityType, entityId, history, post });
 });
 
 // Delete post — owner only.

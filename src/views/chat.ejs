@@ -16,9 +16,24 @@
         <div class="chat-msg <%= m.from_id === currentUser.id ? 'own' : '' %>"
              data-body="<%= m.body %>"
              data-key-sender="<%= m.key_for_sender || '' %>"
-             data-key-recipient="<%= m.key_for_recipient || '' %>">
+             data-key-recipient="<%= m.key_for_recipient || '' %>"
+             data-msg-id="<%= m.id %>">
           <div class="chat-bubble"><%= m.key_for_sender ? '🔒' : '' %><% if (m.body && m.body.startsWith('/uploads/stickers/')) { %><img src="<%= m.body %>" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker"><% } else { %><%= m.body %><% } %></div>
-          <div class="muted" style="font-size:0.7rem;padding:0 4px"><%= locals.relTime(m.created_at) %></div>
+          <div class="muted" style="font-size:0.7rem;padding:0 4px">
+            <%= locals.relTime(m.created_at) %>
+            <% if (m.edited_at) { %><span class="edited-indicator" title="<%= new Date(m.edited_at).toLocaleString() %>">· edited</span><% } %>
+            <% if (m.from_id === currentUser.id) { %>
+              <button class="btn ghost edit-msg-btn" style="font-size:10px;padding:0 4px;margin-left:4px">Edit</button>
+            <% } %>
+          </div>
+          <% if (m.from_id === currentUser.id) { %>
+            <form class="edit-msg-form" method="post" action="/chats/<%= other.username %>/edit/<%= m.id %>" style="display:none;margin-top:2px">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <input type="text" name="body" value="<%= m.body %>" maxlength="2000" style="width:80%">
+              <button class="btn" type="submit" style="font-size:11px;padding:2px 8px">Save</button>
+              <button class="btn ghost cancel-edit-msg" type="button" style="font-size:11px;padding:2px 8px">Cancel</button>
+            </form>
+          <% } %>
         </div>
       <% }) %>
     <% } %>

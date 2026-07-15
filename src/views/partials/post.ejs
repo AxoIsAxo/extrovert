@@ -21,10 +21,12 @@
       </div>
       <span class="post-handle">@<%= item.authorUsername %></span>
       <span class="post-time">· <%= time(item.createdAt) %></span>
+      <% if (item.editedAt) { %><span class="post-time edited-badge" title="<%= new Date(item.editedAt).toLocaleString() %>">· edited</span><% } %>
     </div>
   </header>
 
   <% if (item.body) { %><div class="post-body"><%= item.body %></div><% } %>
+  <% if (item.editedAt) { %><div class="post-edited"><a href="/posts/<%= item.interactId %>/history?type=post" class="edited-link" title="<%= new Date(item.editedAt).toLocaleString() %>">(edited)</a></div><% } %>
   <% if (item.mediaPath && item.type === 'photo') { %>
     <img class="post-media" src="<%= item.mediaPath %>" alt="photo">
   <% } else if (item.mediaPath && item.type === 'video') { %>
@@ -60,19 +62,40 @@
       </form>
     <% } %>
     <% if (item.isOwn) { %>
-      <a class="btn ghost" href="/posts/<%= item.interactId %>/delete" style="margin-left:auto;color:#c33">Delete</a>
+      <button class="btn ghost edit-post-btn" data-post-id="<%= item.id %>" style="margin-left:auto">Edit</button>
+      <a class="btn ghost" href="/posts/<%= item.interactId %>/delete" style="color:#c33">Delete</a>
     <% } %>
   </div>
+  <% if (item.isOwn) { %>
+    <form class="edit-post-form" method="post" action="/posts/<%= item.interactId %>/edit" style="display:none;margin-top:8px">
+      <input type="hidden" name="_csrf" value="<%= _token %>">
+      <textarea name="body" maxlength="5000" style="width:100%;min-height:80px"><%= item.body %></textarea>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="btn" type="submit">Save</button>
+        <button class="btn ghost cancel-edit-post" type="button">Cancel</button>
+      </div>
+    </form>
+  <% } %>
 
   <div class="post-comments">
     <% (item.comments || []).forEach(function(c){ %>
-      <div class="comment">
+      <div class="comment" data-comment-id="<%= c.id %>">
         <b><%= c.display_name %></b> <span class="post-handle">@<%= c.username %></span>
-        <span class="post-time">· <%= time(c.created_at) %></span><br>
-        <% if (c.body && c.body.startsWith('/uploads/stickers/')) { %>
+        <span class="post-time">· <%= time(c.created_at) %></span>
+        <% if (c.edited_at) { %><a href="/posts/<%= c.id %>/history?type=comment&post_id=<%= item.interactId %>" class="edited-link" title="<%= new Date(c.edited_at).toLocaleString() %>">(edited)</a><% } %><br>
+        <span class="comment-body"><% if (c.body && c.body.startsWith('/uploads/stickers/')) { %>
           <img src="<%= c.body %>" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker">
         <% } else { %>
           <%= c.body %>
+        <% } %></span>
+        <% if (u && c.user_id === u.id) { %>
+          <button class="btn ghost edit-comment-btn" style="font-size:11px;padding:1px 6px">Edit</button>
+          <form class="edit-comment-form" method="post" action="/posts/<%= item.interactId %>/comments/<%= c.id %>/edit" style="display:none;margin-top:4px">
+            <input type="hidden" name="_csrf" value="<%= _token %>">
+            <input type="text" name="body" value="<%= c.body %>" maxlength="1000" style="width:80%">
+            <button class="btn" type="submit" style="font-size:11px;padding:2px 8px">Save</button>
+            <button class="btn ghost cancel-edit-comment" type="button" style="font-size:11px;padding:2px 8px">Cancel</button>
+          </form>
         <% } %>
       </div>
     <% }) %>

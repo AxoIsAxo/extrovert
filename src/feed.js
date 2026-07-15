@@ -65,7 +65,7 @@ function candidatePosts(viewerId, limit = 500) {
          OR p.user_id IN (SELECT uid FROM friends)
          OR p.user_id IN (SELECT uid FROM foaf)
     )
-    SELECT b.id, b.user_id, b.type, b.body, b.media_path, b.repost_of_id, b.created_at,
+    SELECT b.id, b.user_id, b.type, b.body, b.media_path, b.repost_of_id, b.created_at, b.edited_at,
            b.eff_id, b.eff_author_id,
            u.username  AS author_username,
            u.display_name AS author_name,
@@ -156,6 +156,7 @@ function hydrateItem(row, viewerId, score) {
     body: contentPost.body,
     mediaPath: contentPost.media_path,
     createdAt: row.created_at,
+    editedAt: contentPost.edited_at,
     isRepost: row.type === 'repost',
     reposterName: row.type === 'repost' ? reposter?.display_name : null,
     reposterUsername: row.type === 'repost' ? reposter?.username : null,

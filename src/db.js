@@ -262,6 +262,17 @@ function init() {
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action, created_at);
+
+    CREATE TABLE IF NOT EXISTS edit_history (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      entity_type TEXT NOT NULL,
+      entity_id   INTEGER NOT NULL,
+      old_body    TEXT NOT NULL,
+      new_body    TEXT NOT NULL,
+      edited_at   INTEGER NOT NULL,
+      edited_by   INTEGER NOT NULL REFERENCES users(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_edit_history_entity ON edit_history(entity_type, entity_id);
   `);
 }
 
@@ -280,6 +291,10 @@ try { db.exec(`ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0`
 try { db.exec(`ALTER TABLE users ADD COLUMN banned INTEGER NOT NULL DEFAULT 0`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN avatar TEXT`); } catch {}
 try { db.exec(`ALTER TABLE rooms ADD COLUMN is_public INTEGER NOT NULL DEFAULT 1`); } catch {}
+try { db.exec(`ALTER TABLE posts ADD COLUMN edited_at INTEGER`); } catch {}
+try { db.exec(`ALTER TABLE comments ADD COLUMN edited_at INTEGER`); } catch {}
+try { db.exec(`ALTER TABLE messages ADD COLUMN edited_at INTEGER`); } catch {}
+try { db.exec(`ALTER TABLE room_messages ADD COLUMN edited_at INTEGER`); } catch {}
 try { db.exec(`ALTER TABLE oauth_codes ADD COLUMN nonce TEXT`); } catch {}
 try { db.exec(`CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, reporter_id INTEGER NOT NULL REFERENCES users(id), reported_user_id INTEGER NOT NULL REFERENCES users(id), message_id INTEGER NOT NULL, message_body TEXT NOT NULL, channel_id INTEGER NOT NULL, room_id INTEGER NOT NULL, reason TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL)`); } catch {}
 try { db.exec(`CREATE TABLE IF NOT EXISTS join_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, room_id INTEGER NOT NULL REFERENCES rooms(id), user_id INTEGER NOT NULL REFERENCES users(id), status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL)`); } catch {}
@@ -456,6 +471,57 @@ function commentsForPost(postId) {
      JOIN users u ON u.id = c.user_id
      WHERE c.post_id = ? ORDER BY c.created_at ASC`
   ).all(postId);
+}
+
+// ---------- edit history ----------
+function editPost(postId, userId, newBody) {
+  const post = db.prepare(`SELECT * FROM posts WHERE id = ? AND user_id = ?`).get(postId, userId);
+  if (!post) return false;
+  const now = Date.now();
+  db.prepare(`INSERT INTO edit_history (entity_type, entity_id, old_body, new_body, edited_at, edited_by) VALUES (?,?,?,?,?,?)`)
+    .run('post', postId, post.body, newBody, now, userId);
+  db.prepare(`UPDATE posts SET body = ?, edited_at = ? WHERE id = ?`).run(newBody, now, postId);
+  return true;
+}
+
+function editComment(commentId, userId, newBody) {
+  const comment = db.prepare(`SELECT * FROM comments WHERE id = ? AND user_id = ?`).get(commentId, userId);
+  if (!comment) return false;
+  const now = Date.now();
+  db.prepare(`INSERT INTO edit_history (entity_type, entity_id, old_body, new_body, edited_at, edited_by) VALUES (?,?,?,?,?,?)`)
+    .run('comment', commentId, comment.body, newBody, now, userId);
+  db.prepare(`UPDATE comments SET body = ?, edited_at = ? WHERE id = ?`).run(newBody, now, commentId);
+  return true;
+}
+
+function editMessage(msgId, userId, newBody) {
+  const msg = db.prepare(`SELECT * FROM messages WHERE id = ? AND from_id = ?`).get(msgId, userId);
+  if (!msg) return false;
+  const now = Date.now();
+  db.prepare(`INSERT INTO edit_history (entity_type, entity_id, old_body, new_body, edited_at, edited_by) VALUES (?,?,?,?,?,?)`)
+    .run('message', msgId, msg.body, newBody, now, userId);
+  db.prepare(`UPDATE messages SET body = ?, edited_at = ? WHERE id = ?`).run(newBody, now, msgId);
+  return true;
+}
+
+function editRoomMessage(msgId, userId, newBody) {
+  const msg = db.prepare(`SELECT * FROM room_messages WHERE id = ? AND user_id = ?`).get(msgId, userId);
+  if (!msg) return false;
+  const now = Date.now();
+  db.prepare(`INSERT INTO edit_history (entity_type, entity_id, old_body, new_body, edited_at, edited_by) VALUES (?,?,?,?,?,?)`)
+    .run('room_message', msgId, msg.body, newBody, now, userId);
+  db.prepare(`UPDATE room_messages SET body = ?, edited_at = ? WHERE id = ?`).run(newBody, now, msgId);
+  return true;
+}
+
+function getEditHistory(entityType, entityId) {
+  return db.prepare(`
+    SELECT eh.*, u.username, u.display_name
+    FROM edit_history eh
+    JOIN users u ON u.id = eh.edited_by
+    WHERE eh.entity_type = ? AND eh.entity_id = ?
+    ORDER BY eh.edited_at ASC
+  `).all(entityType, entityId);
 }
 
 // ---------- shares ----------
@@ -814,9 +880,9 @@ function deleteRoomChannel(id) {
 }
 function getRoomMessages(channelId, beforeId) {
   if (beforeId) {
-    return db.prepare(`SELECT m.id, m.body, m.created_at, u.id AS user_id, u.username, u.display_name, u.avatar FROM room_messages m INNER JOIN users u ON u.id = m.user_id WHERE m.channel_id = ? AND m.id < ? ORDER BY m.id DESC LIMIT 50`).all(channelId, beforeId);
+    return db.prepare(`SELECT m.id, m.body, m.created_at, m.edited_at, u.id AS user_id, u.username, u.display_name, u.avatar FROM room_messages m INNER JOIN users u ON u.id = m.user_id WHERE m.channel_id = ? AND m.id < ? ORDER BY m.id DESC LIMIT 50`).all(channelId, beforeId);
   }
-  return db.prepare(`SELECT m.id, m.body, m.created_at, u.id AS user_id, u.username, u.display_name, u.avatar FROM room_messages m INNER JOIN users u ON u.id = m.user_id WHERE m.channel_id = ? ORDER BY m.id DESC LIMIT 50`).all(channelId).reverse();
+  return db.prepare(`SELECT m.id, m.body, m.created_at, m.edited_at, u.id AS user_id, u.username, u.display_name, u.avatar FROM room_messages m INNER JOIN users u ON u.id = m.user_id WHERE m.channel_id = ? ORDER BY m.id DESC LIMIT 50`).all(channelId).reverse();
 }
 function sendRoomMessage(channelId, userId, body) {
   return db.prepare(`INSERT INTO room_messages (channel_id, user_id, body, created_at) VALUES (?,?,?,?)`).run(channelId, userId, body, Date.now()).lastInsertRowid;
@@ -1080,6 +1146,8 @@ module.exports = {
   toggleLike, hasLiked,
   // comments
   addComment, commentsForPost,
+  // edit history
+  editPost, editComment, editMessage, editRoomMessage, getEditHistory,
   // shares
   sharePost, hasShared, hasReposted,
   // customization

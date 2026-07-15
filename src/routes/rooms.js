@@ -4,7 +4,7 @@ const express = require('express');
 const { sanitizeProfileHTML, sanitizeCSS } = require('../sanitize');
 
 const {
-  createRoom, getRoom, getRoomsForUser, getAvailableRooms, updateRoom, deleteRoom, deleteRoomMessage,
+  createRoom, getRoom, getRoomsForUser, getAvailableRooms, updateRoom, deleteRoom,   deleteRoomMessage, editRoomMessage, getEditHistory,
   isRoomMember, addRoomMember, removeRoomMember, getRoomMembers, getUserRoomRole, countRoomMembers,
   createRoomRole, getRoomRole, getRoomRoles, updateRoomRole, deleteRoomRole, transferFounder,
   createRoomChannel, getRoomChannel, getRoomChannels, updateRoomChannel, deleteRoomChannel,
@@ -386,6 +386,22 @@ router.post('/:id/channels/:cid/messages/:mid/delete', (req, res) => {
   const canModerate = checkPerm(room.id, userId, PERM.MANAGE_MESSAGES);
   if (!canDeleteOwn && !canModerate && !res.locals.currentUser.is_admin) return res.status(403).json({ error: 'No permission' });
   deleteRoomMessage(msgId);
+  res.json({ ok: true });
+});
+
+// Edit a message
+router.post('/:id/channels/:cid/messages/:mid/edit', (req, res) => {
+  if (!res.locals.currentUser) return res.status(401).json({ error: 'Not logged in' });
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+  const userId = res.locals.currentUser.id;
+  if (!isRoomMember(room.id, userId) && !res.locals.currentUser.is_admin) return res.status(403).json({ error: 'Not a member' });
+  const channel = getRoomChannel(Number(req.params.cid));
+  if (!channel || channel.room_id !== room.id) return res.status(404).json({ error: 'Channel not found' });
+  const body = String(req.body.body || '').trim();
+  if (!body) return res.status(400).json({ error: 'Message is empty' });
+  const ok = editRoomMessage(Number(req.params.mid), userId, body);
+  if (!ok) return res.status(403).json({ error: 'Not your message' });
   res.json({ ok: true });
 });
 

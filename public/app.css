@@ -412,6 +412,16 @@ a.conv-row:hover { color: var(--primary); }
 .room-card strong { display: block; font-size: 15px; margin-bottom: 2px; }
 .room-card small { font-size: 12px; }
 
+.edited-link { font-size:0.8em; color:var(--text-muted); text-decoration:none; }
+.edited-link:hover { text-decoration:underline; }
+.edited-badge { font-size:0.8em; color:var(--text-muted); }
+.edited-indicator { font-size:0.7em; color:var(--text-muted); margin-left:4px; }
+.post-edited { margin-top:-0.5rem; margin-bottom:0.5rem; font-size:0.85rem; }
+.edit-post-form textarea { background:var(--surface-container-high); color:var(--on-surface); border:1px solid var(--outline-variant); border-radius:8px; padding:0.5rem; }
+.room-msg-edit-input { background:var(--surface-container-high); color:var(--on-surface); border:1px solid var(--outline-variant); border-radius:4px; padding:2px 6px; }
+.edit-msg-btn { cursor:pointer; }
+.edit-comment-btn, .edit-post-btn { cursor:pointer; }
+
 @media (max-width: 600px) {
   .room-layout { flex-direction: column; height: auto; border-radius: 0; border: none; }
   .room-sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--outline-variant); max-height: 200px; }

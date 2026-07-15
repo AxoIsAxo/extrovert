@@ -5,6 +5,7 @@ const {
   db, getUserByUsername, getUserById, areMutualFollowers,
   sendMessage, getConversations, getMessages, markConversationRead,
   createNotification, setPublicKey, getPublicKey, getEncryptedPrivateKey,
+  editMessage, getEditHistory,
 } = require('../db');
 
 const router = express.Router();
@@ -79,6 +80,21 @@ router.post('/:username/send', (req, res) => {
     }
   }
   res.redirect('/chats/' + other.username);
+});
+
+// Edit a message.
+router.post('/:username/edit/:mid', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return req.xhr ? res.json({ error: 'not logged in' }) : res.redirect('/login');
+  const body = String(req.body.body || '').trim().slice(0, 5000);
+  if (!body) return req.xhr ? res.json({ error: 'body required' }) : res.redirect(back(req, '/chats'));
+  const ok = editMessage(Number(req.params.mid), user.id, body);
+  if (!ok) return req.xhr ? res.json({ error: 'not found or not yours' }) : res.status(404).send('Message not found or not yours.');
+  if (req.xhr) {
+    const msg = db.prepare(`SELECT id, from_id, body, created_at, edited_at, key_for_sender, key_for_recipient FROM messages WHERE id = ?`).get(Number(req.params.mid));
+    return res.json({ message: msg });
+  }
+  res.redirect('/chats/' + req.params.username);
 });
 
 module.exports = router;
