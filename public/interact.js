@@ -172,7 +172,7 @@ document.addEventListener('DOMContentLoaded', function(){
   }
 
   // Inline editing helpers
-  function replaceWithInput(el, className, multiline, saveFn, cancelFn) {
+  function replaceWithInput(el, className, multiline, saveFn, cancelFn, noButtons) {
     var origText = el.textContent.trim();
     var input;
     if (multiline) {
@@ -186,30 +186,32 @@ document.addEventListener('DOMContentLoaded', function(){
     el.replaceWith(input);
 
     // Save and Cancel buttons
-    var btnWrap = document.createElement('span');
-    btnWrap.className = 'inline-edit-btns';
-    btnWrap.style.cssText = 'display:inline-flex;gap:4px;margin-left:4px;vertical-align:middle';
-    if (multiline) {
-      btnWrap.style.cssText = 'display:flex;gap:6px;margin-top:6px';
+    if (!noButtons) {
+      var btnWrap = document.createElement('span');
+      btnWrap.className = 'inline-edit-btns';
+      btnWrap.style.cssText = 'display:inline-flex;gap:4px;margin-left:4px;vertical-align:middle';
+      if (multiline) {
+        btnWrap.style.cssText = 'display:flex;gap:6px;margin-top:6px';
+      }
+
+      var saveBtn = document.createElement('button');
+      saveBtn.className = 'btn inline-save-btn';
+      saveBtn.textContent = 'Save';
+      saveBtn.type = 'button';
+      saveBtn.style.cssText = 'font-size:12px;padding:4px 12px;cursor:pointer';
+      saveBtn.addEventListener('click', function() { finish(true); });
+
+      var cancelBtn = document.createElement('button');
+      cancelBtn.className = 'btn ghost inline-cancel-btn';
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.type = 'button';
+      cancelBtn.style.cssText = 'font-size:12px;padding:4px 12px;cursor:pointer';
+      cancelBtn.addEventListener('click', function() { finish(false); });
+
+      btnWrap.appendChild(saveBtn);
+      btnWrap.appendChild(cancelBtn);
+      input.parentNode.insertBefore(btnWrap, input.nextSibling);
     }
-
-    var saveBtn = document.createElement('button');
-    saveBtn.className = 'btn inline-save-btn';
-    saveBtn.textContent = 'Save';
-    saveBtn.type = 'button';
-    saveBtn.style.cssText = 'font-size:12px;padding:4px 12px;cursor:pointer';
-    saveBtn.addEventListener('click', function() { finish(true); });
-
-    var cancelBtn = document.createElement('button');
-    cancelBtn.className = 'btn ghost inline-cancel-btn';
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.type = 'button';
-    cancelBtn.style.cssText = 'font-size:12px;padding:4px 12px;cursor:pointer';
-    cancelBtn.addEventListener('click', function() { finish(false); });
-
-    btnWrap.appendChild(saveBtn);
-    btnWrap.appendChild(cancelBtn);
-    input.parentNode.insertBefore(btnWrap, input.nextSibling);
 
     input.focus();
     if (!multiline) input.setSelectionRange(input.value.length, input.value.length);
@@ -218,16 +220,14 @@ document.addEventListener('DOMContentLoaded', function(){
       if (save) {
         var val = input.value.trim();
         if (val && val !== origText) {
-          saveBtn.disabled = true;
-          saveBtn.textContent = 'Saving…';
+          if (!noButtons) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
           saveFn(val, function() {
             var span = document.createElement(el.tagName);
             span.className = el.className;
             span.textContent = val;
             restore(span);
           }, function() {
-            saveBtn.disabled = false;
-            saveBtn.textContent = 'Save';
+            if (!noButtons) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
             input.value = origText;
             cancel();
           });
@@ -247,7 +247,7 @@ document.addEventListener('DOMContentLoaded', function(){
 
     function restore(span) {
       input.replaceWith(span);
-      btnWrap.remove();
+      if (btnWrap) btnWrap.remove();
     }
 
     input.addEventListener('keydown', function(ev) {
@@ -291,8 +291,29 @@ document.addEventListener('DOMContentLoaded', function(){
       var action = dataEl.dataset.action;
       var csrf = dataEl.dataset.csrf;
       editPostBtn.style.display = 'none';
-      function showEditBtn() { editPostBtn.style.display = ''; }
-      replaceWithInput(bodyEl, 'post-body-edit', true,
+      var deleteBtn = postEl.querySelector('.post-actions .btn.ghost.danger');
+      if (deleteBtn) deleteBtn.style.display = 'none';
+      var postActions = postEl.querySelector('.post-actions');
+      var editActions = document.createElement('span');
+      editActions.className = 'inline-edit-btns';
+      editActions.style.marginLeft = 'auto';
+      var saveBtn = document.createElement('button');
+      saveBtn.className = 'btn inline-save-btn';
+      saveBtn.textContent = 'Save';
+      saveBtn.type = 'button';
+      var cancelBtn = document.createElement('button');
+      cancelBtn.className = 'btn ghost inline-cancel-btn';
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.type = 'button';
+      editActions.appendChild(saveBtn);
+      editActions.appendChild(cancelBtn);
+      postActions.appendChild(editActions);
+      function showEditBtn() {
+        editPostBtn.style.display = '';
+        if (deleteBtn) deleteBtn.style.display = '';
+        if (editActions.parentNode) editActions.remove();
+      }
+      var editState = replaceWithInput(bodyEl, 'post-body-edit', true,
         function(val, onSuccess) {
           fetch(action, {
             method: 'POST',
@@ -302,8 +323,11 @@ document.addEventListener('DOMContentLoaded', function(){
             if (d.ok) { onSuccess(); showEditBtn(); } else { location.reload(); }
           });
         },
-        showEditBtn
+        showEditBtn,
+        true
       );
+      saveBtn.addEventListener('click', function() { editState.finish(true); });
+      cancelBtn.addEventListener('click', function() { editState.finish(false); });
       return;
     }
 

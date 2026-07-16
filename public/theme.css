@@ -370,6 +370,9 @@ label { display: block; font-size: var(--fs-sm); color: var(--text-secondary); m
 }
 .post-actions .boost-btn:hover { background: var(--secondary); color: var(--on-primary); border-color: transparent; }
 .post-actions .boost-btn .ico { color: var(--accent); }
+.post-actions .inline-edit-btns { margin-left: auto; display: inline-flex; gap: 6px; align-items: center; }
+.post-actions .inline-edit-btns .inline-save-btn,
+.post-actions .inline-edit-btns .inline-cancel-btn { padding: 6px 14px; min-height: 0; font-size: 12px; gap: 0; }
 
 /* ── Comments ─────────────────────────────────────────────────────── */
 
