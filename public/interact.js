@@ -290,6 +290,8 @@ document.addEventListener('DOMContentLoaded', function(){
       if (!bodyEl || !dataEl) return;
       var action = dataEl.dataset.action;
       var csrf = dataEl.dataset.csrf;
+      editPostBtn.style.display = 'none';
+      function showEditBtn() { editPostBtn.style.display = ''; }
       replaceWithInput(bodyEl, 'post-body-edit', true,
         function(val, onSuccess) {
           fetch(action, {
@@ -297,9 +299,10 @@ document.addEventListener('DOMContentLoaded', function(){
             headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
             body: 'body=' + encodeURIComponent(val) + '&_csrf=' + encodeURIComponent(csrf),
           }).then(function(r){ return r.json(); }).then(function(d){
-            if (d.ok) { onSuccess(); } else { location.reload(); }
+            if (d.ok) { onSuccess(); showEditBtn(); } else { location.reload(); }
           });
-        }
+        },
+        showEditBtn
       );
       return;
     }
