@@ -1100,10 +1100,11 @@ function rotateRefreshToken(oldRefreshToken, newToken, newRefreshToken, expiresA
   const existing = db.prepare(`SELECT * FROM oauth_tokens WHERE refresh_token = ?`).get(oldRefreshToken);
   if (!existing) return null;
   db.prepare(`DELETE FROM oauth_tokens WHERE refresh_token = ?`).run(oldRefreshToken);
+  const refreshExpiresAt = now + 90 * 24 * 60 * 60 * 1000; // 90 days
   db.prepare(`
-    INSERT INTO oauth_tokens (token, refresh_token, app_id, user_id, scopes, expires_at, created_at)
-    VALUES (?,?,?,?,?,?,?)
-  `).run(newToken, newRefreshToken, existing.app_id, existing.user_id, existing.scopes, expiresAt || null, now);
+    INSERT INTO oauth_tokens (token, refresh_token, app_id, user_id, scopes, expires_at, refresh_expires_at, created_at)
+    VALUES (?,?,?,?,?,?,?,?)
+  `).run(newToken, newRefreshToken, existing.app_id, existing.user_id, existing.scopes, expiresAt || null, refreshExpiresAt, now);
   return existing;
 }
 
