@@ -144,7 +144,7 @@ If you only need API access (not authentication), the OAuth 2.0 flow works witho
 
 ## Rate Limiting
 
-- Per-token limit: **120 requests per minute**
+- Per-token (or per-IP for unauthenticated requests): **120 requests per minute**
 - Rate limit headers are returned on every response:
   - \`X-RateLimit-Limit\`
   - \`X-RateLimit-Remaining\`
@@ -162,6 +162,10 @@ List endpoints use cursor-based pagination. The response includes a \`pagination
 }
 \`\`\`
 Pass the \`next\` cursor value as the \`?cursor=\` query parameter to get the next page.
+
+## Timestamps
+
+All API body fields use **millisecond Unix timestamps** (e.g. "created_at", "updated_at"). OAuth token "created_at" and JWT claims ("iat", "exp") use **second Unix timestamps**. Check individual field descriptions for details.
 
 ## Idempotency
 
@@ -329,7 +333,7 @@ Pass the \`next\` cursor value as the \`?cursor=\` query parameter to get the ne
       get: {
         summary: 'Verify and return the authenticated user',
         tags: ['Accounts'],
-        security: [{ oauth2: ['read', 'profile'] }],
+        security: [{ oauth2: ['read'] }],
         responses: { '200': { description: 'Account object' } },
       },
     },
@@ -337,7 +341,7 @@ Pass the \`next\` cursor value as the \`?cursor=\` query parameter to get the ne
       patch: {
         summary: 'Update the authenticated user\'s profile',
         tags: ['Accounts'],
-        security: [{ oauth2: ['write', 'profile'] }],
+        security: [{ oauth2: ['profile'] }],
         requestBody: {
           content: {
             'application/json': {
@@ -587,6 +591,23 @@ Pass the \`next\` cursor value as the \`?cursor=\` query parameter to get the ne
         security: [{ oauth2: ['read'] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
         responses: { '200': { description: 'Media object' } },
+      },
+    },
+    '/api/v1/calls/presence': {
+      get: {
+        summary: 'Get online presence of your network',
+        tags: ['Calls'],
+        security: [{ oauth2: ['read'] }],
+        responses: { '200': { description: 'List of online users in your network' } },
+      },
+    },
+    '/api/v1/calls/presence/{username}': {
+      get: {
+        summary: 'Get presence of a specific user',
+        tags: ['Calls'],
+        security: [{ oauth2: ['read'] }],
+        parameters: [{ name: 'username', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Presence object' } },
       },
     },
     '/api/v1/search': {

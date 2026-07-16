@@ -6,12 +6,15 @@ const multer = require('multer');
 const path = require('node:path');
 const fs = require('node:fs');
 const { Buffer } = require('node:buffer');
+const sharp = require('sharp');
 const db = require('../db');
 const { canView } = require('../network');
 const feed = require('../feed');
 const { requireApiAuth, clientAppAuth, generateToken, VALID_SCOPES } = require('../api-auth');
-const { signIdToken } = require('../oidc');
+const { signIdToken, ISSUER } = require('../oidc');
 const { getOnlineUsers, getUserPresence } = require('../webrtc-signaling');
+const { onNotification } = require('../notif-broadcaster');
+const dm = require('../dm');
 
 const router = express.Router();
 
@@ -75,6 +78,7 @@ function serializeAccount(user, currentUserId) {
     avatar: user.avatar ? `/uploads/${user.avatar}` : null,
     bio: user.bio || '',
     created_at: user.created_at,
+    statuses_count: db.countPostsByUser(user.id),
     followers_count: db.countFollowers(user.id),
     following_count: db.countFollowing(user.id),
     is_following: currentUserId ? db.isFollowing(currentUserId, user.id) : false,
@@ -303,7 +307,7 @@ router.post('/oauth/token', clientAppAuth, (req, res) => {
       if (scopesSet.has('profile')) {
         idTokenPayload.preferred_username = user.username;
         idTokenPayload.name = user.display_name;
-        if (user.avatar) idTokenPayload.picture = '/uploads/' + user.avatar;
+        if (user.avatar) idTokenPayload.picture = `${ISSUER}/uploads/${user.avatar}`;
       }
       tokenResponse.id_token = signIdToken(idTokenPayload);
     }
@@ -318,7 +322,7 @@ router.post('/oauth/token', clientAppAuth, (req, res) => {
     if (!existing) {
       return errorResponse(res, 400, 'Bad Request', 'Invalid or already revoked refresh token.');
     }
-    if (existing.expires_at && Date.now() > existing.expires_at) {
+    if (existing.refresh_expires_at && Date.now() > existing.refresh_expires_at) {
       return errorResponse(res, 400, 'Bad Request', 'Refresh token has expired.');
     }
 
@@ -391,9 +395,27 @@ router.get('/oauth/userinfo', requireApiAuth('openid'), (req, res) => {
   if (scopesSet.has('profile')) {
     info.preferred_username = user.username;
     info.name = user.display_name;
-    if (user.avatar) info.picture = '/uploads/' + user.avatar;
+    if (user.avatar) info.picture = `${ISSUER}/uploads/${user.avatar}`;
   }
   res.json(info);
+});
+
+// Avatar upload dir
+const AVATAR_DIR = path.join(__dirname, '..', '..', 'uploads', 'avatars');
+fs.mkdirSync(AVATAR_DIR, { recursive: true });
+
+const avatarUpload = multer({
+  storage: multer.diskStorage({
+    destination: AVATAR_DIR,
+    filename: (req, file, cb) => {
+      cb(null, crypto.randomBytes(12).toString('hex') + '.jpg');
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) return cb(null, false);
+    cb(null, true);
+  },
 });
 
 // ======== Accounts ========
@@ -403,12 +425,47 @@ router.get('/accounts/verify_credentials', requireApiAuth('read'), (req, res) =>
 });
 
 router.patch('/accounts/update_credentials', requireApiAuth('profile'), (req, res) => {
-  const { display_name, bio } = req.body;
+  const { display_name, bio, theme } = req.body;
   if (display_name !== undefined) req.apiUser.display_name = String(display_name).trim().slice(0, 100);
   if (bio !== undefined) req.apiUser.bio = String(bio).trim().slice(0, 500);
+  if (theme !== undefined && ['light', 'dark', 'default'].includes(theme)) {
+    req.apiUser.theme = theme;
+    db.setUserTheme(req.apiUser.id, theme);
+  }
   db.updateUserProfile(req.apiUser.id, { displayName: req.apiUser.display_name, bio: req.apiUser.bio });
   db.auditLog('profile_updated', req.apiUser.id, 'Updated via API');
   responseEnvelope(res, serializeAccount(req.apiUser, req.apiUser.id));
+});
+
+// Avatar upload via API
+router.post('/accounts/avatar', requireApiAuth('profile'), avatarUpload.single('avatar'), async (req, res) => {
+  if (!req.file) return errorResponse(res, 400, 'Bad Request', 'No file uploaded. Use multipart/form-data with field "avatar".');
+
+  const inputPath = req.file.path;
+  const outputName = crypto.randomBytes(12).toString('hex') + '.jpg';
+  const outputPath = path.join(AVATAR_DIR, outputName);
+
+  try {
+    await sharp(inputPath).resize(200, 200, { fit: 'cover', position: 'center' }).jpeg({ quality: 85 }).toFile(outputPath);
+    fs.unlinkSync(inputPath);
+    db.setAvatar(req.apiUser.id, 'avatars/' + outputName);
+  } catch (e) {
+    try { fs.unlinkSync(inputPath); } catch {}
+    return errorResponse(res, 400, 'Bad Request', 'Failed to process image.');
+  }
+
+  db.auditLog('avatar_updated', req.apiUser.id, 'Updated via API');
+  responseEnvelope(res, serializeAccount(db.getUserById(req.apiUser.id), req.apiUser.id));
+});
+
+router.get('/accounts/relationships', requireApiAuth('read'), (req, res) => {
+  const ids = String(req.query.id || '').split(',').map(Number).filter(Boolean);
+  const results = ids.map(id => ({
+    id: String(id),
+    following: db.isFollowing(req.apiUser.id, id),
+    followed_by: db.isFollowing(id, req.apiUser.id),
+  }));
+  responseEnvelope(res, results);
 });
 
 router.get('/accounts/:id', requireApiAuth('read'), (req, res) => {
@@ -600,7 +657,7 @@ router.get('/statuses/:id/context', requireApiAuth('read'), (req, res) => {
         id: String(c.id),
         body: c.body,
         created_at: c.created_at,
-        account: serializeAccount({ id: c.user_id, username: c.username, display_name: c.display_name, avatar: null, bio: '', created_at: 0 }, req.apiUser.id),
+        account: serializeAccount({ id: c.user_id, username: c.username, display_name: c.display_name, avatar: c.avatar, bio: '', created_at: c.user_created_at }, req.apiUser.id),
       })),
     },
   });
@@ -659,11 +716,30 @@ router.get('/timelines/home', requireApiAuth('read'), (req, res) => {
   }
   items = items.slice(0, limit);
 
+  // Batch-fetch counts for all posts in the page
+  const postIds = items.map(i => i.interactId || i.id).filter(Boolean);
+  const counts = db.batchPostCounts(postIds);
+
   const results = items.map(item => {
     const post = db.getPostById(item.id);
     if (!post) return null;
     const author = db.getUserById(post.user_id);
-    return serializePost(post, author, req.apiUser.id);
+    const targetId = item.interactId || post.id;
+    return {
+      id: String(post.id),
+      type: post.type,
+      body: post.body || '',
+      media_path: post.media_path || null,
+      created_at: post.created_at,
+      account: author ? serializeAccount(author, req.apiUser.id) : null,
+      likes_count: counts.likeMap[targetId] || 0,
+      shares_count: counts.shareMap[targetId] || 0,
+      comments_count: counts.commentMap[targetId] || 0,
+      liked: req.apiUser.id ? db.hasLiked(req.apiUser.id, targetId) : false,
+      shared: req.apiUser.id ? db.hasShared(req.apiUser.id, targetId) : false,
+      repost_of_id: post.repost_of_id ? String(post.repost_of_id) : null,
+      is_own: req.apiUser.id ? req.apiUser.id === post.user_id : false,
+    };
   }).filter(Boolean);
 
   responseEnvelope(res, results, {
@@ -681,16 +757,21 @@ router.get('/timelines/public', (req, res) => {
 
 router.get('/notifications', requireApiAuth('notifications'), (req, res) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 20, 40);
-  const notifications = db.getNotifications(req.apiUser.id, limit);
+  const cursor = req.query.cursor ? decodeCursor(req.query.cursor) : null;
+  const notifications = db.getNotifications(req.apiUser.id, limit, cursor ? cursor.id : null);
 
   responseEnvelope(res, notifications.map(n => ({
     id: String(n.id),
     type: n.type,
     created_at: n.created_at,
     read: !!n.read,
-    account: serializeAccount({ id: n.actor_id, username: n.actor_username, display_name: n.actor_name, avatar: null, bio: '', created_at: 0 }, req.apiUser.id),
+    account: serializeAccount({ id: n.actor_id, username: n.actor_username, display_name: n.actor_name, avatar: n.actor_avatar, bio: '', created_at: n.actor_created_at }, req.apiUser.id),
     post_id: n.post_id ? String(n.post_id) : null,
-  })));
+  })), {
+    pagination: {
+      next: makeCursor(notifications),
+    },
+  });
 });
 
 router.post('/notifications/clear', requireApiAuth('notifications'), (req, res) => {
@@ -698,9 +779,39 @@ router.post('/notifications/clear', requireApiAuth('notifications'), (req, res) 
   res.json({ data: { ok: true } });
 });
 
+router.get('/notifications/unread_count', requireApiAuth('notifications'), (req, res) => {
+  const count = db.countUnreadNotifications(req.apiUser.id);
+  responseEnvelope(res, { count });
+});
+
+// SSE notification stream
+router.get('/notifications/stream', requireApiAuth('notifications'), (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+
+  res.write('event: connected\ndata: {}\n\n');
+
+  const heartbeat = setInterval(() => {
+    res.write(': heartbeat\n\n');
+  }, 15000);
+
+  const unsubscribe = onNotification(req.apiUser.id, (notif) => {
+    res.write(`event: notification\ndata: ${JSON.stringify(notif)}\n\n`);
+  });
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+  });
+});
+
 // ======== Media ========
 
-router.post('/media', requireApiAuth('media.write'), upload.single('file'), (req, res) => {
+router.post('/media', requireApiAuth('media.write'), upload.single('file'), async (req, res) => {
   if (!req.file) return errorResponse(res, 400, 'Bad Request', 'No file uploaded. Use multipart/form-data with field "file".');
 
   const mimeType = req.file.mimetype;
@@ -709,7 +820,19 @@ router.post('/media', requireApiAuth('media.write'), upload.single('file'), (req
 
   const id = db.createMediaAttachment(req.apiUser.id, filePath, mimeType, fileSize);
 
+  // Read image dimensions with sharp (skip for video).
+  if (mimeType.startsWith('image/')) {
+    try {
+      const metadata = await sharp(req.file.path).metadata();
+      if (metadata.width && metadata.height) {
+        db.updateMediaAttachmentDimensions(id, metadata.width, metadata.height);
+      }
+    } catch {}
+  }
+
   db.auditLog('media_uploaded', req.apiUser.id, `Media ${id} (${mimeType}, ${fileSize} bytes)`);
+
+  const media = db.getMediaAttachment(id);
 
   res.status(201).json({
     data: {
@@ -717,6 +840,8 @@ router.post('/media', requireApiAuth('media.write'), upload.single('file'), (req
       url: `/api-uploads/${filePath}`,
       mime_type: mimeType,
       file_size: fileSize,
+      width: media.width,
+      height: media.height,
       created_at: Date.now(),
     },
   });
@@ -785,6 +910,115 @@ router.get('/calls/presence', requireApiAuth, (req, res) => {
 router.get('/calls/presence/:username', requireApiAuth, (req, res) => {
   const presence = getUserPresence(req.params.username);
   res.json(presence);
+});
+
+// ======== Direct Messages (E2E) ========
+
+// List conversations
+router.get('/conversations', requireApiAuth('read:direct'), (req, res) => {
+  const conversations = dm.getConversations(req.apiUser.id);
+  const filtered = conversations.filter(c => db.areMutualFollowers(req.apiUser.id, c.id));
+  responseEnvelope(res, filtered.map(c => ({
+    id: String(c.id),
+    username: c.username,
+    display_name: c.display_name,
+    avatar: c.avatar,
+    last_message: c.last_message,
+    last_at: c.last_at,
+    unread: c.unread,
+  })));
+});
+
+// Message history with a user
+router.get('/conversations/:username', requireApiAuth('read:direct'), (req, res) => {
+  const other = db.getUserByUsername(req.params.username);
+  if (!other) return errorResponse(res, 404, 'Not Found', 'User not found.');
+  if (!db.areMutualFollowers(req.apiUser.id, other.id)) {
+    return errorResponse(res, 403, 'Forbidden', 'You can only message mutual followers.');
+  }
+
+  const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+  const cursor = req.query.cursor ? decodeCursor(req.query.cursor) : null;
+  const messages = dm.getMessages(req.apiUser.id, other.id, limit, cursor ? cursor.id : null);
+
+  responseEnvelope(res, messages.map(m => ({
+    id: String(m.id),
+    from_id: String(m.from_id),
+    to_id: String(m.to_id),
+    body: m.body,
+    created_at: m.created_at,
+    edited_at: m.edited_at,
+    key_for_sender: m.key_for_sender,
+    key_for_recipient: m.key_for_recipient,
+  })), {
+    pagination: {
+      next: makeCursor(messages),
+    },
+  });
+});
+
+// Send a message
+router.post('/conversations/:username/messages', requireApiAuth('write:direct'), (req, res) => {
+  const other = db.getUserByUsername(req.params.username);
+  if (!other) return errorResponse(res, 404, 'Not Found', 'User not found.');
+  if (!db.areMutualFollowers(req.apiUser.id, other.id)) {
+    return errorResponse(res, 403, 'Forbidden', 'You can only message mutual followers.');
+  }
+
+  const body = String(req.body.body || '').trim().slice(0, 5000);
+  if (!body) return errorResponse(res, 400, 'Bad Request', 'body is required.');
+
+  const keyForSender = String(req.body.key_for_sender || '').trim() || null;
+  const keyForRecipient = String(req.body.key_for_recipient || '').trim() || null;
+
+  const msgId = dm.sendMessage(req.apiUser.id, other.id, body, keyForSender, keyForRecipient);
+  db.createNotification({ userId: other.id, type: 'message', actorId: req.apiUser.id });
+
+  const msg = db.db.prepare(`SELECT id, from_id, to_id, body, created_at, key_for_sender, key_for_recipient FROM messages WHERE id = ?`).get(msgId);
+
+  res.status(201).json({ data: msg });
+});
+
+// Fetch a user's public key
+router.get('/conversations/:username/keys', requireApiAuth('read:direct'), (req, res) => {
+  const other = db.getUserByUsername(req.params.username);
+  if (!other) return errorResponse(res, 404, 'Not Found', 'User not found.');
+  if (!db.areMutualFollowers(req.apiUser.id, other.id)) {
+    return errorResponse(res, 403, 'Forbidden', 'You can only message mutual followers.');
+  }
+
+  const publicKey = dm.getPublicKey(other.id);
+  responseEnvelope(res, { public_key: publicKey });
+});
+
+// Publish / rotate your keys
+router.post('/conversations/keys', requireApiAuth('write:direct'), (req, res) => {
+  const publicKey = String(req.body.public_key || '').trim();
+  const encryptedPrivateKey = String(req.body.encrypted_private_key || '').trim() || null;
+  if (!publicKey || publicKey.length > 5000) {
+    return errorResponse(res, 400, 'Bad Request', 'public_key is required and must be <= 5000 chars.');
+  }
+  dm.setPublicKey(req.apiUser.id, publicKey, encryptedPrivateKey);
+  db.auditLog('dm_key_updated', req.apiUser.id, 'Published public key');
+  res.json({ data: { ok: true } });
+});
+
+// Edit a message
+router.patch('/messages/:id', requireApiAuth('write:direct'), (req, res) => {
+  const body = String(req.body.body || '').trim().slice(0, 5000);
+  if (!body) return errorResponse(res, 400, 'Bad Request', 'body is required.');
+  const ok = dm.editMessage(parseInt(req.params.id, 10), req.apiUser.id, body);
+  if (!ok) return errorResponse(res, 404, 'Not Found', 'Message not found or not yours.');
+  db.auditLog('dm_edited', req.apiUser.id, `Message ${req.params.id}`);
+  res.json({ data: { ok: true } });
+});
+
+// Delete a message
+router.delete('/messages/:id', requireApiAuth('write:direct'), (req, res) => {
+  const ok = dm.deleteMessage(parseInt(req.params.id, 10), req.apiUser.id);
+  if (!ok) return errorResponse(res, 404, 'Not Found', 'Message not found or not yours.');
+  db.auditLog('dm_deleted', req.apiUser.id, `Message ${req.params.id}`);
+  res.json({ data: { ok: true } });
 });
 
 module.exports = router;

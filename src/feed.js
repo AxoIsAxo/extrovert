@@ -3,6 +3,22 @@
 const { db } = require('./db');
 const { getDisplayPost, getUserById, commentsForPost, hasLiked, hasShared, areMutualFollowers } = require('./db');
 
+// In-memory feed cache per user with TTL
+const feedCache = new Map();
+const FEED_CACHE_TTL = 30_000; // 30 seconds
+
+function getCachedFeed(viewerId) {
+  const entry = feedCache.get(viewerId);
+  if (entry && Date.now() - entry.ts < FEED_CACHE_TTL) {
+    return entry.feed;
+  }
+  return null;
+}
+
+function setCachedFeed(viewerId, feed) {
+  feedCache.set(viewerId, { feed, ts: Date.now() });
+}
+
 // ---------------------------------------------------------------------------
 // Extrovert feed algorithm
 // ---------------------------------------------------------------------------
@@ -179,6 +195,13 @@ function hydrateItem(row, viewerId, score) {
 }
 
 function buildFeed(viewerId, { page = 1, perPage = 20 } = {}) {
+  const cached = getCachedFeed(viewerId);
+  if (cached) {
+    const start = (page - 1) * perPage;
+    const pageItems = cached.items.slice(start, start + perPage);
+    return { items: pageItems, page, perPage, hasMore: start + perPage < cached.items.length };
+  }
+
   const now = Date.now();
   const candidates = candidatePosts(viewerId);
   const cwolAuthors = commentWithoutLikeAuthors(viewerId);
@@ -204,10 +227,12 @@ function buildFeed(viewerId, { page = 1, perPage = 20 } = {}) {
     return b.row.created_at - a.row.created_at;
   });
 
+  const allItems = deduped.map(({ row, score }) => hydrateItem(row, viewerId, score));
+  setCachedFeed(viewerId, { items: allItems });
+
   const start = (page - 1) * perPage;
-  const pageRows = deduped.slice(start, start + perPage);
-  const items = pageRows.map(({ row, score }) => hydrateItem(row, viewerId, score));
-  return { items, page, perPage, hasMore: start + perPage < deduped.length };
+  const pageItems = allItems.slice(start, start + perPage);
+  return { items: pageItems, page, perPage, hasMore: start + perPage < allItems.length };
 }
 
 module.exports = {

@@ -297,10 +297,13 @@ try { db.exec(`ALTER TABLE comments ADD COLUMN edited_at INTEGER`); } catch {}
 try { db.exec(`ALTER TABLE messages ADD COLUMN edited_at INTEGER`); } catch {}
 try { db.exec(`ALTER TABLE room_messages ADD COLUMN edited_at INTEGER`); } catch {}
 try { db.exec(`ALTER TABLE oauth_codes ADD COLUMN nonce TEXT`); } catch {}
+try { db.exec(`ALTER TABLE oauth_tokens ADD COLUMN refresh_expires_at INTEGER`); } catch {}
 try { db.exec(`CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, reporter_id INTEGER NOT NULL REFERENCES users(id), reported_user_id INTEGER NOT NULL REFERENCES users(id), message_id INTEGER NOT NULL, message_body TEXT NOT NULL, channel_id INTEGER NOT NULL, room_id INTEGER NOT NULL, reason TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL)`); } catch {}
 try { db.exec(`CREATE TABLE IF NOT EXISTS join_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, room_id INTEGER NOT NULL REFERENCES rooms(id), user_id INTEGER NOT NULL REFERENCES users(id), status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL)`); } catch {}
 // Fix stale referred_by links for users whose referrer no longer has a referral code.
 db.prepare(`UPDATE users SET referred_by = NULL WHERE referred_by IS NOT NULL AND referred_by IN (SELECT id FROM users WHERE referral_code IS NULL)`).run();
+// Fix avatar paths: strip leading /uploads/ prefix so serializer doesn't double-prefix.
+db.prepare(`UPDATE users SET avatar = substr(avatar, 10) WHERE avatar LIKE '/uploads/%'`).run();
 
 // ---------- users ----------
 function adminExists() {
@@ -418,6 +421,11 @@ function postsByUser(userId) {
   ).all(userId);
 }
 
+function countPostsByUser(userId) {
+  const row = db.prepare(`SELECT COUNT(*) AS n FROM posts WHERE user_id = ?`).get(userId);
+  return row.n;
+}
+
 // ---------- post deletion ----------
 function deletePost(postId, userId) {
   const post = db.prepare(`SELECT * FROM posts WHERE id = ? AND user_id = ?`).get(postId, userId);
@@ -434,6 +442,21 @@ function deletePost(postId, userId) {
   // Delete the post itself.
   db.prepare(`DELETE FROM posts WHERE id = ?`).run(post.id);
   return true;
+}
+
+// ---------- batch counts (N+1 reduction) ----------
+function batchPostCounts(postIds) {
+  if (postIds.length === 0) return {};
+  const ph = postIds.map(() => '?').join(',');
+  const likes = db.prepare(`SELECT post_id, COUNT(*) AS n FROM likes WHERE post_id IN (${ph}) GROUP BY post_id`).all(...postIds);
+  const shares = db.prepare(`SELECT post_id, COUNT(*) AS n FROM shares WHERE post_id IN (${ph}) GROUP BY post_id`).all(...postIds);
+  const comments = db.prepare(`SELECT post_id, COUNT(*) AS n FROM comments WHERE post_id IN (${ph}) GROUP BY post_id`).all(...postIds);
+
+  const likeMap = Object.fromEntries(likes.map(r => [r.post_id, r.n]));
+  const shareMap = Object.fromEntries(shares.map(r => [r.post_id, r.n]));
+  const commentMap = Object.fromEntries(comments.map(r => [r.post_id, r.n]));
+
+  return { likeMap, shareMap, commentMap };
 }
 
 // ---------- likes ----------
@@ -468,7 +491,7 @@ function addComment(userId, postId, body) {
 
 function commentsForPost(postId) {
   return db.prepare(
-    `SELECT c.*, u.username, u.display_name FROM comments c
+    `SELECT c.*, u.username, u.display_name, u.avatar, u.created_at AS user_created_at FROM comments c
      JOIN users u ON u.id = c.user_id
      WHERE c.post_id = ? ORDER BY c.created_at ASC`
   ).all(postId);
@@ -567,22 +590,42 @@ function setCustomization(userId, html, css) {
 }
 
 // ---------- notifications ----------
+const { notify } = require('./notif-broadcaster');
+
 function createNotification({ userId, type, actorId, postId }) {
   if (userId === actorId) return;
-  db.prepare(
+  const now = Date.now();
+  const result = db.prepare(
     `INSERT INTO notifications (user_id, type, actor_id, post_id, created_at) VALUES (?,?,?,?,?)`
-  ).run(userId, type, actorId, postId || null, Date.now());
+  ).run(userId, type, actorId, postId || null, now);
+  const notif = { id: result.lastInsertRowid, type, actor_id: actorId, post_id: postId || null, created_at: now };
+  notify(userId, notif);
 }
 
-function getNotifications(userId, limit = 50) {
-  return db.prepare(`
-    SELECT n.*, u.username AS actor_username, u.display_name AS actor_name
-    FROM notifications n
-    JOIN users u ON u.id = n.actor_id
-    WHERE n.user_id = ?
-    ORDER BY n.created_at DESC
-    LIMIT ?
-  `).all(userId, limit);
+function getNotifications(userId, limit = 50, cursor) {
+  let sql, params;
+  if (cursor) {
+    sql = `
+      SELECT n.*, u.username AS actor_username, u.display_name AS actor_name, u.avatar AS actor_avatar, u.created_at AS actor_created_at
+      FROM notifications n
+      JOIN users u ON u.id = n.actor_id
+      WHERE n.user_id = ? AND n.id < ?
+      ORDER BY n.id DESC
+      LIMIT ?
+    `;
+    params = [userId, cursor, limit];
+  } else {
+    sql = `
+      SELECT n.*, u.username AS actor_username, u.display_name AS actor_name, u.avatar AS actor_avatar, u.created_at AS actor_created_at
+      FROM notifications n
+      JOIN users u ON u.id = n.actor_id
+      WHERE n.user_id = ?
+      ORDER BY n.id DESC
+      LIMIT ?
+    `;
+    params = [userId, limit];
+  }
+  return db.prepare(sql).all(...params);
 }
 
 function countUnreadNotifications(userId) {
@@ -1025,10 +1068,11 @@ function markOAuthCodeUsed(id) {
 // ---------- OAuth2 tokens ----------
 function createOAuthToken(token, refreshToken, appId, userId, scopes, expiresAt) {
   const now = Date.now();
+  const refreshExpiresAt = now + 90 * 24 * 60 * 60 * 1000; // 90 days
   db.prepare(`
-    INSERT INTO oauth_tokens (token, refresh_token, app_id, user_id, scopes, expires_at, created_at)
-    VALUES (?,?,?,?,?,?,?)
-  `).run(token, refreshToken || null, appId, userId, scopes, expiresAt || null, now);
+    INSERT INTO oauth_tokens (token, refresh_token, app_id, user_id, scopes, expires_at, refresh_expires_at, created_at)
+    VALUES (?,?,?,?,?,?,?,?)
+  `).run(token, refreshToken || null, appId, userId, scopes, expiresAt || null, refreshExpiresAt, now);
 }
 
 function getOAuthToken(token) {
@@ -1086,14 +1130,20 @@ function updateMediaAttachmentDimensions(id, width, height) {
 }
 
 // ---------- Idempotency keys ----------
+const IDEMPOTENCY_TTL = 24 * 60 * 60 * 1000; // 24h
+
 function getIdempotencyKey(key) {
-  return db.prepare(`SELECT * FROM idempotency_keys WHERE key = ?`).get(key);
+  const cutoff = Date.now() - IDEMPOTENCY_TTL;
+  return db.prepare(`SELECT * FROM idempotency_keys WHERE key = ? AND created_at > ?`).get(key, cutoff);
 }
 
 function setIdempotencyKey(key, response, statusCode) {
   const now = Date.now();
   db.prepare(`INSERT OR IGNORE INTO idempotency_keys (key, response, status_code, created_at) VALUES (?,?,?,?)`)
     .run(key, response, statusCode, now);
+  // Cleanup expired keys on write to prevent unbounded growth.
+  const cutoff = now - IDEMPOTENCY_TTL;
+  db.prepare(`DELETE FROM idempotency_keys WHERE created_at < ?`).run(cutoff);
 }
 
 // ---------- Search ----------
@@ -1153,9 +1203,11 @@ module.exports = {
   // follows
   follow, unfollow, isFollowing, followingIds, countFollowers, countFollowing, recordFollowFromPost,
   // posts
-  createPost, getPostById, getDisplayPost, postsByUser, deletePost, deleteUser,
+  createPost, getPostById, getDisplayPost, postsByUser, countPostsByUser, deletePost, deleteUser,
   // likes
   toggleLike, hasLiked,
+  // batch
+  batchPostCounts,
   // comments
   addComment, commentsForPost,
   // edit history

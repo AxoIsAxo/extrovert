@@ -34,7 +34,10 @@ app.set('view engine', 'ejs');
 // Favicon (suppress 404 noise in console).
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 app.set('views', path.join(__dirname, 'views'));
-app.set('trust proxy', 1);
+const TRUST_PROXY = process.env.TRUST_PROXY || 'false';
+if (TRUST_PROXY !== 'false') {
+  app.set('trust proxy', TRUST_PROXY);
+}
 
 // Security headers.
 app.use(helmet({
@@ -105,13 +108,18 @@ app.use((req, res, next) => {
   next();
 });
 
-// API rate limiter — applies to all /api/ requests.
+// API rate limiter — key on OAuth bearer token when available, fallback to IP.
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 120,
   standardHeaders: true,
   legacyHeaders: false,
-  validate: { xForwardedForHeader: false },
+  keyGenerator: (req) => {
+    const auth = req.headers.authorization;
+    if (auth && auth.startsWith('Bearer ')) return 'token:' + auth.slice(7);
+    return req.ip;
+  },
+  validate: { xForwardedForHeader: false, keyGeneratorIpFallback: false },
   message: { type: 'about:blank', title: 'Too Many Requests', status: 429, detail: 'API rate limit exceeded. See X-RateLimit-* headers for details.' },
 });
 app.use('/api', apiLimiter);

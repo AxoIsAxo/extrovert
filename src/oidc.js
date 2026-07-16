@@ -13,6 +13,18 @@ let keyPair = null;
 function loadOrGenerateKeys() {
   if (keyPair) return keyPair;
 
+  // Allow loading private key directly from env var (overrides file).
+  const envPrivateKey = process.env.OIDC_PRIVATE_KEY;
+  if (envPrivateKey) {
+    const kid = process.env.OIDC_KID || crypto.randomBytes(8).toString('hex');
+    keyPair = {
+      publicKey: crypto.createPublicKey(envPrivateKey),
+      privateKey: crypto.createPrivateKey(envPrivateKey),
+      kid,
+    };
+    return keyPair;
+  }
+
   try {
     if (fs.existsSync(KEY_FILE)) {
       const raw = fs.readFileSync(KEY_FILE, 'utf8');
@@ -42,6 +54,7 @@ function loadOrGenerateKeys() {
 
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(KEY_FILE, JSON.stringify(keyData, null, 2), 'utf8');
+  try { fs.chmodSync(KEY_FILE, 0o600); } catch {}
 
   keyPair = {
     publicKey: crypto.createPublicKey(publicKey),
@@ -51,19 +64,67 @@ function loadOrGenerateKeys() {
   return keyPair;
 }
 
+// Store previous keys for rotation support
+let previousKeys = [];
+
 function getJwks() {
   const { publicKey, kid } = loadOrGenerateKeys();
   const jwk = publicKey.export({ format: 'jwk' });
-  return {
-    keys: [{
-      kty: jwk.kty,
-      kid,
+  const keys = [{
+    kty: jwk.kty,
+    kid,
+    use: 'sig',
+    alg: 'RS256',
+    n: jwk.n,
+    e: jwk.e,
+  }];
+  // Include previous keys for verification during rotation
+  for (const pk of previousKeys) {
+    keys.push({
+      kty: pk.jwk.kty,
+      kid: pk.kid,
       use: 'sig',
       alg: 'RS256',
-      n: jwk.n,
-      e: jwk.e,
-    }],
+      n: pk.jwk.n,
+      e: pk.jwk.e,
+    });
+  }
+  return { keys };
+}
+
+function rotateKeys() {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
+
+  const oldPair = loadOrGenerateKeys();
+  if (oldPair) {
+    // Keep the old key for verification during rollover
+    const oldJwk = oldPair.publicKey.export({ format: 'jwk' });
+    previousKeys.push({ kid: oldPair.kid, jwk: oldJwk });
+    // Keep at most 2 previous keys
+    if (previousKeys.length > 2) previousKeys.shift();
+  }
+
+  const kid = crypto.randomBytes(8).toString('hex');
+  const keyData = {
+    kid,
+    publicKeyPem: publicKey,
+    privateKeyPem: privateKey,
+    generatedAt: Date.now(),
   };
+
+  fs.writeFileSync(KEY_FILE, JSON.stringify(keyData, null, 2), 'utf8');
+  try { fs.chmodSync(KEY_FILE, 0o600); } catch {}
+
+  keyPair = {
+    publicKey: crypto.createPublicKey(publicKey),
+    privateKey: crypto.createPrivateKey(privateKey),
+    kid,
+  };
+  return keyPair;
 }
 
 function signIdToken(payload) {
@@ -91,4 +152,4 @@ function signIdToken(payload) {
   return `${headerB64}.${payloadB64}.${signatureB64}`;
 }
 
-module.exports = { loadOrGenerateKeys, getJwks, signIdToken, ISSUER };
+module.exports = { loadOrGenerateKeys, getJwks, signIdToken, rotateKeys, ISSUER };

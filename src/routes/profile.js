@@ -222,7 +222,7 @@ router.post('/:username/avatar', (req, res, next) => {
   try {
     await sharp(inputPath).resize(200, 200, { fit: 'cover', position: 'center' }).jpeg({ quality: 85 }).toFile(outputPath);
     fs.unlinkSync(inputPath);
-    setAvatar(viewer.id, '/uploads/avatars/' + outputName);
+    setAvatar(viewer.id, 'avatars/' + outputName);
   } catch (e) {
     console.error('Avatar processing error:', e);
     try { fs.unlinkSync(inputPath); } catch {}
