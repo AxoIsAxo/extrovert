@@ -2,78 +2,92 @@
 <div class="feed-layout">
   <aside class="feed-sidebar feed-sidebar-left">
     <div class="card">
-      <h4 style="margin:0 0 8px">My Stickers</h4>
-      <form method="post" action="/stickers/upload" enctype="multipart/form-data" style="margin-bottom:8px">
+      <h4 style="margin:0 0 10px">My stickers</h4>
+      <form method="post" action="/stickers/upload" enctype="multipart/form-data" style="margin-bottom:10px">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
         <input type="file" name="sticker" accept="image/*" required style="font-size:12px;width:100%">
-        <button class="btn" type="submit" style="font-size:12px;padding:4px 10px;margin-top:4px">Upload</button>
+        <button class="btn small" type="submit" style="margin-top:8px"><%- include('partials/icon', { name: 'plus', size: 14 }) %> Upload</button>
       </form>
-      <div style="display:flex;flex-wrap:wrap;gap:4px">
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
         <% if (stickers.length) { %>
           <% stickers.forEach(function(s){ %>
-            <img src="<%= s.file_path %>" alt="" style="width:56px;height:56px;object-fit:contain;border-radius:var(--radius);background:var(--surface-3)">
+            <img src="<%= s.file_path %>" alt="" style="width:56px;height:56px;object-fit:contain;border-radius:var(--radius-sm);background:var(--surface-3)">
           <% }) %>
         <% } else { %>
-          <p class="muted" style="font-size:12px;margin:0">No stickers yet.</p>
+          <p class="muted" style="font-size:12px;margin:0">No stickers yet — drop one in and it'll show up here.</p>
         <% } %>
       </div>
-      <% if (stickers.length) { %><a href="/stickers/manage" style="font-size:12px;display:inline-block;margin-top:4px">Manage →</a><% } %>
+      <% if (stickers.length) { %><a href="/stickers/manage" style="font-size:12px;display:inline-block;margin-top:8px">Manage →</a><% } %>
     </div>
   </aside>
   <div class="feed-main">
-    <div class="card" style="display:flex;justify-content:space-between;align-items:center">
+    <div class="card elevated" style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
       <div>
         <h2 style="margin:0">Your feed</h2>
-        <small class="muted">Only content from your friends and friends-of-friends.</small>
+        <small class="muted">Only posts from you, your friends, and their friends.</small>
       </div>
-      <a class="btn" href="/compose">+ New post</a>
+      <a class="btn" href="/compose"><%- include('partials/icon', { name: 'plus', size: 16 }) %> New post</a>
     </div>
 
-    <%- include('partials/post-list', { items: items }) %>
-
-    <div class="pager">
-      <% if (page > 1) { %>
-        <a class="btn ghost" href="/?page=<%= page - 1 %>">← Newer</a>
-      <% } else { %><span></span><% } %>
-      <% if (hasMore) { %>
-        <a class="btn ghost" href="/?page=<%= page + 1 %>">Older →</a>
-      <% } %>
-    </div>
+    <% if (!items.length) { %>
+      <div class="card empty-state">
+        <div class="empty-art"><%- include('partials/rings', { size: 64, animate: true }) %></div>
+        <h4>Quiet here</h4>
+        <p>Nobody in your network has posted yet. Break the ice.</p>
+        <a class="btn" href="/compose"><%- include('partials/icon', { name: 'plus', size: 16 }) %> Write the first post</a>
+      </div>
+    <% } else { %>
+      <%- include('partials/post-list', { items: items }) %>
+      <div class="pager">
+        <% if (page > 1) { %>
+          <a class="btn ghost" href="/?page=<%= page - 1 %>"><%- include('partials/icon', { name: 'arrowLeft', size: 15 }) %> Newer</a>
+        <% } else { %><span></span><% } %>
+        <% if (hasMore) { %>
+          <a class="btn ghost" href="/?page=<%= page + 1 %>">Older <%- include('partials/icon', { name: 'arrowRight', size: 15 }) %></a>
+        <% } %>
+      </div>
+    <% } %>
   </div>
   <aside class="feed-sidebar feed-sidebar-right">
     <div class="card">
-      <h4 style="margin:0 0 8px">Discover people</h4>
+      <div class="section-rings">
+        <%- include('partials/rings', { size: 20 }) %>
+        <h4 style="margin:0">Find people</h4>
+      </div>
       <form method="get" action="/">
         <input type="search" name="q" value="<%= q %>" placeholder="Search by username…" style="font-size:13px;width:100%">
       </form>
       <% if (discoverResults.length) { %>
-        <div style="margin-top:8px">
+        <div style="margin-top:10px">
           <% discoverResults.forEach(function(r){ %>
-            <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:2px solid var(--border-light)">
-              <% if (r.avatar) { %><img src="<%= r.avatar %>" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover"><% } else { %><div style="width:28px;height:28px;border-radius:50%;background:var(--primary-light);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0"><%= r.username.slice(0,1).toUpperCase() %></div><% } %>
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border-soft)">
+              <% if (r.avatar) { %><img src="<%= r.avatar %>" alt="" style="width:30px;height:30px;border-radius:50%;object-fit:cover"><% } else { %><div style="width:30px;height:30px;border-radius:50%;background:var(--primary-soft);color:var(--primary-strong);display:flex;align-items:center;justify-content:center;font-size:12px;font-family:var(--font-display);flex-shrink:0"><%= r.username.slice(0,1).toUpperCase() %></div><% } %>
               <div style="flex:1;min-width:0;font-size:13px">
-                <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><%= r.display_name %></div>
+                <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600"><%= r.display_name %></div>
                 <small class="muted">@<%= r.username %></small>
               </div>
-              <a class="btn" href="/u/<%= r.username %>" style="font-size:11px;padding:2px 8px">View</a>
+              <a class="btn small" href="/u/<%= r.username %>">View</a>
             </div>
           <% }) %>
         </div>
       <% } %>
-      <h5 style="margin:12px 0 6px;font-size:13px">Friends of friends</h5>
+      <div class="section-rings" style="margin-top:16px">
+        <%- include('partials/rings', { size: 20 }) %>
+        <small class="muted" style="font-weight:700;letter-spacing:0.04em;text-transform:uppercase;font-size:11px">Friends of friends</small>
+      </div>
       <% if (suggested.length) { %>
         <% suggested.forEach(function(r){ %>
-          <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:2px solid var(--border-light)">
-            <% if (r.avatar) { %><img src="<%= r.avatar %>" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover"><% } else { %><div style="width:28px;height:28px;border-radius:50%;background:var(--secondary-light);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0"><%= r.username.slice(0,1).toUpperCase() %></div><% } %>
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border-soft)">
+            <% if (r.avatar) { %><img src="<%= r.avatar %>" alt="" style="width:30px;height:30px;border-radius:50%;object-fit:cover"><% } else { %><div style="width:30px;height:30px;border-radius:50%;background:var(--secondary-soft);color:var(--secondary-strong);display:flex;align-items:center;justify-content:center;font-size:12px;font-family:var(--font-display);flex-shrink:0"><%= r.username.slice(0,1).toUpperCase() %></div><% } %>
             <div style="flex:1;min-width:0;font-size:13px">
-              <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><%= r.display_name %></div>
+              <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600"><%= r.display_name %></div>
               <small class="muted">@<%= r.username %></small>
             </div>
-            <a class="btn ghost" href="/u/<%= r.username %>" style="font-size:11px;padding:2px 8px">View</a>
+            <a class="btn ghost small" href="/u/<%= r.username %>">View</a>
           </div>
         <% }) %>
       <% } else { %>
-        <p class="muted" style="font-size:12px">Follow more people to expand your network.</p>
+        <p class="muted" style="font-size:12px;margin:6px 0 0">Your friends haven't introduced you to anyone new yet. Follow a couple more people to widen the ring.</p>
       <% } %>
     </div>
   </aside>

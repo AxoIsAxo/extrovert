@@ -1,23 +1,24 @@
 <%- include('partials/header') %>
-  <div class="card" style="max-width:500px;margin:0 auto;text-align:center">
-    <h2 style="margin-top:0">Delete post?</h2>
-    <p style="margin-bottom:24px">This will permanently delete this post and all its likes, comments, shares, and reposts. This cannot be undone.</p>
+  <div class="card" style="max-width:520px;margin:40px auto;text-align:center">
+    <div style="display:flex;justify-content:center;margin-bottom:8px"><%- include('partials/icon', { name: 'trash', size: 32, cls: 'flash-ico' }) %></div>
+    <h2 style="margin-top:0">Delete this post?</h2>
+    <p class="muted" style="margin-bottom:24px">This permanently removes the post and all its likes, comments, shares, and reposts. Can't be undone.</p>
 
-    <blockquote style="background:var(--surface-2);padding:16px;border-radius:var(--radius-lg);margin-bottom:24px;text-align:left">
-      <% if (post.body) { %><p><%= post.body.slice(0, 200) %></p><% } %>
+    <blockquote style="background:var(--surface-2);padding:16px;border:1px solid var(--border-soft);border-radius:var(--radius-lg);margin-bottom:24px;text-align:left">
+      <% if (post.body) { %><p style="margin:0 0 8px"><%= post.body.slice(0, 200) %></p><% } %>
       <small class="muted">
-        <% if (post.type === 'photo') { %>📷 Photo<% }
-           else if (post.type === 'video') { %>🎬 Video<% }
-           else if (post.type === 'repost') { %>🔁 Repost<% }
-           else { %>📝 Text<% } %>
+        <% if (post.type === 'photo') { %>Photo<% }
+           else if (post.type === 'video') { %>Video<% }
+           else if (post.type === 'repost') { %>Repost<% }
+           else { %>Text<% } %>
         · <%= new Date(post.created_at).toLocaleString() %>
       </small>
     </blockquote>
 
     <form method="post" action="/posts/<%= post.id %>/delete" style="display:inline">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-      <button class="btn danger">Yes, delete permanently</button>
+      <button class="btn danger"><%- include('partials/icon', { name: 'trash', size: 15 }) %> Delete permanently</button>
     </form>
-    <a class="btn ghost" href="<%= back || '/' %>" style="margin-left:8px">Cancel</a>
+    <a class="btn ghost" href="<%= back || '/' %>" style="margin-left:8px">Keep it</a>
   </div>
 <%- include('partials/footer') %>

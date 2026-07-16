@@ -1,6 +1,6 @@
 <%- include('../partials/header') %>
-  <div class="card">
-    <h2 style="margin-top:0">Room Settings — <%= room.name %></h2>
+  <div class="card" style="max-width:620px;margin:0 auto">
+    <h2 style="margin-top:0">Room settings — <%= room.name %></h2>
     <form method="post" action="/rooms/<%= room.id %>/settings">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <label>Room name</label>
@@ -8,28 +8,28 @@
       <label>Description</label>
       <input type="text" name="description" value="<%= room.description %>" maxlength="200">
       <label>Banner HTML <span class="muted">(no &lt;script&gt;, no JS — stripped automatically)</span></label>
-      <textarea name="html" rows="8" spellcheck="false"><%= room.html %></textarea>
+      <textarea name="html" rows="8" spellcheck="false" style="font-family:ui-monospace,monospace;font-size:13px"><%= room.html %></textarea>
       <label>Room CSS <span class="muted">(styles the entire room page)</span></label>
-      <textarea name="css" rows="8" spellcheck="false"><%= room.css %></textarea>
-      <label style="margin-top:12px">Privacy</label>
+      <textarea name="css" rows="8" spellcheck="false" style="font-family:ui-monospace,monospace;font-size:13px"><%= room.css %></textarea>
+      <label style="margin-top:14px">Privacy</label>
       <div style="display:flex;gap:16px;margin-bottom:8px">
-        <label style="font-weight:400;font-size:14px"><input type="radio" name="is_public" value="1" <%= room.is_public ? 'checked' : '' %>> Public</label>
-        <label style="font-weight:400;font-size:14px"><input type="radio" name="is_public" value="0" <%= !room.is_public ? 'checked' : '' %>> Private</label>
+        <label style="font-weight:400;font-size:var(--fs-sm)"><input type="radio" name="is_public" value="1" <%= room.is_public ? 'checked' : '' %>> Public</label>
+        <label style="font-weight:400;font-size:var(--fs-sm)"><input type="radio" name="is_public" value="0" <%= !room.is_public ? 'checked' : '' %>> Private</label>
       </div>
-      <div style="margin-top:16px">
-        <button class="btn">Save</button>
+      <div style="margin-top:18px;display:flex;gap:10px">
+        <button class="btn"><%- include('../partials/icon', { name: 'check', size: 15 }) %> Save</button>
         <a class="btn ghost" href="/rooms/<%= room.id %>">Back</a>
       </div>
     </form>
-    <hr style="border:none;border-top:2px solid var(--border-light);margin:24px 0">
+    <hr>
     <form method="post" action="/rooms/<%= room.id %>/delete" class="delete-room-form">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-      <p class="muted" style="color:var(--danger)">Danger zone: deleting a room is permanent and irreversible.</p>
+      <p style="color:var(--danger);font-weight:600">Danger zone — deleting a room is permanent and irreversible.</p>
       <label>Type <strong style="color:var(--danger)">DELETE</strong> to confirm</label>
       <input type="text" name="confirm_delete" placeholder="DELETE" required>
       <label>Type the room name <strong><%= room.name %></strong> to confirm</label>
       <input type="text" name="confirm_name" placeholder="<%= room.name %>" required>
-      <button class="btn danger" style="margin-top:8px">Delete Room</button>
+      <button class="btn danger" style="margin-top:10px"><%- include('../partials/icon', { name: 'trash', size: 15 }) %> Delete room</button>
     </form>
   </div>
   <script src="/static/rooms.js?v=1"></script>

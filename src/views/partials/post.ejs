@@ -4,18 +4,18 @@
 %>
 <article class="post">
   <% if (item.isRepost) { %>
-    <div class="post-repost">🔁 <%= item.reposterName %> reposted this</div>
+    <div class="post-repost"><%- include('icon', { name: 'repost', size: 14 }) %> <%= item.reposterName %> reposted</div>
   <% } %>
   <header class="post-head">
     <% if (item.authorAvatar) { %><a class="post-avatar-link" href="/u/<%= item.authorUsername %>"><img src="<%= item.authorAvatar %>" alt="" class="post-avatar-img"></a><% } else { %><a class="post-avatar" href="/u/<%= item.authorUsername %>"><%= (item.authorName || '?').slice(0,1).toUpperCase() %></a><% } %>
     <div>
-      <div style="display:flex;align-items:center;gap:4px">
+      <div style="display:flex;align-items:center;gap:6px">
         <a href="/u/<%= item.authorUsername %>" class="post-name"><%= item.authorName %></a>
         <% if (u && !item.isOwn) { %>
           <% if (item.mutual) { %>
-            <a href="/chats/<%= item.authorUsername %>" class="chat-icon" title="Send message">💬</a>
+            <a href="/chats/<%= item.authorUsername %>" class="chat-icon" title="Send a message"><%- include('icon', { name: 'chat', size: 15 }) %></a>
           <% } else { %>
-            <span class="chat-icon locked" title="Follow each other to chat">💬</span>
+            <span class="chat-icon locked" title="Follow each other to start chatting"><%- include('icon', { name: 'lock', size: 13 }) %></span>
           <% } %>
         <% } %>
       </div>
@@ -34,10 +34,10 @@
   <% } %>
 
   <div class="post-stats">
-    <span>❤️ <%= item.likeCount %></span>
-    <span>💬 <%= item.commentCount %></span>
-    <span>🔗 <%= item.shareCount %></span>
-    <% if (item.followBoost > 0) { %><span class="boost">⭐ followed from post ×<%= item.followBoost %></span><% } %>
+    <span class="stat"><span class="ico"><%- include('icon', { name: item.liked ? 'heartFilled' : 'heart', size: 14 }) %></span> <%= item.likeCount %></span>
+    <span class="stat"><span class="ico"><%- include('icon', { name: 'comment', size: 14 }) %></span> <%= item.commentCount %></span>
+    <span class="stat"><span class="ico"><%- include('icon', { name: 'share', size: 14 }) %></span> <%= item.shareCount %></span>
+    <% if (item.followBoost > 0) { %><span class="boost"><%- include('icon', { name: 'starFilled', size: 13 }) %> followed from post ×<%= item.followBoost %></span><% } %>
   </div>
 
   <% if (u) { %>
@@ -45,25 +45,25 @@
   <div class="post-actions">
     <form method="post" action="/posts/<%= item.interactId %>/like">
       <input type="hidden" name="_csrf" value="<%= _token %>">
-      <button class="<%= item.liked ? 'active' : '' %>"><%= item.liked ? '♥ Liked' : '♡ Like' %></button>
+      <button class="<%= item.liked ? 'active' : '' %>"><%- include('icon', { name: item.liked ? 'heartFilled' : 'heart', size: 15, cls: 'ico' }) %> <%= item.liked ? 'Liked' : 'Like' %></button>
     </form>
     <form method="post" action="/posts/<%= item.interactId %>/share">
       <input type="hidden" name="_csrf" value="<%= _token %>">
-      <button class="<%= item.shared ? 'active' : '' %>">Share</button>
+      <button class="<%= item.shared ? 'active' : '' %>"><%- include('icon', { name: 'share', size: 15, cls: 'ico' }) %> <%= item.shared ? 'Shared' : 'Share' %></button>
     </form>
     <form method="post" action="/posts/<%= item.interactId %>/repost">
       <input type="hidden" name="_csrf" value="<%= _token %>">
-      <button>Repost</button>
+      <button><%- include('icon', { name: 'repost', size: 15, cls: 'ico' }) %> Repost</button>
     </form>
     <% if (!item.isOwn && !item.followingAuthor) { %>
       <form method="post" action="/posts/<%= item.interactId %>/follow-from">
         <input type="hidden" name="_csrf" value="<%= _token %>">
-        <button class="boost-btn">⭐ Follow from post</button>
+        <button class="boost-btn"><%- include('icon', { name: 'star', size: 15, cls: 'ico' }) %> Follow from post</button>
       </form>
     <% } %>
     <% if (item.isOwn) { %>
-      <button class="btn ghost edit-post-btn" data-post-id="<%= item.id %>" style="margin-left:auto">Edit</button>
-      <a class="btn ghost danger" href="/posts/<%= item.interactId %>/delete">Delete</a>
+      <button class="btn ghost edit-post-btn" data-post-id="<%= item.id %>" style="margin-left:auto"><%- include('icon', { name: 'edit', size: 15 }) %> Edit</button>
+      <a class="btn ghost danger" href="/posts/<%= item.interactId %>/delete"><%- include('icon', { name: 'trash', size: 15 }) %> Delete</a>
     <% } %>
   </div>
   <% if (item.isOwn) { %>
@@ -81,12 +81,12 @@
           </div>
           <% if (u && c.user_id === u.id) { %>
             <div class="comment-menu-container">
-              <button class="comment-menu-btn">⋮</button>
+              <button class="comment-menu-btn" title="More"><%- include('icon', { name: 'more', size: 16 }) %></button>
               <div class="comment-menu" style="display:none">
-                <button class="edit-comment-btn">Edit</button>
+                <button class="edit-comment-btn"><%- include('icon', { name: 'edit', size: 14 }) %> Edit</button>
                 <form method="post" action="/posts/<%= item.interactId %>/comments/<%= c.id %>/delete" class="delete-comment-form">
                   <input type="hidden" name="_csrf" value="<%= _token %>">
-                  <button class="delete-comment-btn">Delete</button>
+                  <button class="delete-comment-btn"><%- include('icon', { name: 'trash', size: 14 }) %> Delete</button>
                 </form>
               </div>
             </div>
@@ -101,9 +101,9 @@
     <form class="comment-form" method="post" action="/posts/<%= item.interactId %>/comment" style="position:relative">
       <input type="hidden" name="_csrf" value="<%= _token %>">
       <input type="text" name="body" id="sticker-input-<%= item.interactId %>" placeholder="Add a comment…" maxlength="1000" required>
-      <button>Comment</button>
-      <button class="btn ghost sticker-btn" data-target="sticker-popup-<%= item.interactId %>" type="button" style="font-size:18px;padding:4px 8px">😀</button>
-      <div id="sticker-popup-<%= item.interactId %>" style="display:none;position:absolute;bottom:100%;right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.15)"></div>
+      <button><%- include('icon', { name: 'comment', size: 15 }) %> Comment</button>
+      <button class="btn ghost sticker-btn" data-target="sticker-popup-<%= item.interactId %>" type="button" style="font-size:18px;padding:6px 10px" title="Stickers"><%- include('icon', { name: 'smile', size: 18 }) %></button>
+      <div id="sticker-popup-<%= item.interactId %>" style="display:none;position:absolute;bottom:100%;right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);z-index:100;box-shadow:var(--shadow)"></div>
     </form>
   </div>
   <% } %>

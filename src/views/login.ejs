@@ -1,16 +1,22 @@
 <%- include('partials/header') %>
-  <div class="card" style="max-width:380px;margin:40px auto">
-    <h2 style="margin-top:0">Welcome back</h2>
-    <% if (error) { %><div class="flash err"><%= error %></div><% } %>
-    <form method="post" action="/login<%= next ? '?next=' + encodeURIComponent(next) : '' %>" autocomplete="on">
-      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-      <label for="login-username">Username</label>
-      <input type="text" id="login-username" name="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" required autofocus>
-      <label for="login-password">Password</label>
-      <input type="password" id="login-password" name="password" autocomplete="current-password" required>
-      <input type="hidden" name="next" value="<%= next %>">
-      <div style="margin-top:16px"><button class="btn">Log in</button></div>
-    </form>
-    <p class="muted">No account? <a href="/register">Sign up</a></p>
+  <div style="max-width:400px;margin:48px auto">
+    <div style="text-align:center;margin-bottom:24px">
+      <%- include('partials/rings', { size: 56, animate: true }) %>
+      <h2 style="margin:14px 0 4px">Welcome back</h2>
+      <p class="muted" style="margin:0">Glad you're here again.</p>
+    </div>
+    <div class="card elevated">
+      <% if (error) { %><div class="flash err"><span class="flash-ico"><%- include('partials/icon', { name: 'alert', size: 18 }) %></span><span><%= error %></span></div><% } %>
+      <form method="post" action="/login<%= next ? '?next=' + encodeURIComponent(next) : '' %>" autocomplete="on">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <label for="login-username">Username</label>
+        <input type="text" id="login-username" name="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" required autofocus>
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" name="password" autocomplete="current-password" required>
+        <input type="hidden" name="next" value="<%= next %>">
+        <button class="btn full" style="margin-top:20px">Log in</button>
+      </form>
+    </div>
+    <p class="muted center" style="margin-top:18px">New here? <a href="/register">Make an account</a></p>
   </div>
 <%- include('partials/footer') %>

@@ -4,12 +4,15 @@
   </div>
 
   <% if (conversations.length === 0) { %>
-    <div class="card center muted">
-      <p>No conversations yet. Follow someone who follows you back to start chatting.</p>
+    <div class="card empty-state">
+      <div class="empty-art"><%- include('partials/rings', { size: 56, animate: true }) %></div>
+      <h4>No chats yet</h4>
+      <p>When you and a friend follow each other, you can send messages here.</p>
+      <a class="btn" href="/discover"><%- include('partials/icon', { name: 'search', size: 15 }) %> Find people to talk to</a>
     </div>
   <% } else { %>
     <% conversations.forEach(function(c){ %>
-      <a href="/chats/<%= c.username %>" class="card conv-row">
+      <a href="/chats/<%= c.username %>" class="card conv-row" style="text-decoration:none">
         <% if (c.avatar) { %><img src="<%= c.avatar %>" alt="" class="avatar-img"><% } else { %><div class="avatar"><%= (c.display_name || '?').slice(0,1).toUpperCase() %></div><% } %>
         <div class="info">
           <b><%= c.display_name %></b> <span class="online-dot" data-user="<%= c.username %>"></span>

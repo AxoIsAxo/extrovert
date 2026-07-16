@@ -10,7 +10,7 @@
       <% channels.forEach(function(ch) { %>
         <% if (ch.type === 'voice') { %>
           <div class="room-channel voice-channel" data-channel-id="<%= ch.id %>" data-channel-type="voice">
-            🔊 <span class="voice-name"><%= ch.name %></span>
+            <%- include('../partials/icon', { name: 'mic', size: 14 }) %> <span class="voice-name"><%= ch.name %></span>
             <span class="voice-count" id="voice-count-<%= ch.id %>">0</span>
             <button class="voice-join-btn" data-channel-id="<%= ch.id %>">Join</button>
           </div>
@@ -65,26 +65,26 @@
           </div>
         </div>
       <% }) %>
-      <% if (!messages.length) { %><div class="room-msg"><div class="room-msg-body"><div class="room-msg-body-inner"><span class="muted">No messages yet</span></div></div></div><% } %>
+      <% if (!messages.length) { %><div class="room-msg"><div class="room-msg-body"><div class="room-msg-body-inner"><span class="muted">No messages yet — start the conversation.</span></div></div></div><% } %>
     </div>
     <form class="room-input" id="room-send-form" data-channel-id="<%= firstChannel ? firstChannel.id : '' %>">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <input type="text" name="body" placeholder="Message #<%= firstChannel ? firstChannel.name : '' %>" autocomplete="off" required>
-      <button class="btn" type="submit">Send</button>
+      <button class="btn" type="submit"><%- include('../partials/icon', { name: 'arrowRight', size: 15 }) %> Send</button>
     </form>
   </main>
 </div>
 <div class="report-overlay" id="report-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center">
   <div class="card" style="max-width:400px;width:90%">
-    <h3 style="margin-top:0">Report Message</h3>
-    <div id="report-message-preview" style="padding:8px;background:var(--surface-2);border-radius:var(--radius-lg);margin-bottom:12px;font-style:italic"></div>
+    <h3 style="margin-top:0">Report message</h3>
+    <div id="report-message-preview" style="padding:10px 12px;background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius-lg);margin-bottom:14px;font-style:italic"></div>
     <form id="report-form">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <input type="hidden" name="message_id" id="report-msg-id" value="">
       <label>Reason</label>
-      <input type="text" name="reason" id="report-reason" placeholder="Why is this message inappropriate?" required style="width:100%;margin-bottom:12px">
+      <input type="text" name="reason" id="report-reason" placeholder="What's wrong with this message?" required style="width:100%;margin-bottom:14px">
       <div style="display:flex;gap:8px">
-        <button class="btn" type="submit">Submit Report</button>
+        <button class="btn" type="submit"><%- include('../partials/icon', { name: 'flag', size: 15 }) %> Send report</button>
         <button class="btn ghost close-report-overlay" type="button">Cancel</button>
       </div>
     </form>

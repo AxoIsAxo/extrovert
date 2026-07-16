@@ -1,10 +1,12 @@
 <%- include('partials/header') %>
   <div class="card">
-    <h2 style="margin-top:0">Discover people</h2>
+    <div class="section-rings"><%- include('partials/rings', { size: 20 }) %><h2 style="margin:0">Discover people</h2></div>
     <form method="get" action="/discover">
       <input type="search" name="q" value="<%= q %>" placeholder="Search by username…">
     </form>
-    <% if (q && results.length === 0) { %><p class="muted">No users found.</p><% } %>
+    <% if (q && results.length === 0) { %>
+      <p class="muted" style="margin-top:12px">No one by that name yet. Try another username, or browse the suggestions below.</p>
+    <% } %>
     <% results.forEach(function(r){ %>
       <div class="user-row">
         <% if (r.avatar) { %><img src="<%= r.avatar %>" alt="" class="avatar-img"><% } else { %><div class="avatar"><%= r.username.slice(0,1).toUpperCase() %></div><% } %>
@@ -12,17 +14,21 @@
           <b><%= r.display_name %></b>
           <small>@<%= r.username %></small>
         </div>
-        <a class="btn" href="/u/<%= r.username %>">View</a>
-        <form method="post" action="/follow/<%= r.username %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn">Follow</button></form>
+        <a class="btn ghost small" href="/u/<%= r.username %>">View</a>
+        <form method="post" action="/follow/<%= r.username %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn small"><%- include('partials/icon', { name: 'plus', size: 14 }) %> Follow</button></form>
       </div>
     <% }) %>
   </div>
 
   <div class="card">
-    <h3 style="margin-top:0">Friends of friends</h3>
-    <p class="muted">People in your extended network you don't follow yet.</p>
+    <div class="section-rings"><%- include('partials/rings', { size: 20 }) %><h3 style="margin:0">Friends of friends</h3></div>
+    <p class="muted" style="margin-top:6px">People in your extended network you don't follow yet — the outer ring.</p>
     <% if (suggested.length === 0) { %>
-      <p class="muted">None right now. Follow more people to expand your network.</p>
+      <div class="empty-state" style="padding:24px 12px">
+        <div class="empty-art"><%- include('partials/rings', { size: 40, animate: true }) %></div>
+        <p>Your friends haven't introduced you to anyone new yet. Follow a couple more people to widen the ring.</p>
+        <a class="btn small" href="/discover">Keep looking</a>
+      </div>
     <% } %>
     <% suggested.forEach(function(r){ %>
       <div class="user-row">
@@ -31,8 +37,8 @@
           <b><%= r.display_name %></b>
           <small>@<%= r.username %></small>
         </div>
-        <a class="btn ghost" href="/u/<%= r.username %>">View</a>
-        <form method="post" action="/follow/<%= r.username %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn">Follow</button></form>
+        <a class="btn ghost small" href="/u/<%= r.username %>">View</a>
+        <form method="post" action="/follow/<%= r.username %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn small"><%- include('partials/icon', { name: 'plus', size: 14 }) %> Follow</button></form>
       </div>
     <% }) %>
   </div>

@@ -1,25 +1,25 @@
 <%- include('partials/header') %>
   <div class="card">
-    <a href="<%= post ? '/posts/' + post.id : '/' %>" class="muted" style="font-size:0.85rem">← Back</a>
-    <h2 style="margin:0.5rem 0">Edit History</h2>
+    <a href="<%= post ? '/posts/' + post.id : '/' %>" class="muted" style="font-size:0.85rem;display:inline-flex;align-items:center;gap:4px"><%- include('partials/icon', { name: 'arrowLeft', size: 13 }) %> Back</a>
+    <h2 style="margin:0.5rem 0">Edit history</h2>
     <% if (history.length === 0) { %>
-      <p class="muted">No edit history available.</p>
+      <p class="muted">No edits recorded.</p>
     <% } else { %>
       <div style="margin-top:1rem">
         <% history.forEach(function(h){ %>
-          <div class="edit-history-entry" style="padding:0.75rem;margin-bottom:0.5rem;background:var(--surface-2);border-radius:var(--radius-lg)">
-            <div style="font-size:0.85rem;margin-bottom:0.25rem">
+          <div class="edit-history-entry" style="padding:0.85rem;margin-bottom:0.6rem;background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius-lg)">
+            <div style="font-size:0.85rem;margin-bottom:0.4rem">
               <strong><%= h.display_name %></strong> <span class="muted">@<%= h.username %></span>
               <span class="muted">· <%= new Date(h.edited_at).toLocaleString() %></span>
             </div>
             <div style="display:flex;gap:1rem;flex-wrap:wrap">
               <div style="flex:1;min-width:200px">
-                <small class="muted">Before:</small>
-                <div style="padding:0.25rem 0.5rem;background:var(--surface-3);border-radius:var(--radius);margin-top:2px;white-space:pre-wrap"><%= h.old_body %></div>
+                <small class="muted">Before</small>
+                <div style="padding:0.4rem 0.6rem;background:var(--surface-3);border:1px solid var(--border-soft);border-radius:var(--radius);margin-top:4px;white-space:pre-wrap"><%= h.old_body %></div>
               </div>
               <div style="flex:1;min-width:200px">
-                <small class="muted">After:</small>
-                <div style="padding:0.25rem 0.5rem;background:var(--surface-3);border-radius:var(--radius);margin-top:2px;white-space:pre-wrap"><%= h.new_body %></div>
+                <small class="muted">After</small>
+                <div style="padding:0.4rem 0.6rem;background:var(--surface-3);border:1px solid var(--border-soft);border-radius:var(--radius);margin-top:4px;white-space:pre-wrap"><%= h.new_body %></div>
               </div>
             </div>
           </div>

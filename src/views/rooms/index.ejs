@@ -1,14 +1,12 @@
 <%- include('../partials/header') %>
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center">
-      <h2 style="margin:0">Rooms</h2>
-      <a class="btn" href="/rooms/create">Create Room</a>
-    </div>
+  <div class="card" style="display:flex;justify-content:space-between;align-items:center">
+    <h2 style="margin:0">Rooms</h2>
+    <a class="btn" href="/rooms/create"><%- include('../partials/icon', { name: 'plus', size: 15 }) %> Create room</a>
   </div>
 
   <% if (myRooms.length) { %>
     <div class="card">
-      <h3>Your Rooms</h3>
+      <h3>Your rooms</h3>
       <div style="display:flex;flex-direction:column;gap:8px">
         <% myRooms.forEach(function(r) { %>
           <a href="/rooms/<%= r.id %>" class="room-card">
@@ -22,7 +20,7 @@
 
   <% if (available.length) { %>
     <div class="card">
-      <h3>Public Rooms</h3>
+      <h3>Public rooms</h3>
       <div style="display:flex;flex-direction:column;gap:8px">
         <% available.filter(function(r) { return r.is_public; }).forEach(function(r) { %>
           <div class="room-card" style="display:flex;justify-content:space-between;align-items:center">
@@ -30,23 +28,23 @@
               <a href="/rooms/<%= r.id %>"><strong><%= r.name %></strong></a>
               <small class="muted"><%= r.description || 'No description' %></small>
             </div>
-            <div style="display:flex;align-items:center;gap:8px">
+            <div style="display:flex;align-items:center;gap:10px">
               <small class="muted"><%= r.member_count %></small>
-              <form method="post" action="/rooms/<%= r.id %>/join" style="margin:0">
+              <form method="post" action="/rooms/<%= r.id %>/join">
                 <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                <button class="btn" style="font-size:13px;padding:4px 12px">Join</button>
+                <button class="btn small">Join</button>
               </form>
             </div>
           </div>
         <% }) %>
         <% if (!available.some(function(r) { return r.is_public; })) { %>
-          <p class="muted">No public rooms available.</p>
+          <p class="muted">No public rooms right now.</p>
         <% } %>
       </div>
     </div>
 
     <div class="card">
-      <h3>Private Rooms</h3>
+      <h3>Private rooms</h3>
       <div style="display:flex;flex-direction:column;gap:8px">
         <% available.filter(function(r) { return !r.is_public; }).forEach(function(r) { %>
           <div class="room-card" style="display:flex;justify-content:space-between;align-items:center">
@@ -54,9 +52,7 @@
               <a href="/rooms/<%= r.id %>"><strong><%= r.name %></strong></a>
               <small class="muted"><%= r.description || 'No description' %></small>
             </div>
-            <div style="display:flex;align-items:center;gap:8px">
-              <small class="muted"><%= r.member_count %> members</small>
-            </div>
+            <small class="muted"><%= r.member_count %> members</small>
           </div>
         <% }) %>
         <% if (!available.some(function(r) { return !r.is_public; })) { %>
@@ -65,8 +61,11 @@
       </div>
     </div>
   <% } else { %>
-    <div class="card">
-      <p class="muted">No available rooms. Create one!</p>
+    <div class="card empty-state">
+      <div class="empty-art"><%- include('../partials/rings', { size: 56, animate: true }) %></div>
+      <h4>No rooms yet</h4>
+      <p>Create one and invite your friends in.</p>
+      <a class="btn" href="/rooms/create"><%- include('../partials/icon', { name: 'plus', size: 15 }) %> Create a room</a>
     </div>
   <% } %>
 <%- include('../partials/footer') %>

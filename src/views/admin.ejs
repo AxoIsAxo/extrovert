@@ -1,58 +1,33 @@
 <%- include('partials/header') %>
-  <div class="card" style="max-width:800px;margin:0 auto">
-    <h2>Admin panel</h2>
-    <table style="width:100%;border-collapse:collapse;font-size:13px">
+  <div class="card" style="max-width:820px;margin:0 auto">
+    <h2>Admin · Users</h2>
+    <table class="admin-table">
       <thead>
-        <tr style="text-align:left;border-bottom:2px solid var(--border)">
-          <th style="padding:8px 4px">User</th>
-          <th style="padding:8px 4px">Referred</th>
-          <th style="padding:8px 4px">★</th>
-          <th style="padding:8px 4px">Status</th>
-          <th style="padding:8px 4px">Actions</th>
-        </tr>
+        <tr><th>User</th><th>Referred</th><th>Status</th><th>Actions</th></tr>
       </thead>
       <tbody>
         <% users.forEach(function(u) { %>
-          <tr style="border-bottom:1px solid var(--border)">
-            <td style="padding:8px 4px">
+          <tr>
+            <td>
               <a href="/u/<%= u.username %>"><%= u.display_name %></a>
               <small class="muted">@<%= u.username %></small>
             </td>
-            <td style="padding:8px 4px"><%= u.referral_count %></td>
-            <td style="padding:8px 4px"><%= u.referral_count > 0 ? '★' : '—' %></td>
-            <td style="padding:8px 4px">
-              <% if (u.banned) { %><span style="color:var(--danger)">Banned</span><% } else if (u.is_admin) { %><span style="color:var(--accent)">Admin</span><% } else { %><span class="muted">Active</span><% } %>
+            <td><%= u.referral_count %><% if (u.referral_count > 0) { %> <%- include('partials/icon', { name: 'starFilled', size: 12, cls: 'flash-ico' }) %><% } %></td>
+            <td>
+              <% if (u.banned) { %><span style="color:var(--danger);font-weight:600">Banned</span><% } else if (u.is_admin) { %><span style="color:var(--accent);font-weight:600">Admin</span><% } else { %><span class="muted">Active</span><% } %>
             </td>
-            <td style="padding:8px 4px;white-space:nowrap">
+            <td class="actions">
               <% if (!u.is_admin) { %>
-                <form method="post" action="/admin/make-admin/<%= u.id %>" style="display:inline;margin:0">
-                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                  <button class="btn ghost" style="font-size:12px;padding:2px 8px;color:var(--accent)">Make Admin</button>
-                </form>
-                <form method="post" action="/admin/delete/<%= u.id %>" style="display:inline;margin:0">
-                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                  <button class="btn ghost" style="font-size:12px;padding:2px 8px;color:var(--danger)">Delete</button>
-                </form>
+                <form method="post" action="/admin/make-admin/<%= u.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost small" style="color:var(--accent)">Make admin</button></form>
+                <form method="post" action="/admin/delete/<%= u.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost danger small">Delete</button></form>
                 <% if (u.banned) { %>
-                  <form method="post" action="/admin/unban/<%= u.id %>" style="display:inline;margin:0">
-                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                    <button class="btn ghost" style="font-size:12px;padding:2px 8px">Unban</button>
-                  </form>
+                  <form method="post" action="/admin/unban/<%= u.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost small">Unban</button></form>
                 <% } else { %>
-                  <form method="post" action="/admin/ban/<%= u.id %>" style="display:inline;margin:0">
-                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                    <button class="btn ghost" style="font-size:12px;padding:2px 8px">Ban</button>
-                  </form>
+                  <form method="post" action="/admin/ban/<%= u.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost small">Ban</button></form>
                 <% } %>
               <% } %>
               <% if (u.referral_count > 0) { %>
-                <form method="post" action="/admin/remove-referral/<%= u.id %>" style="display:inline;margin:0">
-                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                  <button class="btn ghost" style="font-size:12px;padding:2px 8px">Remove ★</button>
-                </form>
-              <% } %>
-              <% if (u.is_admin && u.referral_count === 0) { %>
-                <span class="muted">—</span>
+                <form method="post" action="/admin/remove-referral/<%= u.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost small">Remove ★</button></form>
               <% } %>
             </td>
           </tr>
@@ -61,34 +36,20 @@
     </table>
   </div>
 
-  <div class="card" style="max-width:800px;margin:16px auto" id="rooms">
-    <h2>Rooms</h2>
+  <div class="card" style="max-width:820px;margin:16px auto" id="rooms">
+    <h2>Admin · Rooms</h2>
     <% if (rooms.length) { %>
-      <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead>
-          <tr style="text-align:left;border-bottom:2px solid var(--border)">
-            <th style="padding:8px 4px">Room</th>
-            <th style="padding:8px 4px">Creator</th>
-            <th style="padding:8px 4px">Members</th>
-            <th style="padding:8px 4px">Type</th>
-            <th style="padding:8px 4px">Actions</th>
-          </tr>
-        </thead>
+      <table class="admin-table">
+        <thead><tr><th>Room</th><th>Creator</th><th>Members</th><th>Type</th><th>Actions</th></tr></thead>
         <tbody>
           <% rooms.forEach(function(r) { %>
-            <tr style="border-bottom:1px solid var(--border)">
-              <td style="padding:8px 4px">
-                <a href="/rooms/<%= r.id %>"><%= r.name %></a>
-                <small class="muted"><%= r.description ? r.description.substring(0, 60) : '' %></small>
-              </td>
-              <td style="padding:8px 4px"><%= r.creator_username || '—' %></td>
-              <td style="padding:8px 4px"><%= r.member_count %></td>
-              <td style="padding:8px 4px"><% if (r.is_public) { %><span class="muted">Public</span><% } else { %><span class="muted">Private</span><% } %></td>
-              <td style="padding:8px 4px">
-                <form method="post" action="/admin/rooms/<%= r.id %>/delete" style="display:inline;margin:0">
-                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                  <button class="btn ghost" style="font-size:12px;padding:2px 8px;color:var(--danger)">Delete</button>
-                </form>
+            <tr>
+              <td><a href="/rooms/<%= r.id %>"><%= r.name %></a><small class="muted"><%= r.description ? r.description.substring(0, 60) : '' %></small></td>
+              <td><%= r.creator_username || '—' %></td>
+              <td><%= r.member_count %></td>
+              <td><span class="muted"><%= r.is_public ? 'Public' : 'Private' %></span></td>
+              <td class="actions">
+                <form method="post" action="/admin/rooms/<%= r.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost danger small">Delete</button></form>
               </td>
             </tr>
           <% }) %>
@@ -99,33 +60,20 @@
     <% } %>
   </div>
 
-  <div class="card" style="max-width:800px;margin:16px auto" id="reports">
-    <h2>Reports (<%= reports.length %>)</h2>
+  <div class="card" style="max-width:820px;margin:16px auto" id="reports">
+    <h2>Admin · Reports (<%= reports.length %>)</h2>
     <% if (reports.length) { %>
-      <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead>
-          <tr style="text-align:left;border-bottom:2px solid var(--border)">
-            <th style="padding:8px 4px">Message</th>
-            <th style="padding:8px 4px">From</th>
-            <th style="padding:8px 4px">Room</th>
-            <th style="padding:8px 4px">Actions</th>
-          </tr>
-        </thead>
+      <table class="admin-table">
+        <thead><tr><th>Message</th><th>From</th><th>Room</th><th>Actions</th></tr></thead>
         <tbody>
           <% reports.forEach(function(r) { %>
-            <tr style="border-bottom:1px solid var(--border)">
-              <td style="padding:8px 4px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><%= r.message_body %></td>
-              <td style="padding:8px 4px"><%= r.reporter_username %></td>
-              <td style="padding:8px 4px"><%= r.room_name %></td>
-              <td style="padding:8px 4px;white-space:nowrap">
-                <form method="post" action="/admin/reports/<%= r.id %>/ban" style="display:inline;margin:0">
-                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                  <button class="btn ghost" style="font-size:12px;padding:2px 8px;color:var(--danger)">Ban author</button>
-                </form>
-                <form method="post" action="/admin/reports/<%= r.id %>/dismiss" style="display:inline;margin:0">
-                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                  <button class="btn ghost" style="font-size:12px;padding:2px 8px">Dismiss</button>
-                </form>
+            <tr>
+              <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><%= r.message_body %></td>
+              <td><%= r.reporter_username %></td>
+              <td><%= r.room_name %></td>
+              <td class="actions">
+                <form method="post" action="/admin/reports/<%= r.id %>/ban"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost danger small">Ban author</button></form>
+                <form method="post" action="/admin/reports/<%= r.id %>/dismiss"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost small">Dismiss</button></form>
               </td>
             </tr>
           <% }) %>

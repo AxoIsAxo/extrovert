@@ -39,25 +39,29 @@ const avatarUpload = multer({
 });
 
 const DEFAULT_PROFILE_HTML = `<div class="ev-banner">
-  <h2>Welcome to my profile</h2>
-  <p>This is my customizable space on Extrovert. I can edit this HTML and the
-  page CSS however I like — no JavaScript allowed.</p>
+  <h2>Hi, I'm on Extrovert</h2>
+  <p>This is my space — I can write my own HTML and CSS here, no scripts
+  allowed. Put <code>&lt;!--POSTS--&gt;</code> wherever I want my posts to show up.</p>
 </div>
 <div class="ev-posts-wrap">
   <!--POSTS-->
 </div>`;
 
 const DEFAULT_PROFILE_CSS = `.ev-banner {
-  padding: 32px;
-  background: #2a2347;
-  color: #d8ccff;
-  border: 1px solid #7c5cff;
-  border-radius: 18px;
+  padding: 30px 32px;
+  background: linear-gradient(135deg, var(--primary-soft), var(--secondary-soft));
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
   margin-bottom: 22px;
 }
-.ev-banner h2 { margin: 0 0 8px; color: #fff; }
-.ev-banner p { margin: 0; opacity: .85; }
-.ev-posts-wrap { display: flex; flex-direction: column; gap: 16px; }`;
+.ev-banner h2 { margin: 0 0 8px; font-family: var(--font-display); color: var(--text); }
+.ev-banner p { margin: 0; color: var(--text-secondary); line-height: 1.6; }
+.ev-banner code {
+  background: var(--surface-2); color: var(--primary-strong);
+  padding: 1px 6px; border-radius: 6px; font-size: 0.85em;
+  font-family: ui-monospace, monospace;
+}
+.ev-posts-wrap { display: flex; flex-direction: column; gap: 14px; }`;
 
 // Hydrate a user's posts for display on their profile (resolves reposts).
 function hydrateProfilePosts(userId, viewerId) {

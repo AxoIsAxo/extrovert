@@ -1,18 +1,20 @@
 <%- include('partials/header') %>
-  <div class="card" style="max-width:500px;margin:0 auto">
-    <h2>My Stickers</h2>
-    <form method="post" action="/stickers/upload" enctype="multipart/form-data" style="margin-bottom:16px">
+  <div class="card" style="max-width:520px;margin:0 auto">
+    <h2>My stickers</h2>
+    <form method="post" action="/stickers/upload" enctype="multipart/form-data" style="margin-bottom:18px">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-      <label>Upload sticker (max 250 KB, images &amp; GIFs)</label>
+      <label>Upload a sticker <span class="muted">(max 250 KB, images &amp; GIFs)</span></label>
       <input type="file" name="sticker" accept="image/*" required>
-      <button class="btn" type="submit" style="margin-top:8px">Upload</button>
+      <button class="btn" type="submit" style="margin-top:10px"><%- include('partials/icon', { name: 'plus', size: 15 }) %> Upload</button>
     </form>
-    <div style="display:flex;flex-wrap:wrap;gap:8px">
+    <div style="display:flex;flex-wrap:wrap;gap:10px">
       <% stickers.forEach(function(s){ %>
-        <img src="<%= s.file_path %>" class="sticker-thumb" alt="sticker" style="width:80px;height:80px;object-fit:contain;border-radius:var(--radius-lg);background:var(--surface-2)">
+        <img src="<%= s.file_path %>" class="sticker-thumb" alt="sticker" style="width:84px;height:84px;object-fit:contain;border-radius:var(--radius-lg);background:var(--surface-2);border:1px solid var(--border-soft)">
       <% }) %>
       <% if (stickers.length === 0) { %>
-        <p class="muted">No stickers yet.</p>
+        <div class="empty-state" style="padding:18px 12px;width:100%">
+          <p>No stickers yet — upload one and it'll show up in your sticker picker.</p>
+        </div>
       <% } %>
     </div>
   </div>

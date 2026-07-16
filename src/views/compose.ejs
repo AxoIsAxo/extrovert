@@ -1,29 +1,29 @@
 <%- include('partials/header') %>
-  <div class="card">
-    <h2 style="margin-top:0">Create a post</h2>
+  <div class="card" style="max-width:620px;margin:0 auto">
+    <h2 style="margin-top:0">New post</h2>
     <form method="post" action="/posts" enctype="multipart/form-data">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <div class="type-tabs" id="typeTabs">
-        <button type="button" data-type="text" class="active">📝 Text</button>
-        <button type="button" data-type="photo">📷 Photo</button>
-        <button type="button" data-type="video">🎬 Video</button>
+        <button type="button" data-type="text" class="active"><%- include('partials/icon', { name: 'edit', size: 15 }) %> Text</button>
+        <button type="button" data-type="photo"><%- include('partials/icon', { name: 'image', size: 15 }) %> Photo</button>
+        <button type="button" data-type="video"><%- include('partials/icon', { name: 'video', size: 15 }) %> Video</button>
       </div>
       <input type="hidden" name="type" id="typeField" value="text">
 
-      <label>Caption / text</label>
-      <textarea name="body" rows="3" placeholder="What's on your mind?"></textarea>
+      <label>What's on your mind?</label>
+      <textarea name="body" rows="4" placeholder="Share something with your network…"></textarea>
 
       <div id="mediaWrap" style="display:none">
         <label>Media file</label>
         <input type="file" name="media" accept="image/*,video/*">
       </div>
 
-      <div style="margin-top:16px">
-        <button class="btn" type="submit">Post</button>
+      <div style="margin-top:18px;display:flex;gap:10px">
+        <button class="btn" type="submit"><%- include('partials/icon', { name: 'arrowRight', size: 16 }) %> Post</button>
         <a class="btn ghost" href="/">Cancel</a>
       </div>
     </form>
   </div>
 
-  <script src="/static/compose.js?v=1"></script>
+  <script src="/static/compose.js?v=2"></script>
 <%- include('partials/footer') %>

@@ -1,22 +1,25 @@
 <%- include('partials/header') %>
   <div class="card" style="display:flex;justify-content:space-between;align-items:center">
-    <h2 style="margin:0">Inbox</h2>
+    <h2 style="margin:0">Notifications</h2>
+    <% if (notifications.length) { %><small class="muted"><%= notifications.filter(n=>!n.read).length %> new</small><% } %>
   </div>
 
   <% if (notifications.length === 0) { %>
-    <div class="card center muted">
-      <p>No notifications yet.</p>
+    <div class="card empty-state">
+      <div class="empty-art"><%- include('partials/rings', { size: 56, animate: true }) %></div>
+      <h4>All quiet</h4>
+      <p>When people interact with you, it'll show up here.</p>
     </div>
   <% } else { %>
     <% notifications.forEach(function(n){ %>
       <div class="card notif <%= n.read ? '' : 'unread' %>">
         <div class="notif-icon">
-          <% if (n.type === 'follow') { %>👤<% } %>
-          <% if (n.type === 'like') { %>❤️<% } %>
-          <% if (n.type === 'comment') { %>💬<% } %>
-          <% if (n.type === 'share') { %>🔗<% } %>
-          <% if (n.type === 'repost') { %>🔁<% } %>
-          <% if (n.type === 'message') { %>💬<% } %>
+          <% if (n.type === 'follow') { %><%- include('partials/icon', { name: 'user', size: 18 }) %><% } %>
+          <% if (n.type === 'like') { %><%- include('partials/icon', { name: 'heartFilled', size: 18 }) %><% } %>
+          <% if (n.type === 'comment') { %><%- include('partials/icon', { name: 'comment', size: 18 }) %><% } %>
+          <% if (n.type === 'share') { %><%- include('partials/icon', { name: 'share', size: 18 }) %><% } %>
+          <% if (n.type === 'repost') { %><%- include('partials/icon', { name: 'repost', size: 18 }) %><% } %>
+          <% if (n.type === 'message') { %><%- include('partials/icon', { name: 'chat', size: 18 }) %><% } %>
         </div>
         <div class="notif-body">
           <a href="/u/<%= n.actor_username %>"><b><%= n.actor_name %></b></a>
@@ -26,7 +29,7 @@
           <% if (n.type === 'share') { %>shared your <a href="/posts/<%= n.post_id %>">post</a><% } %>
           <% if (n.type === 'repost') { %>reposted your <a href="/posts/<%= n.post_id %>">post</a><% } %>
           <% if (n.type === 'message') { %>sent you a <a href="/chats/<%= n.actor_username %>">message</a><% } %>
-          <div class="muted" style="font-size:0.8rem"><%= locals.relTime(n.created_at) %></div>
+          <div class="muted" style="font-size:0.78rem"><%= locals.relTime(n.created_at) %></div>
         </div>
       </div>
     <% }) %>

@@ -1,11 +1,12 @@
 <%- include('partials/header') %>
-  <div class="card" style="max-width:500px;margin:0 auto;text-align:center">
-    <h2>No admin exists</h2>
-    <p style="margin:16px 0">There is no admin account on Extrovert. Do you want to make your account an admin account?</p>
-    <form method="post" action="/become-admin">
+  <div class="card" style="max-width:500px;margin:40px auto;text-align:center">
+    <div style="display:flex;justify-content:center;margin-bottom:6px"><%- include('partials/rings', { size: 44, animate: true }) %></div>
+    <h2>No admin yet</h2>
+    <p class="muted" style="margin:14px 0">There's no admin account on this Extrovert instance. Make yours the admin?</p>
+    <form method="post" action="/become-admin" style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-      <button class="btn">Yes, make me admin</button>
-      <a href="/" class="btn ghost" style="margin-left:8px">No, skip</a>
+      <button class="btn"><%- include('partials/icon', { name: 'shield', size: 15 }) %> Yes, make me admin</button>
+      <a href="/" class="btn ghost">No, skip</a>
     </form>
   </div>
 <%- include('partials/footer') %>

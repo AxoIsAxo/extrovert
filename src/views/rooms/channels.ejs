@@ -37,7 +37,7 @@
     <% if (channels.length) { %>
       <div style="display:flex;flex-direction:column;gap:4px">
         <% channels.forEach(function(ch) { %>
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:2px solid var(--border-light)">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:2px solid var(--border-soft)">
             <div>
               <strong>#<%= ch.name %></strong>
               <% if (ch.view_role_ids) { %><small class="muted"> restricted view</small><% } %>

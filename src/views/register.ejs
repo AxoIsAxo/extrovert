@@ -1,18 +1,24 @@
 <%- include('partials/header') %>
-  <div class="card" style="max-width:380px;margin:40px auto">
-    <h2 style="margin-top:0">Join Extrovert</h2>
-    <% if (error) { %><div class="flash err"><%= error %></div><% } %>
-    <form method="post" action="/register<%= locals.ref ? '?ref=' + encodeURIComponent(ref) : '' %>" autocomplete="on">
-      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-      <% if (locals.ref) { %><input type="hidden" name="ref" value="<%= ref %>"><% } %>
-      <label for="reg-username">Username</label>
-      <input type="text" id="reg-username" name="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" required autofocus placeholder="3-20 chars, no spaces">
-      <label for="reg-displayName">Display name</label>
-      <input type="text" id="reg-displayName" name="displayName" placeholder="(optional)">
-      <label for="reg-password">Password</label>
-      <input type="password" id="reg-password" name="password" autocomplete="new-password" required>
-      <div style="margin-top:16px"><button class="btn">Create account</button></div>
-    </form>
-    <p class="muted">Already have an account? <a href="/login">Log in</a></p>
+  <div style="max-width:400px;margin:48px auto">
+    <div style="text-align:center;margin-bottom:24px">
+      <%- include('partials/rings', { size: 56, animate: true }) %>
+      <h2 style="margin:14px 0 4px">Join Extrovert</h2>
+      <p class="muted" style="margin:0">A network where you only see people your friends know.</p>
+    </div>
+    <div class="card elevated">
+      <% if (error) { %><div class="flash err"><span class="flash-ico"><%- include('partials/icon', { name: 'alert', size: 18 }) %></span><span><%= error %></span></div><% } %>
+      <form method="post" action="/register<%= locals.ref ? '?ref=' + encodeURIComponent(ref) : '' %>" autocomplete="on">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <% if (locals.ref) { %><input type="hidden" name="ref" value="<%= ref %>"><% } %>
+        <label for="reg-username">Username</label>
+        <input type="text" id="reg-username" name="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" required autofocus placeholder="3–20 chars, no spaces">
+        <label for="reg-displayName">Display name <span class="muted">(optional)</span></label>
+        <input type="text" id="reg-displayName" name="displayName" placeholder="What should people call you?">
+        <label for="reg-password">Password</label>
+        <input type="password" id="reg-password" name="password" autocomplete="new-password" required>
+        <button class="btn full" style="margin-top:20px">Create account</button>
+      </form>
+    </div>
+    <p class="muted center" style="margin-top:18px">Already on Extrovert? <a href="/login">Log in</a></p>
   </div>
 <%- include('partials/footer') %>

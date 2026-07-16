@@ -1,14 +1,15 @@
 <%- include('partials/header') %>
-  <div class="card" style="max-width:500px;margin:0 auto;text-align:center">
-    <h2 style="margin-top:0">Delete account?</h2>
-    <p style="margin-bottom:24px">This will permanently delete your account, all your posts, comments, likes, messages, and every other trace. This <strong>cannot be undone</strong>.</p>
+  <div class="card" style="max-width:520px;margin:40px auto;text-align:center">
+    <div style="display:flex;justify-content:center;margin-bottom:8px"><%- include('partials/icon', { name: 'alert', size: 32, cls: 'flash-ico' }) %></div>
+    <h2 style="margin-top:0">Delete your account?</h2>
+    <p class="muted" style="margin-bottom:20px">This removes your account, all your posts, comments, likes, messages, and every other trace. <strong style="color:var(--danger)">This cannot be undone.</strong></p>
 
-    <hr style="border:none;border-top:2px solid var(--border-light);margin:24px 0">
+    <hr>
 
     <form method="post" action="/settings/delete" style="display:inline">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-      <button class="btn danger">Yes, delete my account</button>
+      <button class="btn danger"><%- include('partials/icon', { name: 'trash', size: 15 }) %> Delete my account</button>
     </form>
-    <a class="btn ghost" href="/settings" style="margin-left:8px">Cancel</a>
+    <a class="btn ghost" href="/settings" style="margin-left:8px">Keep my account</a>
   </div>
 <%- include('partials/footer') %>

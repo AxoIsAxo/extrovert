@@ -1,0 +1,15 @@
+<%
+// The signature motif: three concentric rings.
+//   inner  = you        (primary)
+//   mid    = friends    (primary-strong)
+//   outer  = friends-of-friends (cyan secondary)
+// Encodes the one mechanic no other social product has.
+// Usage: include('rings', { size: 22, animate: true })
+const size = locals.size || 24;
+const animate = locals.animate ? ' ring-anim' : '';
+const cls = locals.cls ? ` ${locals.cls}` : '';
+%><svg class="rings-svg<%= cls %>" width="<%= size %>" height="<%= size %>" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+  <circle class="r3<%= animate %>" cx="12" cy="12" r="11" stroke="var(--secondary)" stroke-width="1.4" opacity="0.85"/>
+  <circle class="r2<%= animate %>" cx="12" cy="12" r="7" stroke="var(--primary-strong)" stroke-width="1.4" opacity="0.9"/>
+  <circle class="r1<%= animate %>" cx="12" cy="12" r="3" fill="var(--primary)" stroke="var(--primary)" stroke-width="1"/>
+</svg>

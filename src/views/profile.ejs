@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="<%= locals.theme || 'dark' %>">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -14,41 +14,43 @@
   <%- include('partials/nav') %>
   <main class="wrap">
     <div class="profile-header">
-      <% if (profileUser.avatar) { %><img src="<%= profileUser.avatar %>" alt="" style="width:68px;height:68px;border-radius:999px;flex:none;object-fit:cover"><% } else { %><div class="avatar" style="width:68px;height:68px;font-size:28px"><%= (profileUser.display_name || profileUser.username).slice(0,1).toUpperCase() %></div><% } %>
+      <% if (profileUser.avatar) { %><img src="<%= profileUser.avatar %>" alt="" style="width:72px;height:72px;border-radius:var(--radius-full);flex:none;object-fit:cover;border:1px solid var(--border-soft)"><% } else { %><div class="avatar" style="width:72px;height:72px;font-size:32px"><%= (profileUser.display_name || profileUser.username).slice(0,1).toUpperCase() %></div><% } %>
       <div>
-        <div style="display:flex;align-items:center;gap:8px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <h1 style="margin:0"><%= profileUser.display_name %></h1>
           <% if (locals.currentUser && !isOwn) { %>
             <% if (mutual) { %>
-              <a href="/chats/<%= profileUser.username %>" class="chat-icon" title="Send message">💬</a>
+              <a href="/chats/<%= profileUser.username %>" class="chat-icon" title="Send a message"><%- include('partials/icon', { name: 'chat', size: 18 }) %></a>
             <% } else { %>
-              <span class="chat-icon locked" title="Follow each other to chat">💬</span>
+              <span class="chat-icon locked" title="Follow each other to start chatting"><%- include('partials/icon', { name: 'lock', size: 15 }) %></span>
             <% } %>
           <% } %>
         </div>
         <div class="handle">@<%= profileUser.username %></div>
         <% if (profileUser.bio) { %><p class="bio"><%= profileUser.bio %></p><% } %>
-        <small class="muted">
-          <a href="/u/<%= profileUser.username %>/followers"><%= followerCount %> follower<%= followerCount === 1 ? '' : 's' %></a>
-          · <a href="/u/<%= profileUser.username %>/following"><%= followingCount %> following</a>
+        <div class="profile-stats">
+          <a href="/u/<%= profileUser.username %>/followers" title="Followers"><span class="stat-dot dot-friends"></span><%= followerCount %> follower<%= followerCount === 1 ? '' : 's' %></a>
+          <a href="/u/<%= profileUser.username %>/following" title="Following"><span class="stat-dot dot-fof"></span><%= followingCount %> following</a>
           <% if (referralCount > 0) { %>
-            · <span class="referral-badge" title="<%= referralCount %> person<%= referralCount === 1 ? '' : 's' %> referred">★<%= referralCount %></span>
+            <span class="stat-pip" title="<%= referralCount %> person<%= referralCount === 1 ? '' : 's' %> referred"><%- include('partials/icon', { name: 'starFilled', size: 13 }) %> <%= referralCount %></span>
           <% } %>
-        </small>
+        </div>
       </div>
       <span class="spacer"></span>
       <% if (locals.currentUser) { %>
         <% if (isOwn) { %>
-          <a class="btn ghost" href="/u/<%= profileUser.username %>/edit">Edit page</a>
-          <% if (referralCode) { %>
-            <button class="btn ghost copy-ref" data-link="<%= baseUrl %>/register?ref=<%= referralCode %>">Copy Referral</button>
-          <% } else { %>
-            <form method="post" action="/u/<%= profileUser.username %>/referral" style="display:inline"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost">Create referral</button></form>
-          <% } %>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <a class="btn ghost" href="/u/<%= profileUser.username %>/edit"><%- include('partials/icon', { name: 'edit', size: 15 }) %> Edit page</a>
+            <% if (referralCode) { %>
+              <button class="btn ghost copy-ref" data-link="<%= baseUrl %>/register?ref=<%= referralCode %>"><%- include('partials/icon', { name: 'link', size: 15 }) %> Copy invite link</button>
+            <% } else { %>
+              <form method="post" action="/u/<%= profileUser.username %>/referral" style="display:inline"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost"><%- include('partials/icon', { name: 'link', size: 15 }) %> Create invite link</button></form>
+            <% } %>
+          </div>
         <% } else if (following) { %>
-          <form method="post" action="/unfollow/<%= profileUser.username %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost">Following ✓</button></form>
+          <form method="post" action="/unfollow/<%= profileUser.username %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost"><%- include('partials/icon', { name: 'check', size: 15 }) %> Following</button></form>
         <% } else { %>
-          <form method="post" action="/follow/<%= profileUser.username %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn">Follow</button></form>
+          <form method="post" action="/follow/<%= profileUser.username %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn"><%- include('partials/icon', { name: 'plus', size: 15 }) %> Follow</button></form>
         <% } %>
       <% } %>
     </div>

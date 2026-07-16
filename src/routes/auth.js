@@ -26,7 +26,7 @@ router.post('/register', async (req, res) => {
     return res.render('register', { error: 'Password must be 6–128 characters.' });
   }
   if (getUserByUsername(username)) {
-    return res.render('register', { error: 'Username unavailable.' });
+    return res.render('register', { error: 'That username is taken — try another.' });
   }
 
   // Handle referral.
@@ -39,7 +39,7 @@ router.post('/register', async (req, res) => {
       const refIp = db.getReferrerIp ? db.getReferrerIp(referrer.id) : null;
       // Anti-farming: reject if same IP as referrer's stored IP.
       if (refIp && registrantIp === refIp) {
-        return res.render('register', { error: 'Referral link cannot be used from the same network.', ref });
+        return res.render('register', { error: "You can't use a referral from your own network.", ref });
       }
       referredBy = referrer.id;
     }

@@ -1,7 +1,8 @@
 <%- include('partials/header') %>
-  <div class="card center">
-    <h2>Not found</h2>
-    <p class="muted">That <%= thing %> doesn't exist, or you can't see it because you're not connected.</p>
-    <a class="btn" href="/">Back to feed</a>
+  <div class="card center" style="max-width:480px;margin:40px auto">
+    <div style="display:flex;justify-content:center;margin-bottom:8px"><%- include('partials/rings', { size: 48, animate: true }) %></div>
+    <h2 style="margin:0 0 6px">Not found</h2>
+    <p class="muted" style="margin:0 0 16px">That <%= thing %> doesn't exist, or it's outside your network — you can only see things from people you're connected to.</p>
+    <a class="btn" href="/"><%- include('partials/icon', { name: 'home', size: 15 }) %> Back to feed</a>
   </div>
 <%- include('partials/footer') %>

@@ -7,21 +7,22 @@
   </div>
 
   <% if (list.length === 0) { %>
-    <div class="card center muted">
+    <div class="card empty-state">
+      <div class="empty-art"><%- include('partials/rings', { size: 48, animate: true }) %></div>
       <p><%= emptyMsg %></p>
     </div>
   <% } else { %>
     <% list.forEach(function(u){ %>
-      <div class="card user-row">
+      <div class="card user-row" style="margin-bottom:10px">
         <% if (u.avatar) { %><img src="<%= u.avatar %>" alt="" class="avatar-img"><% } else { %><div class="avatar"><%= (u.display_name || '?').slice(0,1).toUpperCase() %></div><% } %>
         <div class="info">
           <div style="display:flex;align-items:center;gap:6px">
             <a href="/u/<%= u.username %>" class="post-name"><%= u.display_name %></a>
             <% if (locals.currentUser && u.id !== currentUser.id) { %>
               <% if (u.mutual) { %>
-                <a href="/chats/<%= u.username %>" class="chat-icon" title="Send message">💬</a>
+                <a href="/chats/<%= u.username %>" class="chat-icon" title="Send a message"><%- include('partials/icon', { name: 'chat', size: 15 }) %></a>
               <% } else { %>
-                <span class="chat-icon locked" title="Follow each other to chat">💬</span>
+                <span class="chat-icon locked" title="Follow each other to start chatting"><%- include('partials/icon', { name: 'lock', size: 13 }) %></span>
               <% } %>
             <% } %>
           </div>
@@ -31,7 +32,7 @@
         <% if (locals.currentUser && u.id !== currentUser.id) { %>
           <form method="post" action="<%= u.following ? '/unfollow' : '/follow' %>/<%= u.username %>">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-            <button class="btn <%= u.following ? 'ghost' : '' %>"><%= u.following ? 'Following' : 'Follow' %></button>
+            <button class="btn <%= u.following ? 'ghost' : '' %> small"><% if (u.following) { %><%- include('partials/icon', { name: 'check', size: 14 }) %> Following<% } else { %><%- include('partials/icon', { name: 'plus', size: 14 }) %> Follow<% } %></button>
           </form>
         <% } %>
       </div>

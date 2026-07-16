@@ -1,8 +1,12 @@
 <% if (!items || items.length === 0) { %>
-  <div class="card center muted">
-    <p>No posts here yet.</p>
-    <% if (!locals.onProfile) { %>
-      <p>Follow some people to fill your feed. Try the <a href="/discover">Discover</a> page.</p>
+  <div class="card empty-state">
+    <div class="empty-art"><%- include('rings', { size: 56, animate: true }) %></div>
+    <h4>Nothing here yet</h4>
+    <% if (locals.onProfile) { %>
+      <p>This person hasn't posted. Check back later.</p>
+    <% } else { %>
+      <p>No posts to show. Follow a few people to fill your feed.</p>
+      <a class="btn" href="/discover"><%- include('icon', { name: 'search', size: 15 }) %> Find people</a>
     <% } %>
   </div>
 <% } else { %>
