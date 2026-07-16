@@ -274,8 +274,8 @@ h4 { font-size: var(--fs-lg); font-family: var(--font-body); font-weight: 700; l
   box-shadow: none;
 }
 .btn.ghost:hover { background: var(--surface-2); color: var(--text); border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
-.btn.ghost.danger { color: var(--danger); border-color: var(--danger); }
-.btn.ghost.danger:hover { background: var(--danger-soft); border-color: var(--danger); }
+.btn.ghost.danger { background: transparent; color: var(--danger); border-color: var(--danger); box-shadow: none; }
+.btn.ghost.danger:hover { background: var(--danger-soft); color: var(--danger); border-color: var(--danger); }
 .btn.danger { background: var(--danger); color: #fff; }
 .btn.danger:hover { background: #ff7585; color: #fff; }
 .btn.small { padding: 6px 14px; min-height: 32px; font-size: var(--fs-xs); }
