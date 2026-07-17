@@ -41,6 +41,7 @@ class SqliteStore extends Store {
       }
       cb(null, JSON.parse(row.data));
     } catch (err) {
+      console.error('Session store get error:', err);
       cb(err);
     }
   }
@@ -57,6 +58,7 @@ class SqliteStore extends Store {
       `).run(sid, data, expiresAt);
       cb(null);
     } catch (err) {
+      console.error('Session store set error:', err);
       cb(err);
     }
   }
