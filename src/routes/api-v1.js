@@ -75,7 +75,7 @@ function serializeAccount(user, currentUserId) {
     id: String(user.id),
     username: user.username,
     display_name: user.display_name,
-    avatar: user.avatar ? `/uploads/${user.avatar}` : null,
+    avatar: user.avatar || null,
     bio: user.bio || '',
     created_at: user.created_at,
     statuses_count: db.countPostsByUser(user.id),
@@ -307,7 +307,7 @@ router.post('/oauth/token', clientAppAuth, (req, res) => {
       if (scopesSet.has('profile')) {
         idTokenPayload.preferred_username = user.username;
         idTokenPayload.name = user.display_name;
-        if (user.avatar) idTokenPayload.picture = `${ISSUER}/uploads/${user.avatar}`;
+        if (user.avatar) idTokenPayload.picture = `${ISSUER}${user.avatar}`;
       }
       tokenResponse.id_token = signIdToken(idTokenPayload);
     }
@@ -395,7 +395,7 @@ router.get('/oauth/userinfo', requireApiAuth('openid'), (req, res) => {
   if (scopesSet.has('profile')) {
     info.preferred_username = user.username;
     info.name = user.display_name;
-    if (user.avatar) info.picture = `${ISSUER}/uploads/${user.avatar}`;
+    if (user.avatar) info.picture = `${ISSUER}${user.avatar}`;
   }
   res.json(info);
 });
@@ -448,7 +448,7 @@ router.post('/accounts/avatar', requireApiAuth('profile'), avatarUpload.single('
   try {
     await sharp(inputPath).resize(200, 200, { fit: 'cover', position: 'center' }).jpeg({ quality: 85 }).toFile(outputPath);
     fs.unlinkSync(inputPath);
-    db.setAvatar(req.apiUser.id, 'avatars/' + outputName);
+    db.setAvatar(req.apiUser.id, '/uploads/avatars/' + outputName);
   } catch (e) {
     try { fs.unlinkSync(inputPath); } catch {}
     return errorResponse(res, 400, 'Bad Request', 'Failed to process image.');
@@ -910,6 +910,82 @@ router.get('/calls/presence', requireApiAuth, (req, res) => {
 router.get('/calls/presence/:username', requireApiAuth, (req, res) => {
   const presence = getUserPresence(req.params.username);
   res.json(presence);
+});
+
+// ======== Rooms ========
+
+router.get('/rooms', requireApiAuth('read'), (req, res) => {
+  const myRooms = db.getRoomsForUser(req.apiUser.id);
+  const result = myRooms.map(r => ({
+    id: String(r.id),
+    name: r.name,
+    description: r.description || '',
+    is_public: !!r.is_public,
+    member_count: db.countRoomMembers(r.id),
+    is_member: true,
+  }));
+  responseEnvelope(res, result);
+});
+
+router.get('/rooms/:id', requireApiAuth('read'), (req, res) => {
+  const room = db.getRoom(parseInt(req.params.id, 10));
+  if (!room) return errorResponse(res, 404, 'Not Found', 'Room not found.');
+  const isMember = db.isRoomMember(room.id, req.apiUser.id);
+  const channels = db.getRoomChannels(room.id).map(c => ({
+    id: String(c.id),
+    name: c.name,
+    type: c.type || 'text',
+  }));
+  responseEnvelope(res, {
+    id: String(room.id),
+    name: room.name,
+    description: room.description || '',
+    html: room.html || '',
+    css: room.css || '',
+    is_public: !!room.is_public,
+    is_member: isMember,
+    channels,
+  });
+});
+
+router.get('/rooms/:id/channels/:cid/messages', requireApiAuth('read'), (req, res) => {
+  const room = db.getRoom(parseInt(req.params.id, 10));
+  if (!room) return errorResponse(res, 404, 'Not Found', 'Room not found.');
+  if (!db.isRoomMember(room.id, req.apiUser.id)) return errorResponse(res, 403, 'Forbidden', 'Not a member.');
+  const channel = db.getRoomChannel(parseInt(req.params.cid, 10));
+  if (!channel || channel.room_id !== room.id) return errorResponse(res, 404, 'Not Found', 'Channel not found.');
+
+  const cursor = req.query.cursor ? parseInt(req.query.cursor, 10) : null;
+  const messages = db.getRoomMessages(channel.id, cursor);
+  const next = messages.length >= 50 ? String(messages[messages.length - 1].id) : null;
+
+  responseEnvelope(res, {
+    messages: messages.map(m => ({
+      id: String(m.id),
+      user_id: String(m.user_id),
+      username: m.username,
+      display_name: m.display_name,
+      avatar: m.avatar || null,
+      body: m.body,
+      created_at: m.created_at,
+      edited_at: m.edited_at || null,
+    })),
+    next,
+  });
+});
+
+router.post('/rooms/:id/channels/:cid/messages', requireApiAuth('write'), (req, res) => {
+  const room = db.getRoom(parseInt(req.params.id, 10));
+  if (!room) return errorResponse(res, 404, 'Not Found', 'Room not found.');
+  if (!db.isRoomMember(room.id, req.apiUser.id)) return errorResponse(res, 403, 'Forbidden', 'Not a member.');
+  const channel = db.getRoomChannel(parseInt(req.params.cid, 10));
+  if (!channel || channel.room_id !== room.id) return errorResponse(res, 404, 'Not Found', 'Channel not found.');
+
+  const body = String(req.body.body || '').trim();
+  if (!body) return errorResponse(res, 400, 'Bad Request', 'body is required.');
+
+  const msgId = db.sendRoomMessage(channel.id, req.apiUser.id, body);
+  res.status(201).json({ data: { id: String(msgId) } });
 });
 
 // ======== Direct Messages (E2E) ========

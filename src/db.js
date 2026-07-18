@@ -302,8 +302,8 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOIN
 try { db.exec(`CREATE TABLE IF NOT EXISTS join_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, room_id INTEGER NOT NULL REFERENCES rooms(id), user_id INTEGER NOT NULL REFERENCES users(id), status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL)`); } catch {}
 // Fix stale referred_by links for users whose referrer no longer has a referral code.
 db.prepare(`UPDATE users SET referred_by = NULL WHERE referred_by IS NOT NULL AND referred_by IN (SELECT id FROM users WHERE referral_code IS NULL)`).run();
-// Fix avatar paths: strip leading /uploads/ prefix so serializer doesn't double-prefix.
-db.prepare(`UPDATE users SET avatar = substr(avatar, 10) WHERE avatar LIKE '/uploads/%'`).run();
+// Ensure avatar paths have /uploads/ prefix for template rendering.
+db.prepare(`UPDATE users SET avatar = '/uploads/' || avatar WHERE avatar IS NOT NULL AND avatar NOT LIKE '/uploads/%'`).run();
 
 // ---------- users ----------
 function adminExists() {
