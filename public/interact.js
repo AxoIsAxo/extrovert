@@ -9,33 +9,7 @@ document.addEventListener('DOMContentLoaded', function(){
     if (confirmMsg && !confirm(confirmMsg)) { e.preventDefault(); return; }
     var action = form.getAttribute('action') || '';
     var m = action.match(/^\/posts\/(\d+)\/(like|share|repost|follow-from|comment|delete)$/);
-    var chatM = action.match(/^\/chats\/([^/]+)\/send$/);
-    if (!m && !chatM) return;
-
-    if (chatM) {
-      e.preventDefault();
-      var chatMsgDiv = document.querySelector('.chat-messages');
-      if (!chatMsgDiv) return;
-      var input = form.querySelector('input[name="body"]');
-      if (!input || !input.value.trim()) return;
-
-      fetch(action, {
-        method: 'POST',
-        headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': csrfToken },
-        body: new URLSearchParams(Array.from(new FormData(form))),
-      })
-      .then(function(r){ return r.json(); })
-      .then(function(data){
-        if (data.error) return;
-        if (data.message) {
-          addChatMessage(chatMsgDiv, data.message);
-          input.value = '';
-          chatMsgDiv.scrollTop = chatMsgDiv.scrollHeight;
-        }
-      })
-      .catch(function(){});
-      return;
-    }
+    if (!m) return;
 
     var postId = m[1], verb = m[2];
     var postEl = form.closest('.post');
@@ -142,22 +116,6 @@ document.addEventListener('DOMContentLoaded', function(){
         }
       }
     }
-  }
-
-  function addChatMessage(container, msg){
-    var div = document.createElement('div');
-    div.className = 'chat-msg own';
-    var bubble = document.createElement('div');
-    bubble.className = 'chat-bubble';
-    var sticker = msg.body && msg.body.indexOf('/uploads/stickers/') !== -1;
-    bubble.innerHTML = (msg.key_for_sender ? '🔒' : '') + (sticker ? '<img src="' + esc(msg.body) + '" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker">' : esc(msg.body));
-    div.appendChild(bubble);
-    var time = document.createElement('div');
-    time.className = 'muted';
-    time.style.cssText = 'font-size:0.7rem;padding:0 4px';
-    time.textContent = relTime ? relTime(msg.created_at) : new Date(msg.created_at).toLocaleString();
-    div.appendChild(time);
-    container.appendChild(div);
   }
 
   function esc(s){

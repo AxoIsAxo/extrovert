@@ -76,6 +76,9 @@ router.post('/:username/send', (req, res) => {
   const body = String(req.body.body || '').trim().slice(0, 5000);
   const keyForSender = String(req.body.key_for_sender || '').trim() || null;
   const keyForRecipient = String(req.body.key_for_recipient || '').trim() || null;
+  if (body && !body.startsWith('/uploads/stickers/') && (!keyForSender || !keyForRecipient)) {
+    return req.xhr ? res.json({ error: 'End-to-end encryption required. All messages must be encrypted.' }) : res.status(400).send('E2EE required');
+  }
   if (body) {
     const msgId = sendMessage(user.id, other.id, body, keyForSender, keyForRecipient);
     createNotification({ userId: other.id, type: 'message', actorId: user.id });

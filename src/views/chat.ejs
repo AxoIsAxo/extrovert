@@ -44,4 +44,19 @@
     <button class="btn ghost sticker-btn" data-target="sticker-popup-chat" type="button" style="padding:6px 10px" title="Stickers"><%- include('partials/icon', { name: 'smile', size: 18 }) %></button>
     <div id="sticker-popup-chat" style="display:none;position:absolute;bottom:100%;right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);z-index:100;box-shadow:var(--shadow)"></div>
   </form>
+
+  <div id="e2ee-recipient-notice" class="card" style="display:none;text-align:center;padding:2rem">
+    <p><%- include('partials/icon', { name: 'lock', size: 24 }) %></p>
+    <p><strong><%= other.display_name %></strong> hasn't enabled end-to-end encryption yet. Ask them to log in to generate their encryption keys.</p>
+  </div>
+
+  <div id="e2ee-unlock-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center" data-username="<%= locals.currentUser.username %>">
+    <div class="card" style="max-width:360px;width:90%;text-align:center">
+      <h3>Unlock End-to-End Encryption</h3>
+      <p class="muted">Enter your password to decrypt your private key and enable secure messaging.</p>
+      <input type="password" id="e2ee-password" placeholder="Password" style="width:100%;margin-bottom:10px">
+      <button class="btn" id="e2ee-unlock-btn">Unlock</button>
+      <div id="e2ee-unlock-error" style="color:var(--danger);margin-top:8px;display:none"></div>
+    </div>
+  </div>
 <%- include('partials/footer') %>

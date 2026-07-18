@@ -1047,12 +1047,26 @@ router.post('/conversations/:username/messages', requireApiAuth('write:direct'),
   const keyForSender = String(req.body.key_for_sender || '').trim() || null;
   const keyForRecipient = String(req.body.key_for_recipient || '').trim() || null;
 
+  if (!body.startsWith('/uploads/stickers/') && (!keyForSender || !keyForRecipient)) {
+    return errorResponse(res, 400, 'Bad Request', 'End-to-end encryption required. All messages must be encrypted.');
+  }
+
   const msgId = dm.sendMessage(req.apiUser.id, other.id, body, keyForSender, keyForRecipient);
   db.createNotification({ userId: other.id, type: 'message', actorId: req.apiUser.id });
 
   const msg = db.db.prepare(`SELECT id, from_id, to_id, body, created_at, key_for_sender, key_for_recipient FROM messages WHERE id = ?`).get(msgId);
 
-  res.status(201).json({ data: msg });
+  res.status(201).json({
+    data: {
+      id: String(msg.id),
+      from_id: String(msg.from_id),
+      to_id: String(msg.to_id),
+      body: msg.body,
+      created_at: msg.created_at,
+      key_for_sender: msg.key_for_sender,
+      key_for_recipient: msg.key_for_recipient,
+    },
+  });
 });
 
 // Fetch a user's public key

@@ -8,14 +8,12 @@
   var myPrivateKey = null;
   var myPublicKeyPem = null;
 
-  /* ---- Uint8Array → base64 (no .apply, Firefox-safe) ---- */
   function uint8ArrayToBase64(arr) {
     var s = '';
     for (var i = 0; i < arr.length; i++) s += String.fromCharCode(arr[i]);
     return btoa(s);
   }
 
-  /* ---- Derive a key-encryption key from password + username ---- */
   function deriveKek(password, username) {
     var enc = new TextEncoder();
     return crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']).then(function (key) {
@@ -29,7 +27,6 @@
     });
   }
 
-  /* ---- Wrap an RSA private key with a KEK (exportable KEK) ---- */
   function wrapPrivateKey(privateKey, kek) {
     var iv = crypto.getRandomValues(new Uint8Array(12));
     return crypto.subtle.exportKey('pkcs8', privateKey).then(function (exported) {
@@ -42,7 +39,6 @@
     });
   }
 
-  /* ---- Generate RSA key pair and upload -- uses an already-derived KEK ---- */
   function generateAndUpload(kek) {
     return crypto.subtle.generateKey(
       { name: 'RSA-OAEP', modulusLength: 4096, publicExponent: new Uint8Array([1,0,1]), hash: 'SHA-256' },
@@ -63,7 +59,6 @@
     });
   }
 
-  /* ---- Read CSRF token from page meta ---- */
   function csrfToken() {
     var meta = document.querySelector('meta[name="csrf-token"]');
     return meta ? meta.getAttribute('content') : '';
@@ -73,7 +68,6 @@
     return { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() };
   }
 
-  /* ---- Fetch keys from server, unwrap private key with KEK ---- */
   function ensureKeys(kek) {
     if (myPrivateKey) return Promise.resolve();
     return fetch(KEY_URL, { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (data) {
@@ -85,13 +79,11 @@
             return crypto.subtle.importKey('pkcs8', decrypted, { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['decrypt']);
           }).then(function (priv) { myPrivateKey = priv; });
       } else if (!data.publicKey && kek) {
-        // No keys exist yet (existing user before E2EE) — generate on the spot
         return generateAndUpload(kek);
       }
     });
   }
 
-  /* ---- Derive KEK and store in sessionStorage ---- */
   function storeKek(password, username) {
     return deriveKek(password, username).then(function (kek) {
       return crypto.subtle.exportKey('jwk', kek);
@@ -100,7 +92,6 @@
     });
   }
 
-  /* ---- Intercept login form ---- */
   function interceptLoginForm() {
     var form = document.querySelector('form[action^="/login"]');
     if (!form) return;
@@ -113,7 +104,6 @@
     });
   }
 
-  /* ---- Intercept register form ---- */
   function interceptRegisterForm() {
     var form = document.querySelector('form[action^="/register"]');
     if (!form) return;
@@ -136,7 +126,6 @@
     });
   }
 
-  /* ---- My own SPKI for encrypting AES keys for ourselves ---- */
   function mySpki() {
     if (!myPublicKeyPem) return Promise.reject(new Error('No public key'));
     var bytes = atob(myPublicKeyPem.replace(/\s/g, ''));
@@ -145,7 +134,6 @@
     return crypto.subtle.importKey('spki', arr.buffer, { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['encrypt']);
   }
 
-  /* ---- Encrypt ---- */
   function encryptMessage(plaintext, recipientPem) {
     var aesKey, iv;
     return crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt']).then(function (k) {
@@ -182,7 +170,6 @@
       .then(function (enc) { return uint8ArrayToBase64(new Uint8Array(enc)); });
   }
 
-  /* ---- Decrypt ---- */
   function decryptMessage(bodyB64, keyB64) {
     if (!myPrivateKey) return Promise.reject(new Error('No private key loaded'));
     var encKey = Uint8Array.from(atob(keyB64), function (c) { return c.charCodeAt(0); });
@@ -194,13 +181,17 @@
     }).then(function (plain) { return new TextDecoder().decode(plain); });
   }
 
-  /* ---- Append a message bubble (mirrors interact.js addChatMessage) ---- */
   function addChatMsg(container, msg) {
     var div = document.createElement('div');
     div.className = 'chat-msg own';
     var bubble = document.createElement('div');
     bubble.className = 'chat-bubble';
-    bubble.appendChild(document.createTextNode('🔒' + msg.body));
+    var sticker = msg.body && msg.body.indexOf('/uploads/stickers/') !== -1;
+    if (sticker) {
+      bubble.innerHTML = '<img src="' + esc(msg.body) + '" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker">';
+    } else {
+      bubble.appendChild(document.createTextNode('🔒' + msg.body));
+    }
     div.appendChild(bubble);
     var time = document.createElement('div');
     time.className = 'muted';
@@ -211,10 +202,156 @@
     container.scrollTop = container.scrollHeight;
   }
 
-  /* ---- Init on every page load ---- */
+  function esc(s){
+    var d = document.createElement('div');
+    d.appendChild(document.createTextNode(s));
+    return d.innerHTML;
+  }
+
+  function showUnlockOverlay() {
+    var overlay = document.getElementById('e2ee-unlock-overlay');
+    if (!overlay) return;
+    overlay.style.display = 'flex';
+    var input = document.getElementById('e2ee-password');
+    var btn = document.getElementById('e2ee-unlock-btn');
+    var error = document.getElementById('e2ee-unlock-error');
+    if (!input || !btn) return;
+    input.focus();
+
+    function doUnlock() {
+      var pass = input.value.trim();
+      if (!pass) return;
+      btn.disabled = true;
+      btn.textContent = 'Unlocking…';
+      var overlayEl = document.getElementById('e2ee-unlock-overlay');
+      var username = overlayEl ? overlayEl.getAttribute('data-username') : '';
+      deriveKek(pass, username).then(function (kek) {
+        return ensureKeys(kek).then(function () {
+          if (!myPrivateKey) throw new Error('Wrong password or no keys found');
+          storeKek(pass, username);
+          overlay.style.display = 'none';
+          error.style.display = 'none';
+          initChat();
+        });
+      }).catch(function (err) {
+        error.textContent = 'Wrong password or unlock failed.';
+        error.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Unlock';
+        input.value = '';
+        input.focus();
+      });
+    }
+
+    btn.onclick = doUnlock;
+    input.onkeydown = function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); doUnlock(); }
+    };
+  }
+
+  function showRecipientNotReady() {
+    var notice = document.getElementById('e2ee-recipient-notice');
+    if (notice) notice.style.display = 'block';
+    var sendForm = document.querySelector('.chat-form');
+    if (sendForm) {
+      var btn = sendForm.querySelector('button');
+      if (btn) btn.disabled = true;
+    }
+  }
+
+  function initChat() {
+    var sendForm = document.querySelector('.chat-form');
+    if (!sendForm) return;
+
+    var recipientPem = sendForm.getAttribute('data-pubkey');
+    if (!recipientPem) {
+      showRecipientNotReady();
+      return;
+    }
+
+    if (!myPrivateKey || !myPublicKeyPem) return;
+
+    sendForm.addEventListener('submit', function (e) {
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      var input = sendForm.querySelector('input[name="body"]');
+      var plaintext = input.value.trim();
+      if (!plaintext) return;
+
+      // Stickers are sent as plaintext (they're image paths, not user text)
+      if (plaintext.startsWith('/uploads/stickers/')) {
+        input.disabled = true;
+        var chatMsgDiv = document.querySelector('.chat-messages');
+        var usp = new URLSearchParams(Array.from(new FormData(sendForm)));
+        fetch(sendForm.getAttribute('action'), {
+          method: 'POST',
+          headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': csrfToken() },
+          body: usp,
+        }).then(function (r) { return r.json(); }).then(function (data) {
+          if (data.error) return;
+          if (data.message && chatMsgDiv) {
+            addChatMsg(chatMsgDiv, data.message);
+          }
+          input.value = '';
+          input.disabled = false;
+        }).catch(function () { input.disabled = false; });
+        return;
+      }
+
+      input.disabled = true;
+      var chatMsgDiv = document.querySelector('.chat-messages');
+      encryptMessage(plaintext, recipientPem).then(function (result) {
+        var usp = new URLSearchParams(Array.from(new FormData(sendForm)));
+        usp.set('body', result.body);
+        usp.set('key_for_sender', result.keyForSender);
+        usp.set('key_for_recipient', result.keyForRecipient);
+        fetch(sendForm.getAttribute('action'), {
+          method: 'POST',
+          headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': csrfToken() },
+          body: usp,
+        }).then(function (r) { return r.json(); }).then(function (data) {
+          if (data.error) return;
+          if (data.message && chatMsgDiv) {
+            var m = data.message;
+            decryptMessage(m.body, m.key_for_sender).then(function (plain) {
+              m.body = plain;
+              addChatMsg(chatMsgDiv, m);
+            }).catch(function () {
+              addChatMsg(chatMsgDiv, m);
+            });
+          }
+          input.value = '';
+          input.disabled = false;
+        }).catch(function () { input.disabled = false; });
+      }).catch(function (err) {
+        console.error('E2EE encrypt error', err);
+        input.disabled = false;
+      });
+    });
+
+    // Decrypt existing messages
+    document.querySelectorAll('.chat-msg').forEach(function (el) {
+      var bodyB64 = el.getAttribute('data-body');
+      var keyB64 = el.classList.contains('own')
+        ? el.getAttribute('data-key-sender')
+        : el.getAttribute('data-key-recipient');
+      if (bodyB64 && keyB64) {
+        decryptMessage(bodyB64, keyB64).then(function (plain) {
+          var bubble = el.querySelector('.chat-bubble');
+          if (bubble) {
+            bubble.innerHTML = '';
+            bubble.appendChild(document.createTextNode(plain));
+          }
+        }).catch(function () {});
+      }
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     interceptLoginForm();
     interceptRegisterForm();
+
+    var isChatPage = document.querySelector('.chat-form') !== null;
 
     var kekB64 = sessionStorage.getItem(SESSION_KEY);
     var kekPromise;
@@ -230,60 +367,13 @@
     kekPromise.then(function (kek) {
       return ensureKeys(kek);
     }).then(function () {
-      if (!myPrivateKey) return;
-
-      // ---- Chat form interception ----
-      var sendForm = document.querySelector('.chat-form');
-      var recipientPem = sendForm ? sendForm.getAttribute('data-pubkey') : null;
-      if (sendForm && recipientPem) {
-        sendForm.addEventListener('submit', function (e) {
-          e.stopImmediatePropagation();
-          e.preventDefault();
-          var input = sendForm.querySelector('input[name="body"]');
-          var plaintext = input.value.trim();
-          if (!plaintext) return;
-          input.disabled = true;
-          var chatMsgDiv = document.querySelector('.chat-messages');
-          encryptMessage(plaintext, recipientPem).then(function (result) {
-            var usp = new URLSearchParams(Array.from(new FormData(sendForm)));
-            usp.set('body', result.body);
-            usp.set('key_for_sender', result.keyForSender);
-            usp.set('key_for_recipient', result.keyForRecipient);
-            fetch(sendForm.getAttribute('action'), {
-              method: 'POST',
-              headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': csrfToken() },
-              body: usp,
-            }).then(function (r) { return r.json(); }).then(function (data) {
-              if (data.error) return;
-              if (data.message && chatMsgDiv) {
-                addChatMsg(chatMsgDiv, data.message);
-              }
-              input.value = '';
-              input.disabled = false;
-            }).catch(function () { input.disabled = false; });
-          }).catch(function (err) {
-            console.error('E2EE encrypt error', err);
-            input.disabled = false;
-          });
-        });
-      }
-
-      // ---- Decrypt existing messages ----
-      document.querySelectorAll('.chat-msg').forEach(function (el) {
-        var bodyB64 = el.getAttribute('data-body');
-        var keyB64 = el.classList.contains('own')
-          ? el.getAttribute('data-key-sender')
-          : el.getAttribute('data-key-recipient');
-        if (bodyB64 && keyB64) {
-          decryptMessage(bodyB64, keyB64).then(function (plain) {
-            var bubble = el.querySelector('.chat-bubble');
-            if (bubble) {
-              bubble.innerHTML = '';
-              bubble.appendChild(document.createTextNode(plain));
-            }
-          }).catch(function () {});
+      if (isChatPage) {
+        if (myPrivateKey) {
+          initChat();
+        } else {
+          showUnlockOverlay();
         }
-      });
+      }
     });
   });
 })();
