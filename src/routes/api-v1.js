@@ -1069,6 +1069,13 @@ router.post('/conversations/:username/messages', requireApiAuth('write:direct'),
   });
 });
 
+// Fetch my own keys
+router.get('/conversations/keys', requireApiAuth('read:direct'), (req, res) => {
+  const publicKey = dm.getPublicKey(req.apiUser.id);
+  const encryptedPrivateKey = dm.getEncryptedPrivateKey(req.apiUser.id);
+  responseEnvelope(res, { public_key: publicKey, encrypted_private_key: encryptedPrivateKey });
+});
+
 // Fetch a user's public key
 router.get('/conversations/:username/keys', requireApiAuth('read:direct'), (req, res) => {
   const other = db.getUserByUsername(req.params.username);

@@ -96,7 +96,9 @@ router.post('/:username/edit/:mid', (req, res) => {
   if (!user) return req.xhr ? res.json({ error: 'not logged in' }) : res.redirect('/login');
   const body = String(req.body.body || '').trim().slice(0, 5000);
   if (!body) return req.xhr ? res.json({ error: 'body required' }) : res.redirect(back(req, '/chats'));
-  const ok = editMessage(Number(req.params.mid), user.id, body);
+  const keyForSender = String(req.body.key_for_sender || '').trim() || null;
+  const keyForRecipient = String(req.body.key_for_recipient || '').trim() || null;
+  const ok = editMessage(Number(req.params.mid), user.id, body, keyForSender, keyForRecipient);
   if (!ok) return req.xhr ? res.json({ error: 'not found or not yours' }) : res.status(404).send('Message not found or not yours.');
   if (req.xhr) {
     const msg = db.prepare(`SELECT id, from_id, body, created_at, edited_at, key_for_sender, key_for_recipient FROM messages WHERE id = ?`).get(Number(req.params.mid));

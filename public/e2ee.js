@@ -329,6 +329,99 @@
       });
     });
 
+    // Inline DM editing with re-encryption
+    document.addEventListener('click', function (e) {
+      var editBtn = e.target.closest('.edit-msg-btn');
+      if (!editBtn) return;
+      e.preventDefault();
+      var msgDiv = editBtn.closest('.chat-msg');
+      if (!msgDiv || msgDiv.querySelector('.inline-edit-input')) return;
+      var bubble = msgDiv.querySelector('.chat-bubble');
+      var dataEl = msgDiv.querySelector('.edit-msg-data');
+      if (!bubble || !dataEl) return;
+      var action = dataEl.dataset.action;
+      var csrf = dataEl.dataset.csrf;
+      var origText = bubble.textContent;
+
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'inline-edit-input chat-bubble-edit';
+      input.value = origText;
+      bubble.replaceWith(input);
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+
+      var btnWrap = document.createElement('span');
+      btnWrap.className = 'inline-edit-btns';
+      btnWrap.style.cssText = 'display:inline-flex;gap:4px;margin-left:4px;vertical-align:middle';
+      var saveBtn = document.createElement('button');
+      saveBtn.className = 'btn inline-save-btn';
+      saveBtn.textContent = 'Save';
+      saveBtn.type = 'button';
+      saveBtn.style.cssText = 'font-size:12px;padding:4px 12px;cursor:pointer';
+      var cancelBtn = document.createElement('button');
+      cancelBtn.className = 'btn ghost inline-cancel-btn';
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.type = 'button';
+      cancelBtn.style.cssText = 'font-size:12px;padding:4px 12px;cursor:pointer';
+      btnWrap.appendChild(saveBtn);
+      btnWrap.appendChild(cancelBtn);
+      input.parentNode.insertBefore(btnWrap, input.nextSibling);
+
+      function restore(text) {
+        var span = document.createElement('div');
+        span.className = 'chat-bubble';
+        span.textContent = text;
+        input.replaceWith(span);
+        if (btnWrap.parentNode) btnWrap.remove();
+      }
+
+      function doSave() {
+        var val = input.value.trim();
+        if (!val || val === origText) { restore(origText); return; }
+
+        // Sticker edits — send as-is
+        if (val.startsWith('/uploads/stickers/')) {
+          saveBtn.disabled = true;
+          saveBtn.textContent = 'Saving…';
+          fetch(action, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
+            body: 'body=' + encodeURIComponent(val) + '&_csrf=' + encodeURIComponent(csrf),
+          }).then(function(r){ return r.json(); }).then(function(d){
+            if (d.ok) { restore(val); } else { location.reload(); }
+          });
+          return;
+        }
+
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving…';
+        encryptMessage(val, recipientPem).then(function (result) {
+          fetch(action, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
+            body: 'body=' + encodeURIComponent(result.body) + '&key_for_sender=' + encodeURIComponent(result.keyForSender) + '&key_for_recipient=' + encodeURIComponent(result.keyForRecipient) + '&_csrf=' + encodeURIComponent(csrf),
+          }).then(function(r){ return r.json(); }).then(function(d){
+            if (d.ok) { restore(val); } else { location.reload(); }
+          });
+        }).catch(function (err) {
+          console.error('E2EE re-encrypt error', err);
+          saveBtn.disabled = false;
+          saveBtn.textContent = 'Save';
+        });
+      }
+
+      saveBtn.onclick = doSave;
+      cancelBtn.onclick = function () { restore(origText); };
+      input.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Escape') { restore(origText); ev.preventDefault(); }
+        if (ev.key === 'Enter') { doSave(); ev.preventDefault(); }
+      });
+      input.addEventListener('blur', function () {
+        setTimeout(function () { if (!input.parentNode) return; restore(origText); }, 200);
+      });
+    });
+
     // Decrypt existing messages
     document.querySelectorAll('.chat-msg').forEach(function (el) {
       var bodyB64 = el.getAttribute('data-body');

@@ -37,8 +37,8 @@ function setPublicKey(userId, publicKey, encryptedPrivateKey) {
   db.setPublicKey(userId, publicKey, encryptedPrivateKey);
 }
 
-function editMessage(msgId, userId, newBody) {
-  return db.editMessage(msgId, userId, newBody);
+function editMessage(msgId, userId, newBody, keyForSender, keyForRecipient) {
+  return db.editMessage(msgId, userId, newBody, keyForSender, keyForRecipient);
 }
 
 function deleteMessage(msgId, userId) {

@@ -525,13 +525,13 @@ function editComment(commentId, userId, newBody) {
   return true;
 }
 
-function editMessage(msgId, userId, newBody) {
+function editMessage(msgId, userId, newBody, keyForSender, keyForRecipient) {
   const msg = db.prepare(`SELECT * FROM messages WHERE id = ? AND from_id = ?`).get(msgId, userId);
   if (!msg) return false;
   const now = Date.now();
   db.prepare(`INSERT INTO edit_history (entity_type, entity_id, old_body, new_body, edited_at, edited_by) VALUES (?,?,?,?,?,?)`)
     .run('message', msgId, msg.body, newBody, now, userId);
-  db.prepare(`UPDATE messages SET body = ?, edited_at = ? WHERE id = ?`).run(newBody, now, msgId);
+  db.prepare(`UPDATE messages SET body = ?, edited_at = ?, key_for_sender = COALESCE(?, key_for_sender), key_for_recipient = COALESCE(?, key_for_recipient) WHERE id = ?`).run(newBody, now, keyForSender || null, keyForRecipient || null, msgId);
   return true;
 }
 

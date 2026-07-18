@@ -349,31 +349,6 @@ document.addEventListener('DOMContentLoaded', function(){
       return;
     }
 
-    // --- Inline DM editing ---
-    var editMsgBtn = e.target.closest('.edit-msg-btn');
-    if (editMsgBtn) {
-      e.preventDefault();
-      var msgDiv = editMsgBtn.closest('.chat-msg');
-      if (!msgDiv || msgDiv.querySelector('.inline-edit-input')) return;
-      var bubble = msgDiv.querySelector('.chat-bubble');
-      var dataEl = msgDiv.querySelector('.edit-msg-data');
-      if (!bubble || !dataEl) return;
-      var action = dataEl.dataset.action;
-      var csrf = dataEl.dataset.csrf;
-      var origText = bubble.textContent;
-      replaceWithInput(bubble, 'chat-bubble-edit', false,
-        function(val, onSuccess) {
-          fetch(action, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
-            body: 'body=' + encodeURIComponent(val) + '&_csrf=' + encodeURIComponent(csrf),
-          }).then(function(r){ return r.json(); }).then(function(d){
-            if (d.ok) { onSuccess(); } else { location.reload(); }
-          });
-        }
-      );
-      return;
-    }
   });
 
   function showToast(msg){
