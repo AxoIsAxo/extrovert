@@ -148,7 +148,7 @@
       return crypto.subtle.exportKey('raw', aesKey).then(function (rawKey) {
         return Promise.all([
           rsaEncrypt(rawKey, pemToSpki(recipientPem)),
-          mySpki().then(function (pub) { return rsaEncrypt(rawKey, pub); })
+          mySpki().then(function (pub) { return crypto.subtle.encrypt({ name: 'RSA-OAEP' }, pub, rawKey).then(function (enc) { return uint8ArrayToBase64(new Uint8Array(enc)); }); })
         ]).then(function (keys) {
           return { body: bodyB64, keyForRecipient: keys[0], keyForSender: keys[1] };
         });
