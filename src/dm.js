@@ -14,11 +14,19 @@ function getMessages(userId, otherId, limit, cursor) {
       JOIN users u ON u.id = m.from_id
       WHERE ((m.from_id = ? AND m.to_id = ?) OR (m.from_id = ? AND m.to_id = ?))
         AND m.id < ?
-      ORDER BY m.created_at ASC
+      ORDER BY m.created_at DESC
       LIMIT ?
     `).all(userId, otherId, otherId, userId, cursor, limit);
   }
-  return db.getMessages(userId, otherId, limit);
+  return db.db.prepare(`
+    SELECT m.*, u.username, u.display_name
+    FROM messages m
+    JOIN users u ON u.id = m.from_id
+    WHERE (m.from_id = ? AND m.to_id = ?)
+       OR (m.from_id = ? AND m.to_id = ?)
+    ORDER BY m.created_at DESC
+    LIMIT ?
+  `).all(userId, otherId, otherId, userId, limit);
 }
 
 function sendMessage(fromId, toId, body, keyForSender, keyForRecipient) {

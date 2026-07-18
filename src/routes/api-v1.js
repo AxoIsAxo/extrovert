@@ -1035,8 +1035,10 @@ router.get('/conversations/:username', requireApiAuth('read:direct'), (req, res)
   const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
   const cursor = req.query.cursor ? decodeCursor(req.query.cursor) : null;
   const messages = dm.getMessages(req.apiUser.id, other.id, limit, cursor ? cursor.id : null);
+  // getMessages returns newest-first; reverse for display (oldest-first)
+  messages.reverse();
 
-  responseEnvelope(res, messages.map(m => ({
+  const items = messages.map(m => ({
     id: String(m.id),
     from_id: String(m.from_id),
     to_id: String(m.to_id),
@@ -1045,10 +1047,16 @@ router.get('/conversations/:username', requireApiAuth('read:direct'), (req, res)
     edited_at: m.edited_at,
     key_for_sender: m.key_for_sender,
     key_for_recipient: m.key_for_recipient,
-  })), {
-    pagination: {
-      next: makeCursor(messages),
-    },
+  }));
+
+  // Cursor points to the oldest message in this batch (first item after reverse)
+  // so the next request fetches messages older than that.
+  const nextCursor = items.length > 0
+    ? Buffer.from(JSON.stringify({ id: items[0].id })).toString('base64url')
+    : null;
+
+  responseEnvelope(res, items, {
+    pagination: { next: nextCursor },
   });
 });
 
