@@ -1005,6 +1005,25 @@ router.get('/conversations', requireApiAuth('read:direct'), (req, res) => {
   })));
 });
 
+// Fetch my own keys (must be before :username routes)
+router.get('/conversations/keys', requireApiAuth('read:direct'), (req, res) => {
+  const publicKey = dm.getPublicKey(req.apiUser.id);
+  const encryptedPrivateKey = dm.getEncryptedPrivateKey(req.apiUser.id);
+  responseEnvelope(res, { public_key: publicKey, encrypted_private_key: encryptedPrivateKey });
+});
+
+// Publish / rotate your keys (must be before :username routes)
+router.post('/conversations/keys', requireApiAuth('write:direct'), (req, res) => {
+  const publicKey = String(req.body.public_key || '').trim();
+  const encryptedPrivateKey = String(req.body.encrypted_private_key || '').trim() || null;
+  if (!publicKey || publicKey.length > 5000) {
+    return errorResponse(res, 400, 'Bad Request', 'public_key is required and must be <= 5000 chars.');
+  }
+  dm.setPublicKey(req.apiUser.id, publicKey, encryptedPrivateKey);
+  db.auditLog('dm_key_updated', req.apiUser.id, 'Published public key');
+  res.json({ data: { ok: true } });
+});
+
 // Message history with a user
 router.get('/conversations/:username', requireApiAuth('read:direct'), (req, res) => {
   const other = db.getUserByUsername(req.params.username);
@@ -1069,13 +1088,6 @@ router.post('/conversations/:username/messages', requireApiAuth('write:direct'),
   });
 });
 
-// Fetch my own keys
-router.get('/conversations/keys', requireApiAuth('read:direct'), (req, res) => {
-  const publicKey = dm.getPublicKey(req.apiUser.id);
-  const encryptedPrivateKey = dm.getEncryptedPrivateKey(req.apiUser.id);
-  responseEnvelope(res, { public_key: publicKey, encrypted_private_key: encryptedPrivateKey });
-});
-
 // Fetch a user's public key
 router.get('/conversations/:username/keys', requireApiAuth('read:direct'), (req, res) => {
   const other = db.getUserByUsername(req.params.username);
@@ -1086,18 +1098,6 @@ router.get('/conversations/:username/keys', requireApiAuth('read:direct'), (req,
 
   const publicKey = dm.getPublicKey(other.id);
   responseEnvelope(res, { public_key: publicKey });
-});
-
-// Publish / rotate your keys
-router.post('/conversations/keys', requireApiAuth('write:direct'), (req, res) => {
-  const publicKey = String(req.body.public_key || '').trim();
-  const encryptedPrivateKey = String(req.body.encrypted_private_key || '').trim() || null;
-  if (!publicKey || publicKey.length > 5000) {
-    return errorResponse(res, 400, 'Bad Request', 'public_key is required and must be <= 5000 chars.');
-  }
-  dm.setPublicKey(req.apiUser.id, publicKey, encryptedPrivateKey);
-  db.auditLog('dm_key_updated', req.apiUser.id, 'Published public key');
-  res.json({ data: { ok: true } });
 });
 
 // Edit a message
