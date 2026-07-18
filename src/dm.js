@@ -14,7 +14,7 @@ function getMessages(userId, otherId, limit, cursor) {
       JOIN users u ON u.id = m.from_id
       WHERE ((m.from_id = ? AND m.to_id = ?) OR (m.from_id = ? AND m.to_id = ?))
         AND m.id < ?
-      ORDER BY m.created_at DESC
+      ORDER BY m.created_at ASC
       LIMIT ?
     `).all(userId, otherId, otherId, userId, cursor, limit);
   }
