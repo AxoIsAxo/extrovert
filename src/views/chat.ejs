@@ -21,7 +21,7 @@
              data-key-sender="<%= m.key_for_sender || '' %>"
              data-key-recipient="<%= m.key_for_recipient || '' %>"
              data-msg-id="<%= m.id %>">
-          <div class="chat-bubble"><% if (m.key_for_sender) { %><span title="End-to-end encrypted"><%- include('partials/icon', { name: 'lock', size: 13 }) %></span> <% } %><% if (m.body && m.body.startsWith('/uploads/stickers/')) { %><img src="<%= m.body %>" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker"><% } else { %><%= m.body %><% } %></div>
+          <div class="chat-bubble"><% if (m.body && m.body.startsWith('/uploads/stickers/')) { %><img src="<%= m.body %>" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker"><% } else { %><%= m.body %><% } %></div>
           <div class="muted" style="font-size:0.7rem;padding:0 4px">
             <%= locals.relTime(m.created_at) %>
             <% if (m.edited_at) { %><span class="edited-indicator" title="<%= new Date(m.edited_at).toLocaleString() %>">· edited</span><% } %>

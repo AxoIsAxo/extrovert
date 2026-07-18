@@ -190,7 +190,7 @@
     if (sticker) {
       bubble.innerHTML = '<img src="' + esc(msg.body) + '" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker">';
     } else {
-      bubble.appendChild(document.createTextNode('🔒' + msg.body));
+      bubble.appendChild(document.createTextNode(msg.body));
     }
     div.appendChild(bubble);
     var time = document.createElement('div');
