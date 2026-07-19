@@ -1242,7 +1242,7 @@ module.exports = {
   isRoomMember, addRoomMember, removeRoomMember, getRoomMembers, getUserRoomRole, countRoomMembers,
   createRoomRole, getRoomRole, getRoomRoles, updateRoomRole, deleteRoomRole, transferFounder,
   createRoomChannel, getRoomChannel, getRoomChannels, updateRoomChannel, deleteRoomChannel,
-  getRoomMessages, sendRoomMessage, joinDefaultRole, hasRoomPermission,
+  getRoomMessages, sendRoomMessage, deleteRoomMessage, joinDefaultRole, hasRoomPermission,
   // reports
   createReport, getPendingReports, getReport, resolveReport, dismissReport,
   // admin rooms

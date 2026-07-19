@@ -36,7 +36,8 @@ document.addEventListener('DOMContentLoaded', function() {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
       body: 'body=' + encodeURIComponent(body)
-    }).then(function(r) { return r.json(); }).then(function() {
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      if (d.error) { input.disabled = false; return; }
       input.value = '';
       input.disabled = false;
       input.focus();
@@ -165,11 +166,11 @@ document.addEventListener('DOMContentLoaded', function() {
     fetch('/rooms/' + roomId() + '/channels/' + cid + '/messages')
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        renderMessages(data.messages || [], data.roleMap || {});
+        renderMessages(data.messages || [], data.roleMap || {}, data.canDelete);
       });
   }
 
-  function renderMessages(messages, roleMap) {
+  function renderMessages(messages, roleMap, canDelete) {
     if (!messages || !messages.length) {
       msgArea.innerHTML = '<div class="room-msg"><div class="room-msg-body"><div class="room-msg-body-inner"><span class="muted">No messages yet</span></div></div></div>';
       return;
@@ -228,7 +229,7 @@ document.addEventListener('DOMContentLoaded', function() {
         editSpan.textContent = 'Edit';
         actionsDiv.appendChild(editSpan);
       }
-      if (m.user_id === currentUserId || data.canDelete) {
+      if (m.user_id === currentUserId || canDelete) {
         var delSpan = document.createElement('span');
         delSpan.className = 'room-msg-delete';
         delSpan.dataset.msgId = m.id;
