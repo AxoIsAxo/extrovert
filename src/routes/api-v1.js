@@ -875,7 +875,7 @@ router.get('/search', requireApiAuth('read'), (req, res) => {
   const maxResults = Math.min(parseInt(limit, 10) || 20, 40);
 
   if (type === 'accounts') {
-    const users = db.searchUsers(query, maxResults);
+    const users = db.searchUsers(query, { limit: maxResults });
     return responseEnvelope(res, users.map(u => serializeAccount(u, req.apiUser.id)));
   }
 
@@ -888,7 +888,7 @@ router.get('/search', requireApiAuth('read'), (req, res) => {
   }
 
   // Default: return both
-  const users = db.searchUsers(query, maxResults);
+  const users = db.searchUsers(query, { limit: maxResults });
   const posts = db.searchPosts(query, req.apiUser.id, maxResults);
 
   responseEnvelope(res, {

@@ -1,7 +1,7 @@
 'use strict';
 
 const express = require('express');
-const { db, getMyStickers } = require('../db');
+const { db, getMyStickers, searchUsers } = require('../db');
 const { buildFeed } = require('../feed');
 const { foafIds, friendIds } = require('../network');
 
@@ -17,10 +17,7 @@ router.get('/', (req, res) => {
   const q = String(req.query.q || '').trim();
   let discoverResults = [];
   if (q) {
-    discoverResults = db.prepare(
-      `SELECT id, username, display_name, avatar, bio FROM users
-       WHERE username LIKE ? AND id <> ? LIMIT 20`
-    ).all(q + '%', user.id);
+    discoverResults = searchUsers(q, { excludeId: user.id, limit: 20 });
   }
 
   const following = friendIds(user.id);
@@ -50,10 +47,7 @@ router.get('/discover', (req, res) => {
   const q = String(req.query.q || '').trim();
   let results = [];
   if (q) {
-    results = db.prepare(
-      `SELECT id, username, display_name, avatar, bio FROM users
-       WHERE username LIKE ? AND id <> ? LIMIT 20`
-    ).all(q + '%', user.id);
+    results = searchUsers(q, { excludeId: user.id, limit: 20 });
   }
 
   // Suggested: friends-of-friends you don't already follow (expand your network).

@@ -1148,20 +1148,29 @@ function setIdempotencyKey(key, response, statusCode) {
 }
 
 // ---------- Search ----------
-function searchUsers(query, limit = 20) {
+function searchUsers(query, opts = {}) {
+  const limit = opts.limit || 20;
+  const excludeId = opts.excludeId || 0;
+  const like = `%${query}%`;
+  const maxNameLen = Math.floor(query.length / 0.15);
   return db.prepare(`
     SELECT id, username, display_name, avatar, bio
     FROM users
-    WHERE (username LIKE ? OR display_name LIKE ?) AND banned = 0
+    WHERE (
+      (username LIKE ? AND LENGTH(username) <= ?)
+      OR (display_name LIKE ? AND LENGTH(display_name) <= ?)
+    )
+    AND banned = 0
+    AND id <> ?
     ORDER BY
       CASE WHEN username = ? THEN 0
            WHEN display_name = ? THEN 1
            WHEN username LIKE ? THEN 2
            ELSE 3
-      END,
+         END,
       username ASC
     LIMIT ?
-  `).all(`%${query}%`, `%${query}%`, query, query, `${query}%`, limit);
+  `).all(like, maxNameLen, like, maxNameLen, excludeId, query, query, `${query}%`, limit);
 }
 
 function searchPosts(query, viewerId, limit = 20) {
