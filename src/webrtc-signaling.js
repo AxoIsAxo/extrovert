@@ -3,7 +3,7 @@
 const crypto = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 const path = require('node:path');
-const { getUserById, areMutualFollowers, getRoomChannel } = require('./db');
+const { getUserById, areMutualFollowers, getRoomChannel, getOAuthToken } = require('./db');
 
 const SESSION_DB_PATH = process.env.EXTV_SESSION_DB_PATH || path.join(__dirname, '..', 'data', 'sessions.db');
 const SESSION_SECRET = process.env.SESSION_SECRET;
@@ -60,20 +60,35 @@ function getSession(sid) {
 }
 
 function lookupUserFromRequest(req) {
-  if (!SESSION_SECRET) { console.log('lookupUser: no SESSION_SECRET'); return null; }
-  if (!sessionDb) { console.log('lookupUser: no sessionDb'); return null; }
-  const cookies = parseCookies(req.headers.cookie);
-  const rawSid = cookies['connect.sid'];
-  if (!rawSid) { console.log('lookupUser: no connect.sid cookie'); return null; }
-  const signedSid = decodeURIComponent(rawSid);
-  const sid = unsignSessionId(signedSid, SESSION_SECRET);
-  if (!sid) { console.log('lookupUser: unsign failed for', signedSid.substring(0, 20)); return null; }
-  const session = getSession(sid);
-  if (!session) { console.log('lookupUser: no session for sid', sid.substring(0, 10)); return null; }
-  if (!session.userId) { console.log('lookupUser: session has no userId', JSON.stringify(session).substring(0, 100)); return null; }
-  const user = getUserById(session.userId);
-  if (!user) { console.log('lookupUser: no user for userId', session.userId); return null; }
-  return user;
+  // 1. Session cookie (browser clients)
+  if (SESSION_SECRET && sessionDb) {
+    const cookies = parseCookies(req.headers.cookie);
+    const rawSid = cookies['connect.sid'];
+    if (rawSid) {
+      const signedSid = decodeURIComponent(rawSid);
+      const sid = unsignSessionId(signedSid, SESSION_SECRET);
+      if (sid) {
+        const session = getSession(sid);
+        if (session && session.userId) {
+          const user = getUserById(session.userId);
+          if (user) return user;
+        }
+      }
+    }
+  }
+  // 2. Bearer token via ?token= query param (native/mobile clients)
+  try {
+    const url = new URL(req.url, 'http://localhost');
+    const token = url.searchParams.get('token');
+    if (token) {
+      const tokenRecord = getOAuthToken(token);
+      if (tokenRecord && (!tokenRecord.expires_at || tokenRecord.expires_at > Date.now())) {
+        const user = getUserById(tokenRecord.user_id);
+        if (user) return user;
+      }
+    }
+  } catch {}
+  return null;
 }
 
 function isMutualFollowerOnline(aId, bId) {
