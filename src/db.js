@@ -273,6 +273,14 @@ function init() {
       edited_by   INTEGER NOT NULL REFERENCES users(id)
     );
     CREATE INDEX IF NOT EXISTS idx_edit_history_entity ON edit_history(entity_type, entity_id);
+
+    -- Server-wide announcement (singleton, id always 1).
+    CREATE TABLE IF NOT EXISTS announcement (
+      id         INTEGER PRIMARY KEY CHECK(id = 1),
+      body       TEXT NOT NULL,
+      author_id  INTEGER REFERENCES users(id),
+      updated_at INTEGER NOT NULL
+    );
   `);
 }
 
@@ -1206,6 +1214,30 @@ function auditLog(action, actorId, details) {
   } catch {}
 }
 
+// ---------- Announcement (singleton) ----------
+// JOINs the author's username/display_name so callers don't need a second lookup.
+function getAnnouncement() {
+  return db.prepare(`
+    SELECT a.*, u.username AS author_username, u.display_name AS author_display_name
+    FROM announcement a LEFT JOIN users u ON u.id = a.author_id
+    WHERE a.id = 1
+  `).get();
+}
+
+function setAnnouncement(body, authorId) {
+  const trimmed = String(body || '').trim();
+  if (!trimmed) throw new Error('Announcement body cannot be empty');
+  db.prepare(`
+    INSERT INTO announcement (id, body, author_id, updated_at) VALUES (1, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET body = excluded.body, author_id = excluded.author_id, updated_at = excluded.updated_at
+  `).run(trimmed, authorId || null, Date.now());
+  return getAnnouncement();
+}
+
+function clearAnnouncement() {
+  db.prepare(`DELETE FROM announcement WHERE id = 1`).run();
+}
+
 module.exports = {
   db,
   // users
@@ -1275,4 +1307,6 @@ module.exports = {
   searchUsers, searchPosts,
   // audit
   auditLog,
+  // announcement (singleton, server-wide)
+  getAnnouncement, setAnnouncement, clearAnnouncement,
 };

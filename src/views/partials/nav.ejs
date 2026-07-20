@@ -11,6 +11,39 @@
     <a href="/rooms" title="Rooms"><span class="nav-icon"><%- include('icon', { name: 'rooms', size: 18 }) %></span><span class="nav-text">Rooms</span></a>
     <a href="/settings" title="Settings"><span class="nav-icon"><%- include('icon', { name: 'settings', size: 18 }) %></span><span class="nav-text">Settings</span></a>
     <% if (locals.currentUser && locals.currentUser.is_admin) { %><a href="/admin" title="Admin"><span class="nav-icon"><%- include('icon', { name: 'shield', size: 18 }) %></span><span class="nav-text">Admin</span><% if (locals.pendingReports > 0) { %><sup class="badge"><%= pendingReports %></sup><% } %></a><% } %>
+    <% if (locals.announcement) { %>
+      <div class="ann" id="ann">
+        <% if (locals.currentUser && locals.currentUser.is_admin) { %>
+          <a class="ann-pill ann-pill-admin" href="/admin/announcement" title="Edit announcement">
+            <span class="ann-pill-glow" aria-hidden="true"></span>
+            <%- include('icon', { name: 'megaphone', size: 16 }) %>
+            <span class="ann-pill-text"><%= announcement.body %></span>
+            <span class="ann-pill-edit" title="Edit"><%- include('icon', { name: 'edit', size: 12 }) %></span>
+          </a>
+        <% } else { %>
+          <button type="button" class="ann-pill" id="ann-pill" aria-expanded="false" aria-haspopup="dialog" title="View announcement">
+            <span class="ann-pill-glow" aria-hidden="true"></span>
+            <%- include('icon', { name: 'megaphone', size: 16 }) %>
+            <span class="ann-pill-text"><%= announcement.body %></span>
+          </button>
+          <div class="ann-popover" id="ann-popover" role="dialog" aria-labelledby="ann-popover-title" hidden>
+            <div class="ann-popover-arrow" aria-hidden="true"></div>
+            <div class="ann-popover-header">
+              <span class="ann-popover-icon"><%- include('icon', { name: 'megaphone', size: 18 }) %></span>
+              <span class="ann-popover-title" id="ann-popover-title">Announcement</span>
+              <button type="button" class="ann-close" aria-label="Dismiss"><%- include('icon', { name: 'close', size: 14 }) %></button>
+            </div>
+            <div class="ann-popover-body"><%= announcement.body %></div>
+            <div class="ann-popover-meta">
+              <% if (announcement.author_display_name || announcement.author_username) { %>
+                <span class="ann-author">by <span class="ann-author-name"><%= announcement.author_display_name || announcement.author_username %></span></span>
+              <% } %>
+              <% if (announcement.updated_at) { %><span class="ann-updated"><%= locals.relTime(announcement.updated_at) %></span><% } %>
+            </div>
+          </div>
+        <% } %>
+      </div>
+    <% } %>
     <span class="spacer"></span>
     <form method="post" action="/logout" style="margin:0"><input type="hidden" name="_csrf" value="<%= locals.csrfToken %>"><button title="Log out"><span class="nav-icon"><%- include('icon', { name: 'logout', size: 18 }) %></span><span class="nav-text">Log out</span></button></form>
   <% } else { %>
