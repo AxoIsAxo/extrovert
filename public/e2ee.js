@@ -77,7 +77,8 @@
         return crypto.subtle.decrypt({ name: 'AES-GCM', iv: combined.slice(0, 12) }, kek, combined.slice(12))
           .then(function (decrypted) {
             return crypto.subtle.importKey('pkcs8', decrypted, { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['decrypt']);
-          }).then(function (priv) { myPrivateKey = priv; });
+          }).then(function (priv) { myPrivateKey = priv; })
+          .catch(function () { return generateAndUpload(kek); });
       } else if (data.publicKey && !data.encryptedPrivateKey && kek) {
         return generateAndUpload(kek);
       } else if (!data.publicKey && kek) {
@@ -244,13 +245,32 @@
           initChat();
         });
       }).catch(function (err) {
-        error.textContent = 'Wrong password or unlock failed.';
+        console.error('E2EE unlock failed:', err);
+        error.textContent = err && err.message === 'Wrong password or no keys found'
+          ? 'Your keys could not be recovered. They will be reset — you will lose access to old encrypted messages.'
+          : 'Decryption failed — check the browser console for details.';
         error.style.display = 'block';
         btn.disabled = false;
-        btn.textContent = 'Unlock';
-        input.value = '';
-        input.focus();
-      });
+        btn.textContent = 'Reset &amp; Unlock';
+        btn.onclick = function () {
+          if (!confirm('This will generate new encryption keys. You will lose access to any previously encrypted messages. Continue?')) return;
+          error.style.display = 'none';
+          btn.disabled = true;
+          btn.textContent = 'Resetting…';
+          deriveKek(pass, username).then(function (kek) {
+            return generateAndUpload(kek);
+          }).then(function () {
+            storeKek(pass, username);
+            overlay.style.display = 'none';
+            initChat();
+          }).catch(function () {
+            error.textContent = 'Key reset failed. Reload the page and try again.';
+            error.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = 'Reset &amp; Unlock';
+          });
+        };
+  
     }
 
     btn.onclick = doUnlock;
