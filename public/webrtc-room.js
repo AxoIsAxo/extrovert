@@ -26,6 +26,7 @@
     ExtrovertCall.on('channel_joined', onChannelJoined);
     ExtrovertCall.on('user_joined_channel', onUserJoinedChannel);
     ExtrovertCall.on('user_left_channel', onUserLeftChannel);
+    ExtrovertCall.on('call_ended', onVoiceCallEnded);
     ExtrovertCall.on('incoming_call', onVoiceIncomingCall);
     ExtrovertCall.on('remote_stream', onVoiceRemoteStream);
   });
@@ -56,14 +57,20 @@
   function leaveVoiceChannel() {
     if (joinedChannelId) {
       ExtrovertCall.leaveChannel(joinedChannelId);
-      var btn = voiceJoinButtons[joinedChannelId];
-      if (btn) btn.textContent = 'Join';
-      var list = voiceMemberLists[joinedChannelId];
-      if (list) { list.classList.remove('active'); list.innerHTML = ''; }
-      var count = document.getElementById('voice-count-' + joinedChannelId);
-      if (count) count.textContent = '0';
-      joinedChannelId = null;
+      resetVoiceChannelUI();
     }
+  }
+
+  function resetVoiceChannelUI() {
+    if (!joinedChannelId) return;
+    var cid = joinedChannelId;
+    joinedChannelId = null;
+    var btn = voiceJoinButtons[cid];
+    if (btn) btn.textContent = 'Join';
+    var list = voiceMemberLists[cid];
+    if (list) { list.classList.remove('active'); list.innerHTML = ''; }
+    var count = document.getElementById('voice-count-' + cid);
+    if (count) count.textContent = '0';
     if (remoteAudioEl) {
       remoteAudioEl.pause();
       remoteAudioEl.srcObject = null;
@@ -84,7 +91,7 @@
         addMemberToList(channelId, m.username, m.display_name);
       });
     }
-    updateVoiceCount(channelId, members.length);
+    updateVoiceCount(channelId, members.length + 1);
     var barLabel = document.getElementById('call-bar-label');
     if (barLabel) {
       var chName = getChannelName(channelId);
@@ -107,6 +114,12 @@
     var el = document.getElementById('voice-member-' + channelId + '-' + username);
     if (el) el.remove();
     updateVoiceCount(channelId);
+  }
+
+  function onVoiceCallEnded(peer) {
+    if (joinedChannelId && !peer) {
+      resetVoiceChannelUI();
+    }
   }
 
   function onVoiceRemoteStream(username, stream) {
@@ -142,7 +155,9 @@
     }
     var list = voiceMemberLists[channelId];
     if (list) {
-      countEl.textContent = list.querySelectorAll('.voice-member').length;
+      var n = list.querySelectorAll('.voice-member').length;
+      if (joinedChannelId === channelId) n += 1;
+      countEl.textContent = n;
     }
   }
 

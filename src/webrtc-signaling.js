@@ -388,11 +388,9 @@ function initSignaling(wss) {
           const members = voiceChannels.get(channelId);
           if (!members) return;
           members.delete(user.id);
+          clientData.inCall = false;
           if (members.size === 0) {
             voiceChannels.delete(channelId);
-          }
-          if (members.size === 0) {
-            clientData.inCall = false;
           }
           for (const otherId of members) {
             const other = clients.get(otherId);
