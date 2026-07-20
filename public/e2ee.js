@@ -78,6 +78,8 @@
           .then(function (decrypted) {
             return crypto.subtle.importKey('pkcs8', decrypted, { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['decrypt']);
           }).then(function (priv) { myPrivateKey = priv; });
+      } else if (data.publicKey && !data.encryptedPrivateKey && kek) {
+        return generateAndUpload(kek);
       } else if (!data.publicKey && kek) {
         return generateAndUpload(kek);
       }
@@ -95,11 +97,19 @@
   function interceptLoginForm() {
     var form = document.querySelector('form[action^="/login"]');
     if (!form) return;
-    form.addEventListener('submit', function () {
+    var intercepted = false;
+    form.addEventListener('submit', function (e) {
+      if (intercepted) return;
       var pass = form.querySelector('input[name="password"]');
       var user = form.querySelector('input[name="username"]');
       if (pass && user && pass.value && user.value) {
-        storeKek(pass.value, user.value).catch(function () {});
+        e.preventDefault();
+        intercepted = true;
+        storeKek(pass.value, user.value).then(function () {
+          form.submit();
+        }).catch(function () {
+          form.submit();
+        });
       }
     });
   }
@@ -467,6 +477,8 @@
           showUnlockOverlay();
         }
       }
+    }).catch(function () {
+      if (isChatPage) showUnlockOverlay();
     });
   });
 })();
