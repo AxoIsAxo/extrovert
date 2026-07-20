@@ -79,7 +79,7 @@
     }
   }
 
-  function onChannelJoined(channelId, members) {
+  function onChannelJoined(channelId, self, members) {
     joinedChannelId = channelId;
     var btn = voiceJoinButtons[channelId];
     if (btn) btn.textContent = 'Leave';
@@ -87,6 +87,7 @@
     if (list) {
       list.classList.add('active');
       list.innerHTML = '';
+      if (self) addMemberToList(channelId, self.username, self.display_name);
       members.forEach(function (m) {
         addMemberToList(channelId, m.username, m.display_name);
       });

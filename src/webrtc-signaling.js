@@ -366,6 +366,7 @@ function initSignaling(wss) {
           ws.send(JSON.stringify({
             type: 'channel_joined',
             channel_id: channelId,
+            self: { id: user.id, username: user.username, display_name: user.display_name },
             members: getVoiceChannelMembers(channelId).filter(m => m.id !== user.id),
           }));
 

@@ -154,7 +154,7 @@
         state.channelId = msg.channel_id;
         state.callState = 'connected';
         state.callStartTime = Date.now();
-        emit('channel_joined', msg.channel_id, msg.members);
+        emit('channel_joined', msg.channel_id, msg.self, msg.members);
         break;
 
       case 'user_joined_channel':

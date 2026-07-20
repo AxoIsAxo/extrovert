@@ -633,8 +633,7 @@ a.conv-row:hover { color: var(--primary); }
 }
 .voice-channel .voice-join-btn:hover { background: var(--secondary-soft); border-color: var(--secondary); color: var(--secondary); }
 
-.voice-members { padding: 4px 12px 8px 24px; font-size: var(--fs-sm); display: none; }
-.voice-members.active { display: block; }
+.voice-members { padding: 4px 12px 8px 24px; font-size: var(--fs-sm); }
 .voice-members .voice-member { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
 .voice-members .voice-member .voice-member-name { font-size: var(--fs-sm); }
 .voice-members .voice-member .voice-member-speaking { color: var(--secondary); font-size: 0.7rem; }
