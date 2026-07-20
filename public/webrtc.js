@@ -198,9 +198,14 @@
     };
 
     pc.oniceconnectionstatechange = function () {
-      if (state.callState !== 'idle' && (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed')) {
+      if (state.callState === 'idle') return;
+      if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
         emit('call_ended', username);
-        endCallInternal();
+        if (state.channelId) {
+          closePeerConnection(username);
+        } else {
+          endCallInternal();
+        }
       }
     };
 

@@ -11,10 +11,18 @@
         <% if (ch.type === 'voice') { %>
           <div class="room-channel voice-channel" data-channel-id="<%= ch.id %>" data-channel-type="voice">
             <%- include('../partials/icon', { name: 'mic', size: 14 }) %> <span class="voice-name"><%= ch.name %></span>
-            <span class="voice-count" id="voice-count-<%= ch.id %>"><%= voiceChannelCounts && voiceChannelCounts[ch.id] != null ? voiceChannelCounts[ch.id] : 0 %></span>
+            <span class="voice-count" id="voice-count-<%= ch.id %>"><%= voiceChannelMembers && voiceChannelMembers[ch.id] ? voiceChannelMembers[ch.id].length : 0 %></span>
             <button class="voice-join-btn" data-channel-id="<%= ch.id %>">Join</button>
           </div>
-          <div class="voice-members" id="voice-members-<%= ch.id %>"></div>
+          <div class="voice-members active" id="voice-members-<%= ch.id %>">
+            <% if (voiceChannelMembers && voiceChannelMembers[ch.id]) { %>
+              <% voiceChannelMembers[ch.id].forEach(function(m) { %>
+                <div class="voice-member" id="voice-member-<%= ch.id %>-<%= m.username %>">
+                  <span class="voice-member-speaking">🔊</span><span class="voice-member-name"><%= m.display_name || m.username %></span>
+                </div>
+              <% }) %>
+            <% } %>
+          </div>
         <% } else { %>
           <a href="#" class="room-channel<%= firstChannel && ch.id === firstChannel.id ? ' active' : '' %>" data-channel-id="<%= ch.id %>">
             # <span><%= ch.name %></span>

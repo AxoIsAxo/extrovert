@@ -3,7 +3,7 @@
 const crypto = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 const path = require('node:path');
-const { getUserById, areMutualFollowers, getRoomChannel } = require('./db');
+const { getUserById, areMutualFollowers, getRoomChannel, isRoomMember } = require('./db');
 
 const SESSION_DB_PATH = process.env.EXTV_SESSION_DB_PATH || path.join(__dirname, '..', 'data', 'sessions.db');
 const SESSION_SECRET = process.env.SESSION_SECRET;
@@ -126,23 +126,27 @@ function removeFromVoiceChannels(userId) {
       members.delete(userId);
       const client = clients.get(userId);
       const username = client ? client.username : 'unknown';
-      for (const otherId of members) {
-        const other = clients.get(otherId);
-        if (other) {
-          try {
-            other.ws.send(JSON.stringify({
-              type: 'user_left_channel',
-              channel_id: channelId,
-              username,
-            }));
-          } catch {}
-        }
-      }
+      broadcastToRoomMembers(channelId, userId, {
+        type: 'user_left_channel',
+        channel_id: channelId,
+        username,
+      });
       if (members.size === 0) voiceChannels.delete(channelId);
     }
   }
   const client = clients.get(userId);
   if (client) client.inCall = false;
+}
+
+function broadcastToRoomMembers(channelId, excludeUserId, msg) {
+  const ch = getRoomChannel(channelId);
+  if (!ch) return;
+  for (const [otherId, other] of clients) {
+    if (otherId === excludeUserId) continue;
+    if (isRoomMember(ch.room_id, otherId)) {
+      try { other.ws.send(JSON.stringify(msg)); } catch {}
+    }
+  }
 }
 
 function routeToChannelMember(msg, user, forwardType) {
@@ -365,20 +369,12 @@ function initSignaling(wss) {
             members: getVoiceChannelMembers(channelId).filter(m => m.id !== user.id),
           }));
 
-          for (const otherId of members) {
-            if (otherId === user.id) continue;
-            const other = clients.get(otherId);
-            if (other) {
-              try {
-                other.ws.send(JSON.stringify({
-                  type: 'user_joined_channel',
-                  channel_id: channelId,
-                  username: user.username,
-                  display_name: user.display_name,
-                }));
-              } catch {}
-            }
-          }
+          broadcastToRoomMembers(channelId, user.id, {
+            type: 'user_joined_channel',
+            channel_id: channelId,
+            username: user.username,
+            display_name: user.display_name,
+          });
           break;
         }
 
@@ -392,18 +388,11 @@ function initSignaling(wss) {
           if (members.size === 0) {
             voiceChannels.delete(channelId);
           }
-          for (const otherId of members) {
-            const other = clients.get(otherId);
-            if (other) {
-              try {
-                other.ws.send(JSON.stringify({
-                  type: 'user_left_channel',
-                  channel_id: channelId,
-                  username: user.username,
-                }));
-              } catch {}
-            }
-          }
+          broadcastToRoomMembers(channelId, user.id, {
+            type: 'user_left_channel',
+            channel_id: channelId,
+            username: user.username,
+          });
           break;
         }
       }

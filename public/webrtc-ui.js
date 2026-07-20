@@ -115,7 +115,8 @@
     }
   }
 
-  function onIncomingCall(username, displayName, sdp) {
+  function onIncomingCall(username, displayName, sdp, channelId) {
+    if (channelId) return;
     pendingIncoming = { username: username, sdp: sdp };
     document.getElementById('call-incoming-from').textContent = displayName || username;
     incomingOverlay.style.display = 'flex';

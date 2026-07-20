@@ -85,12 +85,12 @@ router.get('/:id', (req, res) => {
   let messages = [];
   if (firstChannel) messages = getRoomMessages(firstChannel.id);
 
-  const voiceChannelCounts = {};
+  const voiceChannelMembers = {};
   channels.forEach(ch => {
-    if (ch.type === 'voice') voiceChannelCounts[ch.id] = getVoiceChannelMembers(ch.id).length;
+    if (ch.type === 'voice') voiceChannelMembers[ch.id] = getVoiceChannelMembers(ch.id);
   });
 
-  res.render('rooms/room', { room, channels, members, roles, role, messages, firstChannel, voiceChannelCounts });
+  res.render('rooms/room', { room, channels, members, roles, role, messages, firstChannel, voiceChannelMembers });
 });
 
 // Join room
