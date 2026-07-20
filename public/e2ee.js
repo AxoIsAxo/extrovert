@@ -77,8 +77,7 @@
         return crypto.subtle.decrypt({ name: 'AES-GCM', iv: combined.slice(0, 12) }, kek, combined.slice(12))
           .then(function (decrypted) {
             return crypto.subtle.importKey('pkcs8', decrypted, { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['decrypt']);
-          }).then(function (priv) { myPrivateKey = priv; })
-          .catch(function () { return generateAndUpload(kek); });
+          }).then(function (priv) { myPrivateKey = priv; });
       } else if (data.publicKey && !data.encryptedPrivateKey && kek) {
         return generateAndUpload(kek);
       } else if (!data.publicKey && kek) {
@@ -270,7 +269,7 @@
             btn.textContent = 'Reset &amp; Unlock';
           });
         };
-  
+      });
     }
 
     btn.onclick = doUnlock;
