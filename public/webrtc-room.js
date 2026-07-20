@@ -105,9 +105,6 @@
   function onUserJoinedChannel(channelId, username, displayName) {
     addMemberToList(channelId, username, displayName);
     updateVoiceCount(channelId);
-    if (joinedChannelId === channelId) {
-      ExtrovertCall.initiateCallToMember(username);
-    }
   }
 
   function onUserLeftChannel(channelId, username) {

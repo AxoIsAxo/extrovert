@@ -15,6 +15,8 @@ const {
 
 const router = express.Router();
 
+const { getVoiceChannelMembers } = require('../webrtc-signaling');
+
 const PERM = { VIEW: 1, WRITE: 2, MANAGE_CHANNELS: 4, MANAGE_ROLES: 8, MANAGE_MESSAGES: 16, MANAGE_MEMBERS: 32, MANAGE_ROOM: 64 };
 
 function checkPerm(roomId, userId, perm) {
@@ -83,7 +85,12 @@ router.get('/:id', (req, res) => {
   let messages = [];
   if (firstChannel) messages = getRoomMessages(firstChannel.id);
 
-  res.render('rooms/room', { room, channels, members, roles, role, messages, firstChannel });
+  const voiceChannelCounts = {};
+  channels.forEach(ch => {
+    if (ch.type === 'voice') voiceChannelCounts[ch.id] = getVoiceChannelMembers(ch.id).length;
+  });
+
+  res.render('rooms/room', { room, channels, members, roles, role, messages, firstChannel, voiceChannelCounts });
 });
 
 // Join room

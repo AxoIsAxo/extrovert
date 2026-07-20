@@ -11,7 +11,7 @@
         <% if (ch.type === 'voice') { %>
           <div class="room-channel voice-channel" data-channel-id="<%= ch.id %>" data-channel-type="voice">
             <%- include('../partials/icon', { name: 'mic', size: 14 }) %> <span class="voice-name"><%= ch.name %></span>
-            <span class="voice-count" id="voice-count-<%= ch.id %>">0</span>
+            <span class="voice-count" id="voice-count-<%= ch.id %>"><%= voiceChannelCounts && voiceChannelCounts[ch.id] != null ? voiceChannelCounts[ch.id] : 0 %></span>
             <button class="voice-join-btn" data-channel-id="<%= ch.id %>">Join</button>
           </div>
           <div class="voice-members" id="voice-members-<%= ch.id %>"></div>
