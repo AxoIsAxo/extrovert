@@ -246,7 +246,7 @@ h4 { font-size: var(--fs-lg); font-family: var(--font-body); font-weight: 700; l
 
 /* ── Announcement pill + popover (top bar) ─────────────────────────── */
 
-.ann { position: relative; display: inline-flex; margin: 0 1.5em; }
+.ann { position: relative; display: inline-flex; margin: 0 1em; }
 .ann-pill {
   display: inline-flex; align-items: center; gap: 8px;
   max-width: clamp(180px, 26vw, 360px);
