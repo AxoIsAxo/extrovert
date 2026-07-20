@@ -225,16 +225,38 @@
     var input = document.getElementById('e2ee-password');
     var btn = document.getElementById('e2ee-unlock-btn');
     var error = document.getElementById('e2ee-unlock-error');
+    var resetLink = document.getElementById('e2ee-reset-link');
     if (!input || !btn) return;
     input.focus();
+
+    var username = overlay.getAttribute('data-username') || '';
+
+    function resetKeys() {
+      var pass = input.value.trim();
+      if (!pass) { error.textContent = 'Enter your password first.'; error.style.display = 'block'; input.focus(); return; }
+      if (!confirm('This will generate new encryption keys. You will lose access to any previously encrypted messages. Continue?')) return;
+      error.style.display = 'none';
+      btn.disabled = true;
+      btn.textContent = 'Resetting…';
+      deriveKek(pass, username).then(function (kek) {
+        return generateAndUpload(kek);
+      }).then(function () {
+        storeKek(pass, username);
+        overlay.style.display = 'none';
+        initChat();
+      }).catch(function () {
+        error.textContent = 'Key reset failed. Reload the page and try again.';
+        error.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Unlock';
+      });
+    }
 
     function doUnlock() {
       var pass = input.value.trim();
       if (!pass) return;
       btn.disabled = true;
       btn.textContent = 'Unlocking…';
-      var overlayEl = document.getElementById('e2ee-unlock-overlay');
-      var username = overlayEl ? overlayEl.getAttribute('data-username') : '';
       deriveKek(pass, username).then(function (kek) {
         return ensureKeys(kek).then(function () {
           if (!myPrivateKey) throw new Error('Wrong password or no keys found');
@@ -245,34 +267,16 @@
         });
       }).catch(function (err) {
         console.error('E2EE unlock failed:', err);
-        error.textContent = err && err.message === 'Wrong password or no keys found'
-          ? 'Your keys could not be recovered. They will be reset — you will lose access to old encrypted messages.'
-          : 'Decryption failed — check the browser console for details.';
+        error.textContent = 'Could not decrypt your keys. If you forgot your password or this keeps failing, reset your keys below.';
         error.style.display = 'block';
         btn.disabled = false;
-        btn.textContent = 'Reset &amp; Unlock';
-        btn.onclick = function () {
-          if (!confirm('This will generate new encryption keys. You will lose access to any previously encrypted messages. Continue?')) return;
-          error.style.display = 'none';
-          btn.disabled = true;
-          btn.textContent = 'Resetting…';
-          deriveKek(pass, username).then(function (kek) {
-            return generateAndUpload(kek);
-          }).then(function () {
-            storeKek(pass, username);
-            overlay.style.display = 'none';
-            initChat();
-          }).catch(function () {
-            error.textContent = 'Key reset failed. Reload the page and try again.';
-            error.style.display = 'block';
-            btn.disabled = false;
-            btn.textContent = 'Reset &amp; Unlock';
-          });
-        };
+        btn.textContent = 'Unlock';
+        if (resetLink) resetLink.style.display = 'block';
       });
     }
 
     btn.onclick = doUnlock;
+    if (resetLink) resetLink.onclick = function (e) { e.preventDefault(); resetKeys(); };
     input.onkeydown = function (e) {
       if (e.key === 'Enter') { e.preventDefault(); doUnlock(); }
     };
