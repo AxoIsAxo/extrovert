@@ -10,7 +10,7 @@
     "test:api": "node --test scripts/api-test.js"
   },
   "dependencies": {
-    "bcrypt": "^5.1.1",
+    "bcryptjs": "^2.4.3",
     "ejs": "^3.1.10",
     "express": "^4.21.0",
     "express-rate-limit": "^8.5.2",

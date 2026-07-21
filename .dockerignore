@@ -5,3 +5,11 @@ uploads
 *.md
 server.log
 .commandcode
+extrovert_native_testing
+scripts
+*.db
+*.db-shm
+*.db-wal
+.DS_Store
+.env
+.cookies
