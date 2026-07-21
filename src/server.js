@@ -48,6 +48,7 @@ app.use(helmet({
       imgSrc: ["'self'", "http:", "https:"],
       mediaSrc: ["'self'"],
       scriptSrc: ["'self'"],
+      workerSrc: ["'self'"],
       connectSrc: ["'self'", "ws:", "wss:"],
       frameAncestors: ["'none'"],
     },
@@ -139,7 +140,8 @@ app.use((req, res, next) => {
     req.path === '/stickers/upload' ||
     req.path.startsWith('/stickers/upload') ||
     req.path === '/posts' ||
-    /^\/u\/[^\/]+\/avatar$/.test(req.path)
+    /^\/u\/[^\/]+\/avatar$/.test(req.path) ||
+    req.path === '/push/cancel-pending'
   )) {
     return next();
   }
@@ -226,6 +228,7 @@ app.use('/', require('./routes/social'));     // follow/unfollow
 app.use('/inbox', require('./routes/notifications'));
 app.use('/chats', require('./routes/chats'));
 app.use('/settings', require('./routes/settings'));
+app.use('/push', require('./routes/push'));
 app.use('/admin', require('./routes/admin'));
 app.use('/stickers', require('./routes/stickers'));
 app.use('/rooms', require('./routes/rooms'));

@@ -286,6 +286,20 @@ function init() {
 
 init();
 
+// Push subscriptions for waking offline devices (web-push / FCM / APNs).
+try { db.exec(`
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id),
+    platform   TEXT NOT NULL DEFAULT 'web',
+    endpoint   TEXT NOT NULL,
+    p256dh     TEXT,
+    auth       TEXT,
+    created_at INTEGER NOT NULL,
+    UNIQUE(user_id, platform, endpoint)
+  );
+`); } catch {}
+
 // Migrations.
 try { db.exec(`ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'default'`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''`); } catch {}
@@ -645,6 +659,29 @@ function countUnreadNotifications(userId) {
 
 function markNotificationsRead(userId) {
   db.prepare(`UPDATE notifications SET read = 1 WHERE user_id = ? AND read = 0`).run(userId);
+}
+
+// ---------- push subscriptions ----------
+function addPushSubscription({ userId, platform, endpoint, p256dh, auth }) {
+  db.prepare(
+    `INSERT INTO push_subscriptions (user_id, platform, endpoint, p256dh, auth, created_at)
+     VALUES (?,?,?,?,?,?)
+     ON CONFLICT(user_id, platform, endpoint) DO UPDATE SET p256dh=excluded.p256dh, auth=excluded.auth`
+  ).run(userId, platform || 'web', endpoint, p256dh || null, auth || null, Date.now());
+}
+
+function getPushSubscriptions(userId) {
+  return db.prepare(
+    `SELECT id, platform, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?`
+  ).all(userId);
+}
+
+function removePushSubscription(userId, endpoint) {
+  db.prepare(`DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint = ?`).run(userId, endpoint);
+}
+
+function deletePushSubscriptionsByEndpoint(endpoint) {
+  db.prepare(`DELETE FROM push_subscriptions WHERE endpoint = ?`).run(endpoint);
 }
 
 // ---------- user lists ----------
@@ -1260,6 +1297,8 @@ module.exports = {
   getCustomization, setCustomization,
   // notifications
   createNotification, getNotifications, countUnreadNotifications, markNotificationsRead,
+  // push subscriptions
+  addPushSubscription, getPushSubscriptions, removePushSubscription, deletePushSubscriptionsByEndpoint,
   // user lists
   getFollowers, getFollowing,
   // mutual follow
