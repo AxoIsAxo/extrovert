@@ -12,7 +12,8 @@ router.get('/', (req, res) => {
   const user = res.locals.currentUser;
   if (!user) return res.redirect('/login');
   const theme = getUserTheme(user.id);
-  res.render('settings', { theme });
+  const { version } = require('../../package.json');
+  res.render('settings', { theme, version });
 });
 
 router.post('/', (req, res) => {
