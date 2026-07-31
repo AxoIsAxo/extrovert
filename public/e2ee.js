@@ -628,7 +628,7 @@
 
   // Room-scoped prekey bundle (no mutual-follower requirement).
   function fetchRoomBundle(roomId, username) {
-    return fetch('/rooms/' + encodeURIComponent(roomId) + '/bundle/' + encodeURIComponent(username), { credentials: 'same-origin' })
+    return e2eeFetch('/rooms/' + encodeURIComponent(roomId) + '/bundle/' + encodeURIComponent(username))
       .then(function (r) { return r.json(); });
   }
 

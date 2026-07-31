@@ -966,6 +966,12 @@ router.get('/rooms/:id', requireApiAuth('read'), (req, res) => {
     name: c.name,
     type: c.type || 'text',
   }));
+  const members = db.getRoomMembers(room.id).map(m => ({
+    id: String(m.user_id),
+    username: m.username,
+    display_name: m.display_name,
+    avatar: m.avatar || null,
+  }));
   responseEnvelope(res, {
     id: String(room.id),
     name: room.name,
@@ -975,6 +981,7 @@ router.get('/rooms/:id', requireApiAuth('read'), (req, res) => {
     is_public: !!room.is_public,
     is_member: isMember,
     channels,
+    members,
   });
 });
 
@@ -1107,15 +1114,24 @@ router.get('/rooms/:id/bundle/:username', requireApiAuth('read'), (req, res) => 
 router.get('/conversations', requireApiAuth('read:direct'), (req, res) => {
   const conversations = dm.getConversations(req.apiUser.id);
   const filtered = conversations.filter(c => db.areMutualFollowers(req.apiUser.id, c.id));
-  responseEnvelope(res, filtered.map(c => ({
-    id: String(c.id),
-    username: c.username,
-    display_name: c.display_name,
-    avatar: c.avatar,
-    last_message: c.last_message,
-    last_at: c.last_at,
-    unread: c.unread,
-  })));
+  responseEnvelope(res, filtered.map(c => {
+    const id = db.getOlmIdentity(c.id);
+    return {
+      id: String(c.id),
+      username: c.username,
+      display_name: c.display_name,
+      avatar: c.avatar,
+      last_message: c.last_message,
+      last_at: c.last_at,
+      unread: c.unread,
+      last_from: c.last_from,
+      last_proto: c.last_proto,
+      last_key_for_sender: c.last_key_for_sender,
+      last_key_for_recipient: c.last_key_for_recipient,
+      last_sender_ciphertext: c.last_sender_ciphertext,
+      sender_curve: id ? id.identity_key : null,
+    };
+  }));
 });
 
 // Fetch my own keys (must be before :username routes)
