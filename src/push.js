@@ -109,4 +109,27 @@ async function sendCallPush(calleeUser, callerUser, cancelToken) {
   }
 }
 
-module.exports = { sendCallPush, getVapidPublicKey };
+// Offline-call timeout: tell the callee's devices the call was missed so they
+// get a normal (non-full-screen) missed-call notification.
+async function sendMissedCallPush(calleeUser, callerUser) {
+  try {
+    const subs = db.getPushSubscriptions(calleeUser.id);
+    if (!subs || subs.length === 0) return;
+    const payload = {
+      type: 'missed_call',
+      from: callerUser.username,
+      from_display: callerUser.display_name || callerUser.username,
+    };
+    for (const sub of subs) {
+      if (sub.platform === 'web') {
+        await sendWebPush(sub, payload);
+      } else if (sub.platform === 'unifiedpush') {
+        await sendUnifiedPush(sub.endpoint, payload);
+      }
+    }
+  } catch (e) {
+    console.error('push: sendMissedCallPush error:', e && e.message);
+  }
+}
+
+module.exports = { sendCallPush, sendMissedCallPush, getVapidPublicKey };

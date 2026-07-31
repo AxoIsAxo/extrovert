@@ -4,7 +4,7 @@ const crypto = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 const path = require('node:path');
 const { getUserById, getUserByUsername, areMutualFollowers, getRoomChannel, isRoomMember, getOAuthToken, createNotification } = require('./db');
-const { sendCallPush } = require('./push');
+const { sendCallPush, sendMissedCallPush } = require('./push');
 
 const SESSION_DB_PATH = process.env.EXTV_SESSION_DB_PATH || path.join(__dirname, '..', 'data', 'sessions.db');
 const SESSION_SECRET = process.env.SESSION_SECRET;
@@ -219,6 +219,15 @@ function cancelPendingCall(calleeId, reason) {
         to: calleeUsername,
       }));
     } catch {}
+  }
+  // The call was never answered: tell the callee's devices with a normal
+  // (non-full-screen) missed-call push notification.
+  if (reason === 'timeout') {
+    try {
+      const callee = getUserById(calleeId);
+      const callerUser = getUserById(p.callerId);
+      if (callee && callerUser) sendMissedCallPush(callee, callerUser);
+    } catch (e) { console.error('sendMissedCallPush:', e && e.message); }
   }
   return true;
 }
