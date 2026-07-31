@@ -658,9 +658,33 @@ router.get('/statuses/:id/context', requireApiAuth('read'), (req, res) => {
         id: String(c.id),
         body: c.body,
         created_at: c.created_at,
+        edited_at: c.edited_at || null,
         account: serializeAccount({ id: c.user_id, username: c.username, display_name: c.display_name, avatar: c.avatar, bio: '', created_at: c.user_created_at }, req.apiUser.id),
       })),
     },
+  });
+});
+
+// Comment on a post (same behavior as the web form).
+router.post('/statuses/:id/comment', requireApiAuth('write'), (req, res) => {
+  const post = resolveVisiblePost(parseInt(req.params.id, 10), req.apiUser.id);
+  if (!post) return errorResponse(res, 404, 'Not Found', 'Post not found.');
+  const body = String(req.body.body || '').trim();
+  if (!body) return errorResponse(res, 400, 'Bad Request', 'body is required.');
+  const commentId = db.addComment(req.apiUser.id, post.id, body.slice(0, 1000));
+  if (post.user_id !== req.apiUser.id) {
+    db.createNotification({ userId: post.user_id, type: 'comment', actorId: req.apiUser.id, postId: post.id });
+  }
+  const c = db.db.prepare(
+    `SELECT c.*, u.username, u.display_name, u.avatar, u.created_at AS user_created_at
+     FROM comments c JOIN users u ON u.id = c.user_id WHERE c.id = ?`
+  ).get(commentId);
+  responseEnvelope(res, {
+    id: String(c.id),
+    body: c.body,
+    created_at: c.created_at,
+    edited_at: c.edited_at || null,
+    account: serializeAccount({ id: c.user_id, username: c.username, display_name: c.display_name, avatar: c.avatar, bio: '', created_at: c.user_created_at }, req.apiUser.id),
   });
 });
 
@@ -1106,6 +1130,20 @@ router.get('/rooms/:id/bundle/:username', requireApiAuth('read'), (req, res) => 
   if (!id) return errorResponse(res, 404, 'Not Found', 'Target has no encryption keys.');
   const oneTimeKey = db.claimOlmPrekey(other.id);
   responseEnvelope(res, { identity_key: id.identity_key, ed25519_key: id.ed25519_key, fallback_key: id.fallback_key, one_time_key: oneTimeKey });
+});
+
+// ======== Announcement ========
+
+// Server-wide announcement (if one is set) — shown as a banner in clients.
+router.get('/announcement', requireApiAuth('read'), (req, res) => {
+  const a = db.getAnnouncement();
+  if (!a || !a.body) return responseEnvelope(res, null);
+  responseEnvelope(res, {
+    body: a.body,
+    author_display_name: a.author_display_name,
+    author_username: a.author_username,
+    updated_at: a.updated_at || null,
+  });
 });
 
 // ======== Direct Messages (E2E) ========
