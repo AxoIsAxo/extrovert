@@ -47,7 +47,7 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "http:", "https:"],
       mediaSrc: ["'self'"],
-      scriptSrc: ["'self'"],
+      scriptSrc: ["'self'", "'wasm-unsafe-eval'"],
       connectSrc: ["'self'", "ws:", "wss:"],
       frameAncestors: ["'none'"],
     },

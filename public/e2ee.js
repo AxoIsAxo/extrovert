@@ -1,184 +1,512 @@
 (function () {
   'use strict';
 
-  var SESSION_KEY = 'extrovert_e2ee_kek';
+  // === Olm (Matrix double-ratchet) E2EE for DMs ===
+  //
+  // Security model:
+  //  - Each account has an Olm identity (Curve25519 + Ed25519) + one-time prekeys
+  //    + a fallback key. Only PUBLIC material touches the server.
+  //  - Each conversation has a Double-Ratchet Olm session (forward secrecy +
+  //    post-compromise security). A self-session lets the sender read their own
+  //    sent copies.
+  //  - Seamless: on the same browser, a non-extractable device key (Kd) in IndexedDB
+  //    decrypts the pickled Olm account — no password prompt.
+  //  - Recovery: the account pickle is also stored on the server encrypted with a
+  //    PBKDF2 key from the login password. New browser → enter password once.
+  //  - Legacy: RSA-OAEP messages (proto='rsa') remain decryptable via the legacy
+  //    path; new messages use Olm (proto='olm').
+
+  var DB_NAME = 'extrovert-e2ee';
+  var STORE_CRYPTO = 'cryptokeys';
+  var STORE_OLM = 'olm';
+  var KEY_DEVICE = 'deviceKey';
+  var PICKLE_KEY = 'extrovert-olm-pickle-v1';
+
+  var KEK_SESSION_KEY = 'extrovert_kek';
   var KEY_URL = '/chats/keys';
-  var PUBKEY_URL = '/chats/pubkey';
+  var PREKEYS_URL = '/chats/prekeys';
+  var PREKEYS_COUNT_URL = '/chats/prekeys/count';
+  var PREKEYS_BACKUP_URL = '/chats/prekeys/backup';
+  var PREKEY_THRESHOLD = 3;
 
-  var myPrivateKey = null;
-  var myPublicKeyPem = null;
+  // Runtime state
+  var olmInitPromise = null;
+  var deviceKey = null;        // non-extractable CryptoKey (Kd)
+  var account = null;          // Olm.Account
+  var myIdKeys = null;         // { curve25519, ed25519 }
+  var sessions = {};           // otherUserId (string) -> Olm.Session (bidirectional)
+  var selfOutbound = null;     // Olm.Session (to self, encrypts own copies)
+  var selfInbound = null;      // Olm.Session (from self, decrypts own copies)
+  var kek = null;              // transient password-derived key (recovery only)
+  var legacyPrivateKey = null; // RSA key for decrypting old proto='rsa' messages
 
-  function uint8ArrayToBase64(arr) {
+  // ---- base64 / text ----
+  function b64ToUint8(b64) {
+    var bytes = atob(b64);
+    var arr = new Uint8Array(bytes.length);
+    for (var i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    return arr;
+  }
+  function uint8ToB64(arr) {
     var s = '';
     for (var i = 0; i < arr.length; i++) s += String.fromCharCode(arr[i]);
     return btoa(s);
   }
+  function enc(str) { return new TextEncoder().encode(str); }
+  function dec(buf) { return new TextDecoder().decode(buf); }
 
+  // ---- IndexedDB ----
+  function openDB() {
+    var req = indexedDB.open(DB_NAME, 1);
+    return new Promise(function (resolve, reject) {
+      req.onupgradeneeded = function () {
+        req.result.createObjectStore(STORE_CRYPTO);
+        req.result.createObjectStore(STORE_OLM);
+      };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+  function idbGet(storeName, key) {
+    return openDB().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(storeName, 'readonly');
+        var req = tx.objectStore(storeName).get(key);
+        req.onsuccess = function () { resolve(req.result); };
+        req.onerror = function () { reject(req.error); };
+      });
+    });
+  }
+  function idbSet(storeName, key, value) {
+    return openDB().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(storeName, 'readwrite');
+        tx.objectStore(storeName).put(value, key);
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { reject(tx.error); };
+      });
+    });
+  }
+
+  // ---- PBKDF2 from password (legacy RSA unlock + server backup) ----
   function deriveKek(password, username) {
-    var enc = new TextEncoder();
-    return crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']).then(function (key) {
+    var e = new TextEncoder();
+    return crypto.subtle.importKey('raw', e.encode(password), 'PBKDF2', false, ['deriveKey']).then(function (k) {
       return crypto.subtle.deriveKey(
-        { name: 'PBKDF2', salt: enc.encode(username.toLowerCase()), iterations: 600000, hash: 'SHA-256' },
-        key,
-        { name: 'AES-GCM', length: 256 },
-        true,
-        ['wrapKey', 'unwrapKey', 'encrypt', 'decrypt']
+        { name: 'PBKDF2', salt: e.encode(username.toLowerCase()), iterations: 600000, hash: 'SHA-256' },
+        k, { name: 'AES-GCM', length: 256 }, false, ['wrapKey', 'unwrapKey', 'encrypt', 'decrypt']
       );
     });
   }
 
-  function wrapPrivateKey(privateKey, kek) {
-    var iv = crypto.getRandomValues(new Uint8Array(12));
-    return crypto.subtle.exportKey('pkcs8', privateKey).then(function (exported) {
-      return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, kek, exported);
-    }).then(function (encrypted) {
-      var combined = new Uint8Array(iv.length + encrypted.byteLength);
-      combined.set(iv);
-      combined.set(new Uint8Array(encrypted), iv.length);
-      return uint8ArrayToBase64(combined);
-    });
-  }
-
-  function generateAndUpload(kek) {
-    return crypto.subtle.generateKey(
-      { name: 'RSA-OAEP', modulusLength: 4096, publicExponent: new Uint8Array([1,0,1]), hash: 'SHA-256' },
-      true, ['encrypt', 'decrypt']
-    ).then(function (pair) {
-      myPrivateKey = pair.privateKey;
-      return crypto.subtle.exportKey('spki', pair.publicKey).then(function (spki) {
-        myPublicKeyPem = uint8ArrayToBase64(new Uint8Array(spki));
-        return wrapPrivateKey(pair.privateKey, kek);
-      }).then(function (encPriv) {
-        return fetch(PUBKEY_URL, {
-          method: 'POST',
-          headers: csrfHeaders(),
-          body: JSON.stringify({ publicKey: myPublicKeyPem, encryptedPrivateKey: encPriv }),
-          credentials: 'same-origin'
-        });
+  // ---- Non-extractable device key Kd ----
+  function getOrCreateDeviceKey() {
+    return idbGet(STORE_CRYPTO, KEY_DEVICE).then(function (existing) {
+      if (existing) { deviceKey = existing; return deviceKey; }
+      return crypto.subtle.generateKey(
+        { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+      ).then(function (key) {
+        deviceKey = key;
+        return idbSet(STORE_CRYPTO, KEY_DEVICE, key).then(function () { return key; });
       });
     });
   }
 
+  function encryptWithKd(plaintext) {
+    var iv = crypto.getRandomValues(new Uint8Array(12));
+    return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, deviceKey, enc(plaintext)).then(function (ct) {
+      var c = new Uint8Array(iv.length + ct.byteLength);
+      c.set(iv); c.set(new Uint8Array(ct), iv.length);
+      return uint8ToB64(c);
+    });
+  }
+  function decryptWithKd(b64) {
+    var c = b64ToUint8(b64);
+    return crypto.subtle.decrypt({ name: 'AES-GCM', iv: c.slice(0, 12) }, deviceKey, c.slice(12)).then(dec);
+  }
+  function encryptWithKek(plaintext, key) {
+    var iv = crypto.getRandomValues(new Uint8Array(12));
+    return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, enc(plaintext)).then(function (ct) {
+      var c = new Uint8Array(iv.length + ct.byteLength);
+      c.set(iv); c.set(new Uint8Array(ct), iv.length);
+      return uint8ToB64(c);
+    });
+  }
+  function decryptWithKek(b64, key) {
+    var c = b64ToUint8(b64);
+    return crypto.subtle.decrypt({ name: 'AES-GCM', iv: c.slice(0, 12) }, key, c.slice(12)).then(dec);
+  }
+
+  // ---- Olm ----
+  function initOlm() {
+    if (olmInitPromise) return olmInitPromise;
+    olmInitPromise = Olm.init({ locateFile: function () { return '/static/lib/olm.wasm?v=1'; } });
+    return olmInitPromise;
+  }
+
+  function loadAccountFromStorage() {
+    return idbGet(STORE_OLM, 'account').then(function (enc) {
+      if (!enc) return null;
+      return decryptWithKd(enc).then(function (pickle) {
+        account = new Olm.Account();
+        account.unpickle(PICKLE_KEY, pickle);
+        var k = JSON.parse(account.identity_keys());
+        myIdKeys = { curve25519: k.curve25519, ed25519: k.ed25519 };
+        return account;
+      });
+    });
+  }
+
+  function saveAccount() {
+    return encryptWithKd(account.pickle(PICKLE_KEY)).then(function (enc) {
+      return idbSet(STORE_OLM, 'account', enc);
+    });
+  }
+
+  function loadSession(idStr) {
+    return idbGet(STORE_OLM, 'session:' + idStr).then(function (enc) {
+      if (!enc) return null;
+      return decryptWithKd(enc).then(function (pickle) {
+        var s = new Olm.Session();
+        s.unpickle(PICKLE_KEY, pickle);
+        sessions[idStr] = s;
+        return s;
+      });
+    });
+  }
+
+  function saveSession(idStr, session) {
+    sessions[idStr] = session;
+    return encryptWithKd(session.pickle(PICKLE_KEY)).then(function (enc) {
+      return idbSet(STORE_OLM, 'session:' + idStr, enc);
+    });
+  }
+
+  function loadSelfSessions() {
+    function loadOne(storeKey) {
+      return idbGet(STORE_OLM, storeKey).then(function (enc) {
+        if (!enc) return null;
+        return decryptWithKd(enc).then(function (pickle) {
+          var s = new Olm.Session();
+          s.unpickle(PICKLE_KEY, pickle);
+          return s;
+        });
+      });
+    }
+    return Promise.all([
+      selfOutbound ? Promise.resolve(selfOutbound) : loadOne('selfOutbound').then(function (s) { selfOutbound = s; }),
+      selfInbound ? Promise.resolve(selfInbound) : loadOne('selfInbound').then(function (s) { selfInbound = s; }),
+    ]);
+  }
+
+  function saveSelfSessions() {
+    var ops = [];
+    if (selfOutbound) ops.push(encryptWithKd(selfOutbound.pickle(PICKLE_KEY)).then(function (e) { return idbSet(STORE_OLM, 'selfOutbound', e); }));
+    if (selfInbound) ops.push(encryptWithKd(selfInbound.pickle(PICKLE_KEY)).then(function (e) { return idbSet(STORE_OLM, 'selfInbound', e); }));
+    return Promise.all(ops);
+  }
+
+  function createOlmAccount() {
+    account = new Olm.Account();
+    account.create();
+    var k = JSON.parse(account.identity_keys());
+    myIdKeys = { curve25519: k.curve25519, ed25519: k.ed25519 };
+  }
+
+  function publishPrekeys() {
+    var keys = JSON.parse(account.one_time_keys());
+    var otks = Object.keys(keys.curve25519).map(function (id) {
+      return { id: id, public_key: keys.curve25519[id] };
+    });
+    var fallback = JSON.parse(account.fallback_key());
+    var fb = fallback.curve25519[Object.keys(fallback.curve25519)[0]];
+    return csrfFetch(PREKEYS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ identity_key: myIdKeys.curve25519, ed25519_key: myIdKeys.ed25519, fallback_key: fb, one_time_keys: otks })
+    }).then(function (r) { return r.json(); }).then(function () {
+      account.mark_keys_as_published();
+      return saveAccount();
+    });
+  }
+
+  function createAndPublishAccount() {
+    createOlmAccount();
+    account.generate_fallback_key();
+    account.generate_one_time_keys(5);
+    return publishPrekeys();
+  }
+
+  function fetchBackup() {
+    return csrfFetch(PREKEYS_BACKUP_URL).then(function (r) { return r.json(); });
+  }
+
+  function uploadBackup(pickle) {
+    return encryptWithKek(pickle, kek).then(function (enc) {
+      return csrfFetch(PREKEYS_URL, { method: 'POST', body: JSON.stringify({ backup: enc }) }).then(function (r) { return r.json(); });
+    });
+  }
+
+  function maybeReplenishPrekeys() {
+    return csrfFetch(PREKEYS_COUNT_URL).then(function (r) { return r.json(); }).then(function (data) {
+      if (!data.available || data.available < PREKEY_THRESHOLD) {
+        account.generate_one_time_keys(5);
+        return publishPrekeys();
+      }
+    }).catch(function () {});
+  }
+
+  function fetchBundle(otherId) {
+    return fetch('/chats/' + encodeURIComponent(otherId) + '/bundle', { credentials: 'same-origin' }).then(function (r) { return r.json(); });
+  }
+
+  // Outgoing session (sender -> recipient).
+  function getOrCreateOutboundSession(otherId, otherIdStr) {
+    return sessions[otherIdStr] || loadSession(otherIdStr).then(function (s) { return s || null; }).then(function (existing) {
+      if (existing) return existing;
+      return fetchBundle(otherId).then(function (bundle) {
+        if (!bundle.identity_key || (!bundle.one_time_key && !bundle.fallback_key)) {
+          throw new Error('Recipient has no encryption keys yet.');
+        }
+        var theirOtk = bundle.one_time_key ? bundle.one_time_key.public_key : bundle.fallback_key;
+        var s = new Olm.Session();
+        s.create_outbound(account, bundle.identity_key, theirOtk);
+        return saveSession(otherIdStr, s).then(function () { return s; });
+      });
+    });
+  }
+
+  // Self-session: lets the sender encrypt/decrypt their own sent copies.
+  function ensureSelfSessions() {
+    if (selfOutbound) return Promise.resolve();
+    return loadSelfSessions().then(function () {
+      if (selfOutbound) return;
+      account.generate_one_time_keys(1);
+      var keys = JSON.parse(account.one_time_keys());
+      var otkIds = Object.keys(keys.curve25519);
+      if (!otkIds.length) throw new Error('Could not generate self prekey.');
+      selfOutbound = new Olm.Session();
+      selfOutbound.create_outbound(account, myIdKeys.curve25519, keys.curve25519[otkIds[0]]);
+      var initMsg = selfOutbound.encrypt('__e2ee_self_init__');
+      selfInbound = new Olm.Session();
+      selfInbound.create_inbound(account, initMsg.body);
+      account.remove_one_time_keys(selfInbound);
+      return saveSelfSessions().then(function () { return saveAccount(); });
+    });
+  }
+
+  function encryptOlm(plaintext, otherId, otherIdStr) {
+    var out;
+    return getOrCreateOutboundSession(otherId, otherIdStr).then(function (s) {
+      out = s;
+      return ensureSelfSessions();
+    }).then(function () {
+      var enc = out.encrypt(plaintext);
+      var selfEnc = selfOutbound.encrypt(plaintext);
+      return saveSession(otherIdStr, out).then(function () {
+        return saveSelfSessions();
+      }).then(function () {
+        return {
+          recipientCipher: JSON.stringify({ t: enc.type, b: enc.body }),
+          senderCipher: JSON.stringify({ t: selfEnc.type, b: selfEnc.body }),
+        };
+      });
+    });
+  }
+
+  // Decrypt a message. msg: { body, sender_ciphertext }.
+  function decryptOlm(msg, isOwn, otherIdStr, theirCurve25519) {
+    if (isOwn) {
+      var env = JSON.parse(msg.sender_ciphertext || msg.body);
+      return loadSelfSessions().then(function () {
+        if (!selfInbound) throw new Error('No self-inbound session');
+        return selfInbound.decrypt(env.t, env.b);
+      });
+    }
+    return loadSession(otherIdStr).then(function (s) {
+      var e = JSON.parse(msg.body);
+      if (s) return s.decrypt(e.t, e.b);
+      if (e.t !== 0) throw new Error('No session for sender and message is not a PreKey.');
+      if (!theirCurve25519) throw new Error('Missing sender identity key.');
+      var ns = new Olm.Session();
+      ns.create_inbound_from(account, theirCurve25519, e.b);
+      return saveSession(otherIdStr, ns).then(function () { return ns.decrypt(e.t, e.b); });
+    });
+  }
+
+  // ---- Legacy RSA decrypt (old proto='rsa' messages only) ----
+  function decryptLegacyRSA(bodyB64, keyB64) {
+    if (!legacyPrivateKey) return Promise.reject(new Error('No legacy key'));
+    var encKey = b64ToUint8(keyB64);
+    return crypto.subtle.decrypt({ name: 'RSA-OAEP' }, legacyPrivateKey, encKey)
+      .then(function (rawKey) {
+        return crypto.subtle.importKey('raw', rawKey, { name: 'AES-GCM' }, false, ['decrypt']);
+      }).then(function (aesKey) {
+        var data = b64ToUint8(bodyB64);
+        return crypto.subtle.decrypt({ name: 'AES-GCM', iv: data.slice(0, 12) }, aesKey, data.slice(12));
+      }).then(dec);
+  }
+
+  // ---- fetch helpers ----
   function csrfToken() {
     var meta = document.querySelector('meta[name="csrf-token"]');
     return meta ? meta.getAttribute('content') : '';
   }
-
-  function csrfHeaders() {
-    return { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() };
+  function csrfFetch(url, opts) {
+    opts = opts || {};
+    opts.credentials = 'same-origin';
+    opts.headers = opts.headers || {};
+    opts.headers['Content-Type'] = opts.headers['Content-Type'] || 'application/json';
+    opts.headers['X-CSRF-Token'] = csrfToken();
+    return fetch(url, opts);
   }
 
-  function ensureKeys(kek) {
-    if (myPrivateKey) return Promise.resolve();
-    return fetch(KEY_URL, { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (data) {
-      if (data.publicKey) myPublicKeyPem = data.publicKey;
-      if (data.encryptedPrivateKey && kek) {
-        var combined = Uint8Array.from(atob(data.encryptedPrivateKey), function (c) { return c.charCodeAt(0); });
-        return crypto.subtle.decrypt({ name: 'AES-GCM', iv: combined.slice(0, 12) }, kek, combined.slice(12))
-          .then(function (decrypted) {
-            return crypto.subtle.importKey('pkcs8', decrypted, { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['decrypt']);
-          }).then(function (priv) { myPrivateKey = priv; });
-      } else if (!data.publicKey && kek) {
-        return generateAndUpload(kek);
-      }
-    });
-  }
-
-  function storeKek(password, username) {
-    return deriveKek(password, username).then(function (kek) {
-      return crypto.subtle.exportKey('jwk', kek);
-    }).then(function (jwk) {
-      sessionStorage.setItem(SESSION_KEY, btoa(JSON.stringify(jwk)));
-    });
-  }
-
+  // ---- Form interception: derive KEK from password for recovery ----
   function interceptLoginForm() {
     var form = document.querySelector('form[action^="/login"]');
     if (!form) return;
     form.addEventListener('submit', function () {
-      var pass = form.querySelector('input[name="password"]');
-      var user = form.querySelector('input[name="username"]');
-      if (pass && user && pass.value && user.value) {
-        storeKek(pass.value, user.value).catch(function () {});
+      captureKek(form);
+    });
+  }
+  function interceptRegisterForm() {
+    var form = document.querySelector('form[action^="/register"]');
+    if (!form) return;
+    form.addEventListener('submit', function () {
+      captureKek(form);
+    });
+  }
+  function captureKek(form) {
+    var pass = form.querySelector('input[name="password"]');
+    var user = form.querySelector('input[name="username"]');
+    if (pass && user && pass.value && user.value) {
+      storeKek(pass.value, user.value).catch(function () {});
+    }
+  }
+  function storeKek(password, username) {
+    return deriveKek(password, username).then(function (k) {
+      return crypto.subtle.exportKey('jwk', k);
+    }).then(function (jwk) {
+      sessionStorage.setItem(KEK_SESSION_KEY, btoa(JSON.stringify(jwk)));
+    }).catch(function () {});
+  }
+
+  // Load legacy RSA key (encrypted with password-KEK) for reading old messages.
+  function loadLegacyKey(k) {
+    return csrfFetch(KEY_URL).then(function (r) { return r.json(); }).then(function (data) {
+      if (data.publicKey && data.encryptedPrivateKey) {
+        var combined = b64ToUint8(data.encryptedPrivateKey);
+        return crypto.subtle.decrypt({ name: 'AES-GCM', iv: combined.slice(0, 12) }, k, combined.slice(12))
+          .then(function (decrypted) { return crypto.subtle.importKey('pkcs8', decrypted, { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['decrypt']); })
+          .then(function (priv) { legacyPrivateKey = priv; })
+          .catch(function () {});
       }
     });
   }
 
-  function interceptRegisterForm() {
-    var form = document.querySelector('form[action^="/register"]');
-    if (!form) return;
-    form.addEventListener('submit', function (e) {
-      e.preventDefault();
-      var pass = form.querySelector('input[name="password"]');
-      var user = form.querySelector('input[name="username"]');
-      if (!pass || !user || !pass.value || !user.value) return;
-      deriveKek(pass.value, user.value).then(function (kek) {
-        return generateAndUpload(kek).then(function () {
-          return crypto.subtle.exportKey('jwk', kek);
-        }).then(function (jwk) {
-          sessionStorage.setItem(SESSION_KEY, btoa(JSON.stringify(jwk)));
-        });
+  // Seamless unlock: device key present -> no password. Otherwise KEK recovery.
+  function ensureReady(opts) {
+    opts = opts || {};
+    return getOrCreateDeviceKey().then(function () {
+      return loadAccountFromStorage();
+    }).then(function (acct) {
+      if (acct) {
+        return loadSelfSessions().then(function () { return true; });
+      }
+      var storedKek = sessionStorage.getItem(KEK_SESSION_KEY);
+      if (!storedKek) {
+        if (opts.onNeedsPassword) opts.onNeedsPassword();
+        return false;
+      }
+      return importKek(storedKek).then(function (k) {
+        kek = k;
+        return loadLegacyKey(kek);
       }).then(function () {
-        form.submit();
-      }).catch(function (err) {
-        console.error('E2EE setup failed', err);
+        return fetchBackup();
+      }).then(function (data) {
+        if (!data.backup) {
+          return createAndPublishAccount().then(function () { return uploadBackup(account.pickle(PICKLE_KEY)); }).then(function () { return saveAccount(); });
+        }
+        return decryptWithKek(data.backup, kek).then(function (pickle) {
+          account = new Olm.Account();
+          account.unpickle(PICKLE_KEY, pickle);
+          var k = JSON.parse(account.identity_keys());
+          myIdKeys = { curve25519: k.curve25519, ed25519: k.ed25519 };
+        }).then(function () { return maybeReplenishPrekeys(); }).then(function () { return saveAccount(); });
+      }).then(function () {
+        sessionStorage.removeItem(KEK_SESSION_KEY);
+        if (opts.onReady) opts.onReady();
+        return true;
       });
     });
   }
 
-  function mySpki() {
-    if (!myPublicKeyPem) return Promise.reject(new Error('No public key'));
-    var bytes = atob(myPublicKeyPem.replace(/\s/g, ''));
-    var arr = new Uint8Array(bytes.length);
-    for (var i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
-    return crypto.subtle.importKey('spki', arr.buffer, { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['encrypt']);
+  function importKek(b64) {
+    try {
+      var jwk = JSON.parse(atob(b64));
+      return crypto.subtle.importKey('jwk', jwk, { name: 'AES-GCM', length: 256 }, false, ['wrapKey', 'unwrapKey', 'encrypt', 'decrypt']);
+    } catch (e) { return Promise.resolve(null); }
   }
 
-  function encryptMessage(plaintext, recipientPem) {
-    var aesKey, iv;
-    return crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt']).then(function (k) {
-      aesKey = k;
-      iv = crypto.getRandomValues(new Uint8Array(12));
-      return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, aesKey, new TextEncoder().encode(plaintext));
-    }).then(function (ciphertext) {
-      var bodyArr = new Uint8Array(iv.length + ciphertext.byteLength);
-      bodyArr.set(iv);
-      bodyArr.set(new Uint8Array(ciphertext), iv.length);
-      var bodyB64 = uint8ArrayToBase64(bodyArr);
-      return crypto.subtle.exportKey('raw', aesKey).then(function (rawKey) {
-        return Promise.all([
-          rsaEncrypt(rawKey, pemToSpki(recipientPem)),
-          mySpki().then(function (pub) { return crypto.subtle.encrypt({ name: 'RSA-OAEP' }, pub, rawKey).then(function (enc) { return uint8ArrayToBase64(new Uint8Array(enc)); }); })
-        ]).then(function (keys) {
-          return { body: bodyB64, keyForRecipient: keys[0], keyForSender: keys[1] };
+  // ---- Safety number ----
+  function getSafetyNumber(otherUsername) {
+    return fetch('/chats/' + encodeURIComponent(otherUsername) + '/safety', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); }).then(function (data) {
+        if (!data.my_ed25519 || !data.their_ed25519) return null;
+        var sorted = [data.my_ed25519, data.their_ed25519].sort().join('');
+        var util = new Olm.Utility();
+        var fp = util.sha256(sorted);
+        util.free();
+        var digits = '';
+        for (var i = 0; i < fp.length; i++) digits += String(fp.charCodeAt(i) % 10);
+        return digits.slice(0, 12);
+      });
+  }
+
+  function renderSafetyNumber(otherUsername) {
+    var container = document.getElementById('safety-number');
+    if (!container) return;
+    getSafetyNumber(otherUsername).then(function (num) {
+      if (num) {
+        container.textContent = num;
+        container.style.display = 'inline-block';
+      }
+    }).catch(function () {});
+  }
+
+  // ---- Decrypt messages already rendered in the DOM ----
+  function decryptExistingMessages(otherIdStr, recipientCurve) {
+    document.querySelectorAll('.chat-msg').forEach(function (el) {
+      var bubble = el.querySelector('.chat-bubble');
+      if (!bubble || !bubble.childNodes.length) return;
+      var body = el.getAttribute('data-body') || '';
+      var keySender = el.getAttribute('data-key-sender') || '';
+      var keyRecipient = el.getAttribute('data-key-recipient') || '';
+      var proto = el.getAttribute('data-proto') || 'rsa';
+      var senderCt = el.getAttribute('data-sender-ciphertext') || '';
+      var isOwn = el.classList.contains('own');
+
+      if (proto === 'olm') {
+        var msg = { body: body, sender_ciphertext: senderCt };
+        decryptOlm(msg, isOwn, otherIdStr, recipientCurve).then(function (plain) {
+          bubble.textContent = plain;
+        }).catch(function () {
+          blobFail(bubble);
         });
-      });
+        return;
+      }
+      var keyForDecrypt = isOwn ? keySender : keyRecipient;
+      if (body && keyForDecrypt) {
+        decryptLegacyRSA(body, keyForDecrypt).then(function (plain) {
+          bubble.innerHTML = '';
+          bubble.appendChild(document.createTextNode(plain));
+        }).catch(function () {});
+      }
     });
   }
 
-  function pemToSpki(pem) {
-    var b64 = pem.replace(/-----BEGIN PUBLIC KEY-----/g,'').replace(/-----END PUBLIC KEY-----/g,'').replace(/\s/g,'');
-    var bytes = atob(b64);
-    var arr = new Uint8Array(bytes.length);
-    for (var i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
-    return arr.buffer;
-  }
-
-  function rsaEncrypt(rawKey, spkiBuf) {
-    return crypto.subtle.importKey('spki', spkiBuf, { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['encrypt'])
-      .then(function (pub) { return crypto.subtle.encrypt({ name: 'RSA-OAEP' }, pub, rawKey); })
-      .then(function (enc) { return uint8ArrayToBase64(new Uint8Array(enc)); });
-  }
-
-  function decryptMessage(bodyB64, keyB64) {
-    if (!myPrivateKey) return Promise.reject(new Error('No private key loaded'));
-    var encKey = Uint8Array.from(atob(keyB64), function (c) { return c.charCodeAt(0); });
-    return crypto.subtle.decrypt({ name: 'RSA-OAEP' }, myPrivateKey, encKey).then(function (rawKey) {
-      return crypto.subtle.importKey('raw', rawKey, { name: 'AES-GCM' }, false, ['decrypt']);
-    }).then(function (aesKey) {
-      var data = Uint8Array.from(atob(bodyB64), function (c) { return c.charCodeAt(0); });
-      return crypto.subtle.decrypt({ name: 'AES-GCM', iv: data.slice(0, 12) }, aesKey, data.slice(12));
-    }).then(function (plain) { return new TextDecoder().decode(plain); });
+  function blobFail(bubble) {
+    if (bubble.textContent === '[unable to decrypt]') return;
+    bubble.textContent = '[unable to decrypt]';
   }
 
   function addChatMsg(container, msg) {
@@ -202,13 +530,175 @@
     container.scrollTop = container.scrollHeight;
   }
 
-  function esc(s){
+  function esc(s) {
     var d = document.createElement('div');
     d.appendChild(document.createTextNode(s));
     return d.innerHTML;
   }
 
-  function showUnlockOverlay() {
+  // ---- Chat page wiring ----
+  function initChatHandlers(recipientId, otherIdStr, otherUsername, recipientCurve) {
+    var sendForm = document.querySelector('.chat-form');
+    if (!sendForm) return;
+
+    sendForm.addEventListener('submit', function (e) {
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      var input = sendForm.querySelector('input[name="body"]');
+      var plaintext = input.value.trim();
+      if (!plaintext) return;
+
+      if (plaintext.startsWith('/uploads/stickers/')) {
+        input.disabled = true;
+        var formData = new FormData(sendForm);
+        formData.delete('proto');
+        formData.delete('sender_ciphertext');
+        fetch(sendForm.getAttribute('action'), {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'X-CSRF-Token': csrfToken() },
+          body: formData,
+        }).then(function (r) { return r.json(); }).then(function (data) {
+          if (data.message) addChatMsg(document.querySelector('.chat-messages'), data.message);
+          input.value = '';
+          input.disabled = false;
+        }).catch(function () { input.disabled = false; });
+        return;
+      }
+
+      input.disabled = true;
+      encryptOlm(plaintext, recipientId, otherIdStr).then(function (result) {
+        var usp = new URLSearchParams();
+        usp.set('proto', 'olm');
+        usp.set('body', result.recipientCipher);
+        usp.set('sender_ciphertext', result.senderCipher);
+        fetch(sendForm.getAttribute('action'), {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'X-CSRF-Token': csrfToken() },
+          body: usp,
+        }).then(function (r) { return r.json(); }).then(function (data) {
+          if (data.error) { input.disabled = false; return; }
+          if (data.message) addChatMsg(document.querySelector('.chat-messages'), data.message);
+          input.value = '';
+          input.disabled = false;
+          maybeReplenishPrekeys();
+        }).catch(function () { input.disabled = false; });
+      }).catch(function (err) {
+        console.error('E2EE encrypt error', err);
+        input.disabled = false;
+      });
+    });
+
+    document.addEventListener('click', function (e) {
+      var editBtn = e.target.closest('.edit-msg-btn');
+      if (!editBtn) return;
+      e.preventDefault();
+      editMessageInline(editBtn, recipientId, otherIdStr);
+    });
+  }
+
+  function editMessageInline(editBtn, recipientId, otherIdStr) {
+    var msgDiv = editBtn.closest('.chat-msg');
+    if (!msgDiv) return;
+    var proto = msgDiv.getAttribute('data-proto') || 'rsa';
+    var bubble = msgDiv.querySelector('.chat-bubble');
+    var dataEl = msgDiv.querySelector('.edit-msg-data');
+    if (!bubble || !dataEl) return;
+    var action = dataEl.dataset.action;
+    var csrf = dataEl.dataset.csrf;
+    var origText = bubble.textContent;
+
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'chat-bubble-edit';
+    input.value = origText;
+    bubble.replaceWith(input);
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+
+    var btnWrap = document.createElement('span');
+    btnWrap.className = 'inline-edit-btns';
+    btnWrap.style.cssText = 'display:inline-flex;gap:4px;margin-left:4px;vertical-align:middle';
+    var saveBtn = document.createElement('button');
+    saveBtn.className = 'btn inline-save-btn';
+    saveBtn.textContent = 'Save';
+    saveBtn.type = 'button';
+    saveBtn.style.cssText = 'font-size:12px;padding:4px 12px;cursor:pointer';
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn ghost inline-cancel-btn';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.type = 'button';
+    cancelBtn.style.cssText = 'font-size:12px;padding:4px 12px;cursor:pointer';
+    btnWrap.appendChild(saveBtn);
+    btnWrap.appendChild(cancelBtn);
+    input.parentNode.insertBefore(btnWrap, input.nextSibling);
+
+    function restore(text) {
+      var span = document.createElement('div');
+      span.className = 'chat-bubble';
+      span.textContent = text;
+      input.replaceWith(span);
+      if (btnWrap.parentNode) btnWrap.remove();
+    }
+
+    function doSave() {
+      var val = input.value.trim();
+      if (!val || val === origText) { restore(origText); return; }
+
+      if (val.startsWith('/uploads/stickers/')) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving…';
+        fetch(action, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
+          body: 'body=' + encodeURIComponent(val) + '&_csrf=' + encodeURIComponent(csrf),
+        }).then(function (r) { return r.json(); }).then(function (d) {
+          if (d.ok) { restore(val); } else { location.reload(); }
+        });
+        return;
+      }
+
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+      var req = { proto: proto, body: '', sender_ciphertext: '' };
+      var cryptoP;
+      if (proto === 'olm') {
+        cryptoP = encryptOlm(val, recipientId, otherIdStr).then(function (r) {
+          req.body = r.recipientCipher;
+          req.sender_ciphertext = r.senderCipher;
+        });
+      } else {
+        cryptoP = Promise.resolve();
+      }
+      cryptoP.then(function () {
+        var params = 'body=' + encodeURIComponent(req.body) +
+          '&proto=' + encodeURIComponent(req.proto) +
+          '&sender_ciphertext=' + encodeURIComponent(req.sender_ciphertext) +
+          '&_csrf=' + encodeURIComponent(csrf);
+        return fetch(action, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
+          body: params,
+        }).then(function (r) { return r.json(); }).then(function (d) {
+          if (d.ok || d.message) { restore(val); } else { location.reload(); }
+        });
+      }).catch(function () {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save';
+      });
+    }
+
+    saveBtn.onclick = doSave;
+    cancelBtn.onclick = function () { restore(origText); };
+    input.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') { restore(origText); ev.preventDefault(); }
+      if (ev.key === 'Enter') { doSave(); ev.preventDefault(); }
+    });
+    input.addEventListener('blur', function () {
+      setTimeout(function () { if (input.parentNode) restore(origText); }, 200);
+    });
+  }
+
+  function showUnlockOverlay(onUnlocked) {
     var overlay = document.getElementById('e2ee-unlock-overlay');
     if (!overlay) return;
     overlay.style.display = 'flex';
@@ -225,21 +715,41 @@
       btn.textContent = 'Unlocking…';
       var overlayEl = document.getElementById('e2ee-unlock-overlay');
       var username = overlayEl ? overlayEl.getAttribute('data-username') : '';
-      deriveKek(pass, username).then(function (kek) {
-        return ensureKeys(kek).then(function () {
-          if (!myPrivateKey) throw new Error('Wrong password or no keys found');
-          storeKek(pass, username);
+      initOlm().then(function () {
+        return deriveKek(pass, username).then(function (k) {
+          kek = k;
+          return loadLegacyKey(k);
+        }).then(function () {
+          return getOrCreateDeviceKey();
+        }).then(function () {
+          return loadAccountFromStorage();
+        }).then(function (acct) {
+          if (acct) return loadSelfSessions();
+          return fetchBackup().then(function (data) {
+            if (!data.backup) throw new Error('No encrypted backup found.');
+            return decryptWithKek(data.backup, kek);
+          }).then(function (pickle) {
+            account = new Olm.Account();
+            account.unpickle(PICKLE_KEY, pickle);
+            var k = JSON.parse(account.identity_keys());
+            myIdKeys = { curve25519: k.curve25519, ed25519: k.ed25519 };
+          }).then(function () { return maybeReplenishPrekeys(); });
+        }).then(function () {
+          return saveAccount().then(function () { return loadSelfSessions(); });
+        }).then(function () {
+          sessionStorage.removeItem(KEK_SESSION_KEY);
           overlay.style.display = 'none';
-          error.style.display = 'none';
-          initChat();
+          if (error) error.style.display = 'none';
+          saveSelfSessions();
+          if (onUnlocked) onUnlocked();
+        }).catch(function (err) {
+          console.error('unlock failed', err);
+          if (error) { error.textContent = 'Wrong password or unlock failed.'; error.style.display = 'block'; }
+          btn.disabled = false;
+          btn.textContent = 'Unlock';
+          input.value = '';
+          input.focus();
         });
-      }).catch(function (err) {
-        error.textContent = 'Wrong password or unlock failed.';
-        error.style.display = 'block';
-        btn.disabled = false;
-        btn.textContent = 'Unlock';
-        input.value = '';
-        input.focus();
       });
     }
 
@@ -249,224 +759,34 @@
     };
   }
 
-  function showRecipientNotReady() {
-    var notice = document.getElementById('e2ee-recipient-notice');
-    if (notice) notice.style.display = 'block';
-    var sendForm = document.querySelector('.chat-form');
-    if (sendForm) {
-      var btn = sendForm.querySelector('button');
-      if (btn) btn.disabled = true;
-    }
-  }
-
-  function initChat() {
-    var sendForm = document.querySelector('.chat-form');
-    if (!sendForm) return;
-
-    var recipientPem = sendForm.getAttribute('data-pubkey');
-    if (!recipientPem) {
-      showRecipientNotReady();
-      return;
-    }
-
-    if (!myPrivateKey || !myPublicKeyPem) return;
-
-    sendForm.addEventListener('submit', function (e) {
-      e.stopImmediatePropagation();
-      e.preventDefault();
-      var input = sendForm.querySelector('input[name="body"]');
-      var plaintext = input.value.trim();
-      if (!plaintext) return;
-
-      // Stickers are sent as plaintext (they're image paths, not user text)
-      if (plaintext.startsWith('/uploads/stickers/')) {
-        input.disabled = true;
-        var chatMsgDiv = document.querySelector('.chat-messages');
-        var usp = new URLSearchParams(Array.from(new FormData(sendForm)));
-        fetch(sendForm.getAttribute('action'), {
-          method: 'POST',
-          headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': csrfToken() },
-          body: usp,
-        }).then(function (r) { return r.json(); }).then(function (data) {
-          if (data.error) return;
-          if (data.message && chatMsgDiv) {
-            addChatMsg(chatMsgDiv, data.message);
-          }
-          input.value = '';
-          input.disabled = false;
-        }).catch(function () { input.disabled = false; });
-        return;
-      }
-
-      input.disabled = true;
-      var chatMsgDiv = document.querySelector('.chat-messages');
-      encryptMessage(plaintext, recipientPem).then(function (result) {
-        var usp = new URLSearchParams(Array.from(new FormData(sendForm)));
-        usp.set('body', result.body);
-        usp.set('key_for_sender', result.keyForSender);
-        usp.set('key_for_recipient', result.keyForRecipient);
-        fetch(sendForm.getAttribute('action'), {
-          method: 'POST',
-          headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': csrfToken() },
-          body: usp,
-        }).then(function (r) { return r.json(); }).then(function (data) {
-          if (data.error) return;
-          if (data.message && chatMsgDiv) {
-            var m = data.message;
-            decryptMessage(m.body, m.key_for_sender).then(function (plain) {
-              m.body = plain;
-              addChatMsg(chatMsgDiv, m);
-            }).catch(function () {
-              addChatMsg(chatMsgDiv, m);
-            });
-          }
-          input.value = '';
-          input.disabled = false;
-        }).catch(function () { input.disabled = false; });
-      }).catch(function (err) {
-        console.error('E2EE encrypt error', err);
-        input.disabled = false;
-      });
-    });
-
-    // Inline DM editing with re-encryption
-    document.addEventListener('click', function (e) {
-      var editBtn = e.target.closest('.edit-msg-btn');
-      if (!editBtn) return;
-      e.preventDefault();
-      var msgDiv = editBtn.closest('.chat-msg');
-      if (!msgDiv || msgDiv.querySelector('.inline-edit-input')) return;
-      var bubble = msgDiv.querySelector('.chat-bubble');
-      var dataEl = msgDiv.querySelector('.edit-msg-data');
-      if (!bubble || !dataEl) return;
-      var action = dataEl.dataset.action;
-      var csrf = dataEl.dataset.csrf;
-      var origText = bubble.textContent;
-
-      var input = document.createElement('input');
-      input.type = 'text';
-      input.className = 'inline-edit-input chat-bubble-edit';
-      input.value = origText;
-      bubble.replaceWith(input);
-      input.focus();
-      input.setSelectionRange(input.value.length, input.value.length);
-
-      var btnWrap = document.createElement('span');
-      btnWrap.className = 'inline-edit-btns';
-      btnWrap.style.cssText = 'display:inline-flex;gap:4px;margin-left:4px;vertical-align:middle';
-      var saveBtn = document.createElement('button');
-      saveBtn.className = 'btn inline-save-btn';
-      saveBtn.textContent = 'Save';
-      saveBtn.type = 'button';
-      saveBtn.style.cssText = 'font-size:12px;padding:4px 12px;cursor:pointer';
-      var cancelBtn = document.createElement('button');
-      cancelBtn.className = 'btn ghost inline-cancel-btn';
-      cancelBtn.textContent = 'Cancel';
-      cancelBtn.type = 'button';
-      cancelBtn.style.cssText = 'font-size:12px;padding:4px 12px;cursor:pointer';
-      btnWrap.appendChild(saveBtn);
-      btnWrap.appendChild(cancelBtn);
-      input.parentNode.insertBefore(btnWrap, input.nextSibling);
-
-      function restore(text) {
-        var span = document.createElement('div');
-        span.className = 'chat-bubble';
-        span.textContent = text;
-        input.replaceWith(span);
-        if (btnWrap.parentNode) btnWrap.remove();
-      }
-
-      function doSave() {
-        var val = input.value.trim();
-        if (!val || val === origText) { restore(origText); return; }
-
-        // Sticker edits — send as-is
-        if (val.startsWith('/uploads/stickers/')) {
-          saveBtn.disabled = true;
-          saveBtn.textContent = 'Saving…';
-          fetch(action, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
-            body: 'body=' + encodeURIComponent(val) + '&_csrf=' + encodeURIComponent(csrf),
-          }).then(function(r){ return r.json(); }).then(function(d){
-            if (d.ok) { restore(val); } else { location.reload(); }
-          });
-          return;
-        }
-
-        saveBtn.disabled = true;
-        saveBtn.textContent = 'Saving…';
-        encryptMessage(val, recipientPem).then(function (result) {
-          fetch(action, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
-            body: 'body=' + encodeURIComponent(result.body) + '&key_for_sender=' + encodeURIComponent(result.keyForSender) + '&key_for_recipient=' + encodeURIComponent(result.keyForRecipient) + '&_csrf=' + encodeURIComponent(csrf),
-          }).then(function(r){ return r.json(); }).then(function(d){
-            if (d.ok) { restore(val); } else { location.reload(); }
-          });
-        }).catch(function (err) {
-          console.error('E2EE re-encrypt error', err);
-          saveBtn.disabled = false;
-          saveBtn.textContent = 'Save';
-        });
-      }
-
-      saveBtn.onclick = doSave;
-      cancelBtn.onclick = function () { restore(origText); };
-      input.addEventListener('keydown', function (ev) {
-        if (ev.key === 'Escape') { restore(origText); ev.preventDefault(); }
-        if (ev.key === 'Enter') { doSave(); ev.preventDefault(); }
-      });
-      input.addEventListener('blur', function () {
-        setTimeout(function () { if (!input.parentNode) return; restore(origText); }, 200);
-      });
-    });
-
-    // Decrypt existing messages
-    document.querySelectorAll('.chat-msg').forEach(function (el) {
-      var bodyB64 = el.getAttribute('data-body');
-      var keyB64 = el.classList.contains('own')
-        ? el.getAttribute('data-key-sender')
-        : el.getAttribute('data-key-recipient');
-      if (bodyB64 && keyB64) {
-        decryptMessage(bodyB64, keyB64).then(function (plain) {
-          var bubble = el.querySelector('.chat-bubble');
-          if (bubble) {
-            bubble.innerHTML = '';
-            bubble.appendChild(document.createTextNode(plain));
-          }
-        }).catch(function () {});
-      }
-    });
-  }
-
+  // ---- Main ----
   document.addEventListener('DOMContentLoaded', function () {
     interceptLoginForm();
     interceptRegisterForm();
 
-    var isChatPage = document.querySelector('.chat-form') !== null;
+    var sendForm = document.querySelector('.chat-form');
+    if (!sendForm) return; // not a chat page — login/register hooks already attached
 
-    var kekB64 = sessionStorage.getItem(SESSION_KEY);
-    var kekPromise;
-    if (kekB64) {
-      try { var jwk = JSON.parse(atob(kekB64)); } catch (e) { kekPromise = Promise.resolve(null); }
-      if (!kekPromise) {
-        kekPromise = crypto.subtle.importKey('jwk', jwk, { name: 'AES-GCM', length: 256 }, false, ['wrapKey', 'unwrapKey', 'encrypt', 'decrypt']).catch(function () { return null; });
-      }
-    } else {
-      kekPromise = Promise.resolve(null);
-    }
+    var otherUsername = (document.querySelector('h2') || {}).textContent.trim() || '';
+    var recipientId = sendForm.getAttribute('data-recipient') || '';
+    var recipientCurve = sendForm.getAttribute('data-recipient-curve') || '';
+    var otherIdStr = String(recipientId);
 
-    kekPromise.then(function (kek) {
-      return ensureKeys(kek);
-    }).then(function () {
-      if (isChatPage) {
-        if (myPrivateKey) {
-          initChat();
-        } else {
-          showUnlockOverlay();
-        }
-      }
+    initOlm().then(function () {
+      return ensureReady({
+        onNeedsPassword: function () { showUnlockOverlay(function () { finishChatInit(recipientId, recipientCurve, otherIdStr, otherUsername); }); },
+      });
+    }).then(function (ready) {
+      if (ready) { finishChatInit(recipientId, recipientCurve, otherIdStr, otherUsername); }
+    }).catch(function (err) {
+      console.error('E2EE init failed:', err);
+      showUnlockOverlay(function () { finishChatInit(recipientId, recipientCurve, otherIdStr, otherUsername); });
     });
   });
+
+  function finishChatInit(recipientId, recipientCurve, otherIdStr, otherUsername) {
+    decryptExistingMessages(otherIdStr, recipientCurve);
+    renderSafetyNumber(otherUsername);
+    initChatHandlers(recipientId, otherIdStr, otherUsername, recipientCurve);
+  }
 })();

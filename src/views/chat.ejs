@@ -4,6 +4,11 @@
       <a href="/chats" class="muted" style="font-size:0.85rem;display:inline-flex;align-items:center;gap:4px"><%- include('partials/icon', { name: 'arrowLeft', size: 13 }) %> Chats</a>
       <h2 style="margin:2px 0 0;font-size:var(--fs-lg)"><%= other.display_name %></h2>
       <small class="muted">@<%= other.username %></small>
+      <% if (typeof recipientCurve === 'object' && recipientCurve && recipientCurve.ed25519_key) { %>
+        <span class="muted" style="display:inline-flex;align-items:center;gap:4px;font-size:0.75rem">
+          safety number: <span id="safety-number" style="font-family:monospace;font-weight:bold;display:none"></span>
+        </span>
+      <% } %>
     </div>
     <div style="display:flex;gap:8px">
       <button class="btn ghost call-btn" data-username="<%= other.username %>" data-display="<%= other.display_name %>"><%- include('partials/icon', { name: 'phone', size: 15 }) %> Call</button>
@@ -20,24 +25,31 @@
              data-body="<%= m.body %>"
              data-key-sender="<%= m.key_for_sender || '' %>"
              data-key-recipient="<%= m.key_for_recipient || '' %>"
+             data-proto="<%= m.proto || 'rsa' %>"
+             data-sender-ciphertext="<%= m.sender_ciphertext || '' %>"
              data-msg-id="<%= m.id %>">
-          <div class="chat-bubble"><% if (m.body && m.body.startsWith('/uploads/stickers/')) { %><img src="<%= m.body %>" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker"><% } else { %><%= m.body %><% } %></div>
-          <div class="muted" style="font-size:0.7rem;padding:0 4px">
-            <%= locals.relTime(m.created_at) %>
-            <% if (m.edited_at) { %><span class="edited-indicator" title="<%= new Date(m.edited_at).toLocaleString() %>">· edited</span><% } %>
-            <% if (m.from_id === currentUser.id) { %>
-              <button class="edit-msg-btn" style="font-size:0.7rem;color:var(--text-muted);background:none;border:none;cursor:pointer;padding:0 2px;margin-left:4px;text-decoration:underline">Edit</button>
-            <% } %>
-          </div>
-          <% if (m.from_id === currentUser.id) { %>
-            <input type="hidden" class="edit-msg-data" value="<%= m.body %>" data-csrf="<%= csrfToken %>" data-action="/chats/<%= other.username %>/edit/<%= m.id %>">
-          <% } %>
+           <div class="chat-bubble"><% if (m.body && m.body.startsWith('/uploads/stickers/')) { %><img src="<%= m.body %>" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker"><% } else { %><%= m.body %><% } %></div>
+           <div class="muted" style="font-size:0.7rem;padding:0 4px">
+             <%= locals.relTime(m.created_at) %>
+             <% if (m.edited_at) { %><span class="edited-indicator" title="<%= new Date(m.edited_at).toLocaleString() %>">· edited</span><% } %>
+             <% if (m.from_id === currentUser.id) { %>
+               <button class="edit-msg-btn" style="font-size:0.7rem;color:var(--text-muted);background:none;border:none;cursor:pointer;padding:0 2px;margin-left:4px;text-decoration:underline">Edit</button>
+             <% } %>
+           </div>
+           <% if (m.from_id === currentUser.id) { %>
+             <input type="hidden" class="edit-msg-data" value="<%= m.body %>" data-csrf="<%= csrfToken %>" data-action="/chats/<%= other.username %>/edit/<%= m.id %>">
+           <% } %>
         </div>
       <% }) %>
     <% } %>
   </div>
 
-  <form class="chat-form" method="post" action="/chats/<%= other.username %>/send" data-pubkey="<%= recipientPubKey || '' %>" style="position:relative">
+  <form class="chat-form" method="post" action="/chats/<%= other.username %>/send"
+        data-pubkey="<%= recipientPubKey || '' %>"
+        data-recipient="<%= other.id %>"
+        data-recipient-username="<%= other.username %>"
+        data-recipient-curve="<%= (typeof recipientCurve === 'object' && recipientCurve ? recipientCurve.identity_key : '') %>"
+        style="position:relative">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
     <input type="text" name="body" id="sticker-input-chat" placeholder="Type a message…" maxlength="2000" required autofocus>
     <button><%- include('partials/icon', { name: 'arrowRight', size: 16 }) %> Send</button>
@@ -50,10 +62,10 @@
     <p><strong><%= other.display_name %></strong> hasn't enabled end-to-end encryption yet. Ask them to log in to generate their encryption keys.</p>
   </div>
 
-  <div id="e2ee-unlock-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center" data-username="<%= locals.currentUser.username %>">
+  <div id="e2ee-unlock-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center" data-username="<%= other.username %>">
     <div class="card" style="max-width:360px;width:90%;text-align:center">
       <h3>Unlock End-to-End Encryption</h3>
-      <p class="muted">Enter your password to decrypt your private key and enable secure messaging.</p>
+      <p class="muted">Enter your password to decrypt your keys and enable secure messaging.</p>
       <input type="password" id="e2ee-password" placeholder="Password" style="width:100%;margin-bottom:10px">
       <button class="btn" id="e2ee-unlock-btn">Unlock</button>
       <div id="e2ee-unlock-error" style="color:var(--danger);margin-top:8px;display:none"></div>

@@ -300,6 +300,34 @@ try { db.exec(`ALTER TABLE oauth_codes ADD COLUMN nonce TEXT`); } catch {}
 try { db.exec(`ALTER TABLE oauth_tokens ADD COLUMN refresh_expires_at INTEGER`); } catch {}
 try { db.exec(`CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, reporter_id INTEGER NOT NULL REFERENCES users(id), reported_user_id INTEGER NOT NULL REFERENCES users(id), message_id INTEGER NOT NULL, message_body TEXT NOT NULL, channel_id INTEGER NOT NULL, room_id INTEGER NOT NULL, reason TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL)`); } catch {}
 try { db.exec(`CREATE TABLE IF NOT EXISTS join_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, room_id INTEGER NOT NULL REFERENCES rooms(id), user_id INTEGER NOT NULL REFERENCES users(id), status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL)`); } catch {}
+// Olm (Signal-style) end-to-end encryption: message protocol + sender-self ciphertext.
+try { db.exec(`ALTER TABLE messages ADD COLUMN proto TEXT NOT NULL DEFAULT 'rsa'`); } catch {}
+try { db.exec(`ALTER TABLE messages ADD COLUMN sender_ciphertext TEXT`); } catch {}
+// Per-user Olm identity (public bundle material only; private halves live client-side).
+try { db.exec(`
+  CREATE TABLE IF NOT EXISTS olm_identity (
+    user_id          INTEGER PRIMARY KEY REFERENCES users(id),
+    identity_key     TEXT NOT NULL,
+    ed25519_key      TEXT NOT NULL,
+    fallback_key     TEXT,
+    backup           TEXT,
+    created_at       INTEGER NOT NULL,
+    rotated_at       INTEGER
+  );
+`); } catch {}
+try { db.exec(`ALTER TABLE olm_identity ADD COLUMN backup TEXT`); } catch {}
+// One-time prekeys (Curve25519 publics only). Claimed (used=1) on bundle fetch.
+try { db.exec(`
+  CREATE TABLE IF NOT EXISTS olm_prekeys (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id),
+    key_id      TEXT NOT NULL,
+    public_key  TEXT NOT NULL,
+    used        INTEGER NOT NULL DEFAULT 0,
+    created_at  INTEGER NOT NULL
+  );
+`); } catch {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_olm_prekeys_user ON olm_prekeys(user_id, used)`); } catch {}
 // Fix stale referred_by links for users whose referrer no longer has a referral code.
 db.prepare(`UPDATE users SET referred_by = NULL WHERE referred_by IS NOT NULL AND referred_by IN (SELECT id FROM users WHERE referral_code IS NULL)`).run();
 // Ensure avatar paths have /uploads/ prefix for template rendering.
@@ -349,6 +377,7 @@ function follow(followerId, followeeId) {
   db.prepare(
     `INSERT OR IGNORE INTO follows (follower_id, followee_id, created_at) VALUES (?,?,?)`
   ).run(followerId, followeeId, Date.now());
+  try { require('./feed').invalidateFeedCache(followerId); } catch {}
 }
 
 function unfollow(followerId, followeeId) {
@@ -357,6 +386,7 @@ function unfollow(followerId, followeeId) {
   db.prepare(
     `DELETE FROM follows_from_post WHERE follower_id = ? AND followee_id = ?`
   ).run(followerId, followeeId);
+  try { require('./feed').invalidateFeedCache(followerId); } catch {}
 }
 
 function isFollowing(followerId, followeeId) {
@@ -388,6 +418,7 @@ function recordFollowFromPost(followerId, followeeId, postId) {
     `INSERT OR IGNORE INTO follows_from_post (follower_id, followee_id, post_id, created_at)
      VALUES (?,?,?,?)`
   ).run(followerId, followeeId, postId, Date.now());
+  try { require('./feed').invalidateFeedCache(followerId); } catch {}
 }
 
 // ---------- posts ----------
@@ -525,13 +556,13 @@ function editComment(commentId, userId, newBody) {
   return true;
 }
 
-function editMessage(msgId, userId, newBody, keyForSender, keyForRecipient) {
+function editMessage(msgId, userId, newBody, keyForSender, keyForRecipient, proto, senderCiphertext) {
   const msg = db.prepare(`SELECT * FROM messages WHERE id = ? AND from_id = ?`).get(msgId, userId);
   if (!msg) return false;
   const now = Date.now();
   db.prepare(`INSERT INTO edit_history (entity_type, entity_id, old_body, new_body, edited_at, edited_by) VALUES (?,?,?,?,?,?)`)
     .run('message', msgId, msg.body, newBody, now, userId);
-  db.prepare(`UPDATE messages SET body = ?, edited_at = ?, key_for_sender = COALESCE(?, key_for_sender), key_for_recipient = COALESCE(?, key_for_recipient) WHERE id = ?`).run(newBody, now, keyForSender || null, keyForRecipient || null, msgId);
+  db.prepare(`UPDATE messages SET body = ?, edited_at = ?, key_for_sender = COALESCE(?, key_for_sender), key_for_recipient = COALESCE(?, key_for_recipient), proto = COALESCE(?, proto), sender_ciphertext = COALESCE(?, sender_ciphertext) WHERE id = ?`).run(newBody, now, keyForSender || null, keyForRecipient || null, proto || null, senderCiphertext || null, msgId);
   return true;
 }
 
@@ -671,10 +702,10 @@ function areMutualFollowers(aId, bId) {
 }
 
 // ---------- messages ----------
-function sendMessage(fromId, toId, body, keyForSender, keyForRecipient) {
+function sendMessage(fromId, toId, body, keyForSender, keyForRecipient, proto, senderCiphertext) {
   const res = db.prepare(
-    `INSERT INTO messages (from_id, to_id, body, created_at, key_for_sender, key_for_recipient) VALUES (?,?,?,?,?,?)`
-  ).run(fromId, toId, body, Date.now(), keyForSender || null, keyForRecipient || null);
+    `INSERT INTO messages (from_id, to_id, body, created_at, key_for_sender, key_for_recipient, proto, sender_ciphertext) VALUES (?,?,?,?,?,?,?,?)`
+  ).run(fromId, toId, body, Date.now(), keyForSender || null, keyForRecipient || null, proto || 'rsa', senderCiphertext || null);
   return res.lastInsertRowid;
 }
 
@@ -745,6 +776,43 @@ function getEncryptedPrivateKey(userId) {
   return row ? row.encrypted_private_key : null;
 }
 
+// ---------- Olm (Signal-style) identity + prekeys ----------
+function setOlmIdentity(userId, identityKey, ed25519Key, fallbackKey) {
+  db.prepare(`
+    INSERT INTO olm_identity (user_id, identity_key, ed25519_key, fallback_key, created_at, rotated_at)
+    VALUES (?,?,?,?,?,?)
+    ON CONFLICT(user_id) DO UPDATE SET identity_key = excluded.identity_key, ed25519_key = excluded.ed25519_key, fallback_key = excluded.fallback_key, rotated_at = excluded.rotated_at
+  `).run(userId, identityKey, ed25519Key, fallbackKey || null, Date.now(), Date.now());
+}
+
+function getOlmIdentity(userId) {
+  return db.prepare(`SELECT identity_key, ed25519_key, fallback_key, backup FROM olm_identity WHERE user_id = ?`).get(userId) || null;
+}
+
+function setOlmBackup(userId, backup) {
+  db.prepare(`UPDATE olm_identity SET backup = ? WHERE user_id = ?`).run(backup || null, userId);
+}
+
+function addOlmPrekeys(userId, prekeys) {
+  // prekeys: [{ id, public_key }]
+  const now = Date.now();
+  const stmt = db.prepare(`INSERT INTO olm_prekeys (user_id, key_id, public_key, used, created_at) VALUES (?,?,?,?,?)`);
+  for (const k of prekeys) stmt.run(userId, String(k.id), String(k.public_key), 0, now);
+}
+
+function countAvailablePrekeys(userId) {
+  const row = db.prepare(`SELECT COUNT(*) AS n FROM olm_prekeys WHERE user_id = ? AND used = 0`).get(userId);
+  return row ? row.n : 0;
+}
+
+// Atomically claim one unused one-time prekey for a recipient bundle.
+function claimOlmPrekey(userId) {
+  const row = db.prepare(`SELECT id, key_id, public_key FROM olm_prekeys WHERE user_id = ? AND used = 0 ORDER BY id ASC LIMIT 1`).get(userId);
+  if (!row) return null;
+  db.prepare(`UPDATE olm_prekeys SET used = 1 WHERE id = ?`).run(row.id);
+  return { id: row.key_id, public_key: row.public_key };
+}
+
 // ---------- account deletion ----------
 function deleteUser(userId) {
   // Orphan any users this user referred.
@@ -770,6 +838,8 @@ function deleteUser(userId) {
   db.prepare(`DELETE FROM messages WHERE from_id = ? OR to_id = ?`).run(userId, userId);
   db.prepare(`DELETE FROM profile_customization WHERE user_id = ?`).run(userId);
   db.prepare(`DELETE FROM user_public_keys WHERE user_id = ?`).run(userId);
+  db.prepare(`DELETE FROM olm_identity WHERE user_id = ?`).run(userId);
+  db.prepare(`DELETE FROM olm_prekeys WHERE user_id = ?`).run(userId);
   // Rooms cleanup.
   db.prepare(`DELETE FROM room_messages WHERE user_id = ?`).run(userId);
   db.prepare(`DELETE FROM room_members WHERE user_id = ?`).run(userId);
@@ -1236,6 +1306,8 @@ module.exports = {
   sendMessage, getConversations, getMessages, countUnreadMessages, markConversationRead,
   // E2EE
   setPublicKey, getPublicKey, getEncryptedPrivateKey,
+  // Olm (Signal-style) E2EE
+  setOlmIdentity, getOlmIdentity, setOlmBackup, addOlmPrekeys, countAvailablePrekeys, claimOlmPrekey,
   // admin
   adminExists, getAllUsers, promoteUser, removeReferralBadge, banUser, unbanUser,
   // referrals

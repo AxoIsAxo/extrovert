@@ -7,6 +7,7 @@ const {
   sendMessage, getConversations, getMessages, markConversationRead,
   createNotification, setPublicKey, getPublicKey, getEncryptedPrivateKey,
   editMessage, getEditHistory,
+  setOlmIdentity, getOlmIdentity, addOlmPrekeys, countAvailablePrekeys, claimOlmPrekey, setOlmBackup,
 } = require('../db');
 
 const router = express.Router();
@@ -50,6 +51,80 @@ router.post('/pubkey', express.json(), (req, res) => {
   res.json({ ok: true });
 });
 
+// Publish / refresh Olm (Signal-style) identity + prekey bundle.
+// Server stores PUBLIC material only; private halves stay client-side.
+router.post('/prekeys', express.json(), (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.status(401).json({ error: 'not logged in' });
+  const identityKey = String(req.body.identity_key || '').trim();
+  const ed25519Key = String(req.body.ed25519_key || '').trim();
+  const fallbackKey = String(req.body.fallback_key || '').trim() || null;
+  const oneTimeKeys = Array.isArray(req.body.one_time_keys) ? req.body.one_time_keys : [];
+  if (!identityKey || !ed25519Key || identityKey.length > 5000 || ed25519Key.length > 5000) {
+    return res.status(400).json({ error: 'invalid identity' });
+  }
+  setOlmIdentity(user.id, identityKey, ed25519Key, fallbackKey);
+  if (oneTimeKeys.length) {
+    const clean = oneTimeKeys
+      .filter(k => k && k.id && k.public_key && String(k.public_key).length <= 5000)
+      .map(k => ({ id: String(k.id), public_key: String(k.public_key) }));
+    if (clean.length) addOlmPrekeys(user.id, clean);
+  }
+  const backup = String(req.body.backup || '').trim().slice(0, 200000) || null;
+  if (backup) setOlmBackup(user.id, backup);
+  res.json({ ok: true, available: countAvailablePrekeys(user.id) });
+});
+
+// Download the password-encrypted Olm account backup (for new-browser recovery).
+router.get('/prekeys/backup', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.status(401).json({ error: 'not logged in' });
+  const id = getOlmIdentity(user.id);
+  res.json({ backup: id ? id.backup : null });
+});
+
+// How many unused one-time prekeys the current user still has published.
+router.get('/prekeys/count', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.status(401).json({ error: 'not logged in' });
+  res.json({ available: countAvailablePrekeys(user.id) });
+});
+
+// Fetch a recipient's Olm bundle (identity + one claimed one-time prekey, else fallback).
+router.get('/:username/bundle', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.status(401).json({ error: 'not logged in' });
+  const other = getUserByUsername(req.params.username);
+  if (!other) return res.status(404).json({ error: 'not found' });
+  if (!areMutualFollowers(user.id, other.id)) return res.status(403).json({ error: 'not mutual followers' });
+  const id = getOlmIdentity(other.id);
+  if (!id) return res.json({ identity_key: null, ed25519_key: null, one_time_key: null, fallback_key: null });
+  const otk = claimOlmPrekey(other.id);
+  res.json({
+    identity_key: id.identity_key,
+    ed25519_key: id.ed25519_key,
+    one_time_key: otk,            // { id, public_key } or null
+    fallback_key: id.fallback_key,
+  });
+});
+
+// Recipient's ed25519 identity key for safety-number verification.
+router.get('/:username/safety', (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.status(401).json({ error: 'not logged in' });
+  const other = getUserByUsername(req.params.username);
+  if (!other) return res.status(404).json({ error: 'not found' });
+  if (!areMutualFollowers(user.id, other.id)) return res.status(403).json({ error: 'not mutual followers' });
+  const mine = getOlmIdentity(user.id);
+  const theirs = getOlmIdentity(other.id);
+  res.json({
+    my_ed25519: mine ? mine.ed25519_key : null,
+    their_ed25519: theirs ? theirs.ed25519_key : null,
+    my_curve25519: mine ? mine.identity_key : null,
+    their_curve25519: theirs ? theirs.identity_key : null,
+  });
+});
+
 // Conversation with a specific user.
 router.get('/:username', (req, res) => {
   const user = res.locals.currentUser;
@@ -61,8 +136,9 @@ router.get('/:username', (req, res) => {
   }
   const messages = getMessages(user.id, other.id);
   const recipientPubKey = getPublicKey(other.id);
+  const recipientCurve = getOlmIdentity(other.id);
   markConversationRead(user.id, other.id);
-  res.render('chat', { other, messages, recipientPubKey });
+  res.render('chat', { other, messages, recipientPubKey, recipientCurve });
 });
 
 // Send a message.
@@ -76,14 +152,21 @@ router.post('/:username/send', (req, res) => {
   const body = String(req.body.body || '').trim().slice(0, 5000);
   const keyForSender = String(req.body.key_for_sender || '').trim() || null;
   const keyForRecipient = String(req.body.key_for_recipient || '').trim() || null;
-  if (body && !body.startsWith('/uploads/stickers/') && (!keyForSender || !keyForRecipient)) {
-    return req.xhr ? res.json({ error: 'End-to-end encryption required. All messages must be encrypted.' }) : res.status(400).send('E2EE required');
+  const proto = String(req.body.proto || 'rsa').trim() === 'olm' ? 'olm' : 'rsa';
+  const senderCiphertext = String(req.body.sender_ciphertext || '').trim().slice(0, 5000) || null;
+  const isSticker = body.startsWith('/uploads/stickers/');
+  if (body && !isSticker) {
+    if (proto === 'olm') {
+      if (!senderCiphertext) return req.xhr ? res.json({ error: 'End-to-end encryption required. All messages must be encrypted.' }) : res.status(400).send('E2EE required');
+    } else if (!keyForSender || !keyForRecipient) {
+      return req.xhr ? res.json({ error: 'End-to-end encryption required. All messages must be encrypted.' }) : res.status(400).send('E2EE required');
+    }
   }
   if (body) {
-    const msgId = sendMessage(user.id, other.id, body, keyForSender, keyForRecipient);
+    const msgId = sendMessage(user.id, other.id, body, keyForSender, keyForRecipient, proto, senderCiphertext);
     createNotification({ userId: other.id, type: 'message', actorId: user.id });
     if (req.xhr) {
-      const msg = db.prepare(`SELECT id, from_id, body, created_at, key_for_sender, key_for_recipient FROM messages WHERE id = ?`).get(msgId);
+      const msg = db.prepare(`SELECT id, from_id, body, created_at, key_for_sender, key_for_recipient, proto, sender_ciphertext FROM messages WHERE id = ?`).get(msgId);
       return res.json({ message: msg });
     }
   }
@@ -98,10 +181,12 @@ router.post('/:username/edit/:mid', (req, res) => {
   if (!body) return req.xhr ? res.json({ error: 'body required' }) : res.redirect(back(req, '/chats'));
   const keyForSender = String(req.body.key_for_sender || '').trim() || null;
   const keyForRecipient = String(req.body.key_for_recipient || '').trim() || null;
-  const ok = editMessage(Number(req.params.mid), user.id, body, keyForSender, keyForRecipient);
+  const proto = String(req.body.proto || 'rsa').trim() === 'olm' ? 'olm' : 'rsa';
+  const senderCiphertext = String(req.body.sender_ciphertext || '').trim().slice(0, 5000) || null;
+  const ok = editMessage(Number(req.params.mid), user.id, body, keyForSender, keyForRecipient, proto, senderCiphertext);
   if (!ok) return req.xhr ? res.json({ error: 'not found or not yours' }) : res.status(404).send('Message not found or not yours.');
   if (req.xhr) {
-    const msg = db.prepare(`SELECT id, from_id, body, created_at, edited_at, key_for_sender, key_for_recipient FROM messages WHERE id = ?`).get(Number(req.params.mid));
+    const msg = db.prepare(`SELECT id, from_id, body, created_at, edited_at, key_for_sender, key_for_recipient, proto, sender_ciphertext FROM messages WHERE id = ?`).get(Number(req.params.mid));
     return res.json({ message: msg });
   }
   res.redirect('/chats/' + req.params.username);

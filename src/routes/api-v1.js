@@ -1024,6 +1024,40 @@ router.post('/conversations/keys', requireApiAuth('write:direct'), (req, res) =>
   res.json({ data: { ok: true } });
 });
 
+// Publish / refresh Olm (Signal-style) identity + prekey bundle. Server stores
+// PUBLIC material only; private halves stay client-side. (must be before :username routes)
+router.post('/conversations/prekeys', requireApiAuth('write:direct'), express.json(), (req, res) => {
+  const identityKey = String(req.body.identity_key || '').trim();
+  const ed25519Key = String(req.body.ed25519_key || '').trim();
+  const fallbackKey = String(req.body.fallback_key || '').trim() || null;
+  const oneTimeKeys = Array.isArray(req.body.one_time_keys) ? req.body.one_time_keys : [];
+  if (!identityKey || !ed25519Key || identityKey.length > 5000 || ed25519Key.length > 5000) {
+    return errorResponse(res, 400, 'Bad Request', 'identity_key and ed25519_key are required (<=5000 chars).');
+  }
+  db.setOlmIdentity(req.apiUser.id, identityKey, ed25519Key, fallbackKey);
+  if (oneTimeKeys.length) {
+    const clean = oneTimeKeys
+      .filter(k => k && k.id && k.public_key && String(k.public_key).length <= 5000)
+      .map(k => ({ id: String(k.id), public_key: String(k.public_key) }));
+    if (clean.length) db.addOlmPrekeys(req.apiUser.id, clean);
+  }
+  const backup = String(req.body.backup || '').trim().slice(0, 200000) || null;
+  if (backup) db.setOlmBackup(req.apiUser.id, backup);
+  db.auditLog('dm_olm_keys', req.apiUser.id, 'Published Olm identity + prekeys');
+  responseEnvelope(res, { ok: true, available: db.countAvailablePrekeys(req.apiUser.id) });
+});
+
+// Download the password-encrypted Olm account backup (for new-browser recovery). (before :username)
+router.get('/conversations/prekeys/backup', requireApiAuth('read:direct'), (req, res) => {
+  const id = db.getOlmIdentity(req.apiUser.id);
+  responseEnvelope(res, { backup: id ? id.backup : null });
+});
+
+// Count of unused one-time prekeys the current user still has published. (before :username)
+router.get('/conversations/prekeys/count', requireApiAuth('read:direct'), (req, res) => {
+  responseEnvelope(res, { available: db.countAvailablePrekeys(req.apiUser.id) });
+});
+
 // Message history with a user
 router.get('/conversations/:username', requireApiAuth('read:direct'), (req, res) => {
   const other = db.getUserByUsername(req.params.username);
@@ -1047,6 +1081,8 @@ router.get('/conversations/:username', requireApiAuth('read:direct'), (req, res)
     edited_at: m.edited_at,
     key_for_sender: m.key_for_sender,
     key_for_recipient: m.key_for_recipient,
+    proto: m.proto,
+    sender_ciphertext: m.sender_ciphertext,
   }));
 
   // Cursor points to the oldest message in this batch (first item after reverse)
@@ -1073,15 +1109,21 @@ router.post('/conversations/:username/messages', requireApiAuth('write:direct'),
 
   const keyForSender = String(req.body.key_for_sender || '').trim() || null;
   const keyForRecipient = String(req.body.key_for_recipient || '').trim() || null;
+  const proto = String(req.body.proto || 'rsa').trim() === 'olm' ? 'olm' : 'rsa';
+  const senderCiphertext = String(req.body.sender_ciphertext || '').trim().slice(0, 5000) || null;
 
-  if (!body.startsWith('/uploads/stickers/') && (!keyForSender || !keyForRecipient)) {
-    return errorResponse(res, 400, 'Bad Request', 'End-to-end encryption required. All messages must be encrypted.');
+  if (!body.startsWith('/uploads/stickers/')) {
+    if (proto === 'olm') {
+      if (!senderCiphertext) return errorResponse(res, 400, 'Bad Request', 'End-to-end encryption required. All messages must be encrypted.');
+    } else if (!keyForSender || !keyForRecipient) {
+      return errorResponse(res, 400, 'Bad Request', 'End-to-end encryption required. All messages must be encrypted.');
+    }
   }
 
-  const msgId = dm.sendMessage(req.apiUser.id, other.id, body, keyForSender, keyForRecipient);
+  const msgId = dm.sendMessage(req.apiUser.id, other.id, body, keyForSender, keyForRecipient, proto, senderCiphertext);
   db.createNotification({ userId: other.id, type: 'message', actorId: req.apiUser.id });
 
-  const msg = db.db.prepare(`SELECT id, from_id, to_id, body, created_at, key_for_sender, key_for_recipient FROM messages WHERE id = ?`).get(msgId);
+  const msg = db.db.prepare(`SELECT id, from_id, to_id, body, created_at, key_for_sender, key_for_recipient, proto, sender_ciphertext FROM messages WHERE id = ?`).get(msgId);
 
   res.status(201).json({
     data: {
@@ -1092,7 +1134,43 @@ router.post('/conversations/:username/messages', requireApiAuth('write:direct'),
       created_at: msg.created_at,
       key_for_sender: msg.key_for_sender,
       key_for_recipient: msg.key_for_recipient,
+      proto: msg.proto,
+      sender_ciphertext: msg.sender_ciphertext,
     },
+  });
+});
+
+// Fetch a recipient's Olm bundle (identity + one claimed one-time prekey, else fallback).
+router.get('/conversations/:username/bundle', requireApiAuth('read:direct'), (req, res) => {
+  const other = db.getUserByUsername(req.params.username);
+  if (!other) return errorResponse(res, 404, 'Not Found', 'User not found.');
+  if (!db.areMutualFollowers(req.apiUser.id, other.id)) {
+    return errorResponse(res, 403, 'Forbidden', 'You can only message mutual followers.');
+  }
+  const id = db.getOlmIdentity(other.id);
+  if (!id) return responseEnvelope(res, { identity_key: null, ed25519_key: null, one_time_key: null, fallback_key: null });
+  responseEnvelope(res, {
+    identity_key: id.identity_key,
+    ed25519_key: id.ed25519_key,
+    one_time_key: db.claimOlmPrekey(other.id),
+    fallback_key: id.fallback_key,
+  });
+});
+
+// Recipient ed25519 identity keys for safety-number verification.
+router.get('/conversations/:username/safety', requireApiAuth('read:direct'), (req, res) => {
+  const other = db.getUserByUsername(req.params.username);
+  if (!other) return errorResponse(res, 404, 'Not Found', 'User not found.');
+  if (!db.areMutualFollowers(req.apiUser.id, other.id)) {
+    return errorResponse(res, 403, 'Forbidden', 'You can only message mutual followers.');
+  }
+  const mine = db.getOlmIdentity(req.apiUser.id);
+  const theirs = db.getOlmIdentity(other.id);
+  responseEnvelope(res, {
+    my_ed25519: mine ? mine.ed25519_key : null,
+    their_ed25519: theirs ? theirs.ed25519_key : null,
+    my_curve25519: mine ? mine.identity_key : null,
+    their_curve25519: theirs ? theirs.identity_key : null,
   });
 });
 
@@ -1112,7 +1190,11 @@ router.get('/conversations/:username/keys', requireApiAuth('read:direct'), (req,
 router.patch('/messages/:id', requireApiAuth('write:direct'), (req, res) => {
   const body = String(req.body.body || '').trim().slice(0, 5000);
   if (!body) return errorResponse(res, 400, 'Bad Request', 'body is required.');
-  const ok = dm.editMessage(parseInt(req.params.id, 10), req.apiUser.id, body);
+  const keyForSender = String(req.body.key_for_sender || '').trim() || null;
+  const keyForRecipient = String(req.body.key_for_recipient || '').trim() || null;
+  const proto = String(req.body.proto || 'rsa').trim() === 'olm' ? 'olm' : 'rsa';
+  const senderCiphertext = String(req.body.sender_ciphertext || '').trim().slice(0, 5000) || null;
+  const ok = dm.editMessage(parseInt(req.params.id, 10), req.apiUser.id, body, keyForSender, keyForRecipient, proto, senderCiphertext);
   if (!ok) return errorResponse(res, 404, 'Not Found', 'Message not found or not yours.');
   db.auditLog('dm_edited', req.apiUser.id, `Message ${req.params.id}`);
   res.json({ data: { ok: true } });

@@ -7,7 +7,8 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "test": "node scripts/test.js",
-    "test:api": "node --test scripts/api-test.js"
+    "test:api": "node --test scripts/api-test.js",
+    "test:crypto": "node scripts/crypto-test.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
@@ -20,5 +21,8 @@
     "sanitize-html": "^2.13.0",
     "sharp": "^0.35.3",
     "ws": "^8.21.1"
+  },
+  "devDependencies": {
+    "@matrix-org/olm": "3.2.15"
   }
 }

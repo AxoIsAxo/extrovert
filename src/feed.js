@@ -19,6 +19,10 @@ function setCachedFeed(viewerId, feed) {
   feedCache.set(viewerId, { feed, ts: Date.now() });
 }
 
+function invalidateFeedCache(userId) {
+  feedCache.delete(userId);
+}
+
 // ---------------------------------------------------------------------------
 // Extrovert feed algorithm
 // ---------------------------------------------------------------------------
@@ -238,4 +242,5 @@ function buildFeed(viewerId, { page = 1, perPage = 20 } = {}) {
 module.exports = {
   buildFeed, scorePost, BOOST,
   candidatePosts, commentWithoutLikeAuthors, commentWithoutLikePostIds,
+  invalidateFeedCache,
 };

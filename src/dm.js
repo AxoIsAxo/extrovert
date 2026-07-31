@@ -29,8 +29,8 @@ function getMessages(userId, otherId, limit, cursor) {
   `).all(userId, otherId, otherId, userId, limit);
 }
 
-function sendMessage(fromId, toId, body, keyForSender, keyForRecipient) {
-  return db.sendMessage(fromId, toId, body, keyForSender, keyForRecipient);
+function sendMessage(fromId, toId, body, keyForSender, keyForRecipient, proto, senderCiphertext) {
+  return db.sendMessage(fromId, toId, body, keyForSender, keyForRecipient, proto, senderCiphertext);
 }
 
 function getPublicKey(userId) {
@@ -45,8 +45,8 @@ function setPublicKey(userId, publicKey, encryptedPrivateKey) {
   db.setPublicKey(userId, publicKey, encryptedPrivateKey);
 }
 
-function editMessage(msgId, userId, newBody, keyForSender, keyForRecipient) {
-  return db.editMessage(msgId, userId, newBody, keyForSender, keyForRecipient);
+function editMessage(msgId, userId, newBody, keyForSender, keyForRecipient, proto, senderCiphertext) {
+  return db.editMessage(msgId, userId, newBody, keyForSender, keyForRecipient, proto, senderCiphertext);
 }
 
 function deleteMessage(msgId, userId) {
