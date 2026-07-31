@@ -185,6 +185,8 @@ h4 { font-size: var(--fs-lg); font-family: var(--font-body); font-weight: 700; l
 
 .wrap { max-width: 680px; margin: 0 auto; padding: 36px 20px 96px; }
 .feed-wrap { max-width: 100%; padding: 0; }
+.wrap.wrap-wide { max-width: 960px; }
+.wrap.room-wrap { max-width: 1150px; }
 
 .feed-layout {
   display: grid;
@@ -496,6 +498,7 @@ a.conv-row:hover { color: var(--primary); }
 .chat-wrap {
   display: flex;
   flex-direction: column;
+  max-width: 1000px;
   height: calc(100vh - 62px);
   height: calc(100dvh - 62px);
   overflow: hidden;
