@@ -491,6 +491,8 @@ label { display: block; font-size: var(--fs-sm); color: var(--text-secondary); m
 /* ── Chat ─────────────────────────────────────────────────────────── */
 
 a.conv-row { display: flex; gap: 12px; align-items: center; text-decoration: none; color: inherit; padding: 13px 0; border-bottom: 1px solid var(--border-soft); transition: color var(--t-fast) var(--ease-soft); }
+a.conv-row .info { flex: 1; min-width: 0; }
+a.conv-row .info b { display: block; }
 a.conv-row:hover { color: var(--primary); }
 
 /* Chat page fills the viewport: card pinned on top (messages scroll under it),

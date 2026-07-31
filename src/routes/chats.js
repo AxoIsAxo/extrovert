@@ -26,6 +26,8 @@ router.get('/', (req, res) => {
   conversations.forEach(function(c) {
     const p = getUserPresence(c.username);
     c.online = p.online;
+    const id = getOlmIdentity(c.id);
+    c.sender_curve = id ? id.identity_key : null;
   });
   res.render('chats', { conversations });
 });

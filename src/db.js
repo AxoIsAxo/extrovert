@@ -745,22 +745,30 @@ function getConversations(userId) {
         CASE WHEN from_id = ? THEN to_id ELSE from_id END AS other_id
       FROM messages
       WHERE from_id = ? OR to_id = ?
+    ),
+    lasts AS (
+      SELECT m.from_id, m.to_id, m.body, m.proto, m.sender_ciphertext,
+             m.key_for_sender, m.key_for_recipient, m.created_at,
+             ROW_NUMBER() OVER (
+               PARTITION BY CASE WHEN m.from_id = ? THEN m.to_id ELSE m.from_id END
+               ORDER BY m.created_at DESC, m.id DESC
+             ) AS rn
+      FROM messages m
+      WHERE m.from_id = ? OR m.to_id = ?
     )
     SELECT p.other_id AS id, u.username, u.display_name, u.avatar,
-      (SELECT body FROM messages m
-       WHERE (m.from_id = ? AND m.to_id = p.other_id)
-          OR (m.from_id = p.other_id AND m.to_id = ?)
-       ORDER BY m.created_at DESC LIMIT 1) AS last_message,
-      (SELECT created_at FROM messages m
-       WHERE (m.from_id = ? AND m.to_id = p.other_id)
-          OR (m.from_id = p.other_id AND m.to_id = ?)
-       ORDER BY m.created_at DESC LIMIT 1) AS last_at,
+      l.from_id AS last_from, l.body AS last_message,
+      l.proto AS last_proto, l.sender_ciphertext AS last_sender_ciphertext,
+      l.key_for_sender AS last_key_for_sender, l.key_for_recipient AS last_key_for_recipient,
+      l.created_at AS last_at,
       (SELECT COUNT(*) FROM messages m
        WHERE m.to_id = ? AND m.from_id = p.other_id AND m.read = 0) AS unread
     FROM parts p
     JOIN users u ON u.id = p.other_id
-    ORDER BY last_at DESC
-  `).all(userId, userId, userId, userId, userId, userId, userId, userId);
+    LEFT JOIN lasts l ON l.rn = 1
+      AND ((l.from_id = ? AND l.to_id = p.other_id) OR (l.from_id = p.other_id AND l.to_id = ?))
+    ORDER BY l.created_at DESC
+  `).all(userId, userId, userId, userId, userId, userId, userId, userId, userId);
 }
 
 function getMessages(userId, otherId, limit = 100) {

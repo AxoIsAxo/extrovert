@@ -1176,13 +1176,47 @@
     }).catch(function () {});
   }
 
+  // /chats list: decrypt each conversation's last-message preview client-side.
+  function decryptChatPreviews() {
+    var items = document.querySelectorAll('.chat-preview');
+    if (!items.length) return;
+    ensureReady({ onNeedsPassword: function () {} }).then(function (ok) {
+      if (!ok) return;
+      items.forEach(function (el) {
+        var body = el.getAttribute('data-body') || '';
+        if (!body || body.indexOf('/uploads/stickers/') === 0) return;
+        var proto = el.getAttribute('data-proto') || 'rsa';
+        var isOwn = el.getAttribute('data-own') === '1';
+        var otherId = el.getAttribute('data-other-id') || '';
+        var curve = el.getAttribute('data-curve') || '';
+        var key = isOwn
+          ? el.getAttribute('data-key-sender') || ''
+          : el.getAttribute('data-key-recipient') || '';
+        var p;
+        if (proto === 'olm') {
+          p = decryptOlm(
+            { body: body, sender_ciphertext: el.getAttribute('data-sender-ciphertext') || '' },
+            isOwn, otherId, curve
+          );
+        } else {
+          p = key ? decryptLegacyRSA(body, key) : Promise.reject(new Error('no key'));
+        }
+        p.then(function (plain) { el.textContent = plain; }).catch(function () {});
+      });
+    }).catch(function () {});
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     interceptLoginForm();
     interceptRegisterForm();
 
     var sendForm = document.querySelector('.chat-form');
     if (!sendForm) {
-      prewarm();
+      if (document.querySelector('.chat-preview')) {
+        decryptChatPreviews();
+      } else {
+        prewarm();
+      }
       return; // not a chat page — login/register hooks + background setup attached
     }
 
