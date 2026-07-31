@@ -241,6 +241,7 @@
   }
 
   function uploadBackup(pickle) {
+    if (!kek) return Promise.resolve();
     return encryptWithKek(pickle, kek).then(function (enc) {
       return csrfFetch(PREKEYS_URL, { method: 'POST', body: JSON.stringify({ backup: enc }) }).then(function (r) { return r.json(); });
     });
@@ -361,26 +362,40 @@
   }
 
   // ---- Form interception: derive KEK from password for recovery ----
-  function interceptLoginForm() {
-    var form = document.querySelector('form[action^="/login"]');
+  // Deriving the KEK takes ~100-500ms; a plain submit would navigate away and
+  // kill the async work before it's stored. So we prevent the submit, store the
+  // KEK first, then submit programmatically. Login/register are never blocked:
+  // a 4s safety timeout forces the submit either way.
+  function interceptAuthForm(selector) {
+    var form = document.querySelector(selector);
     if (!form) return;
-    form.addEventListener('submit', function () {
-      captureKek(form);
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var f = e.target;
+      var btn = f.querySelector('button[type="submit"]');
+      var done = false;
+      var submitForm = function () {
+        if (done) return;
+        done = true;
+        if (btn) btn.disabled = false;
+        f.submit();
+      };
+      var pass = f.querySelector('input[name="password"]');
+      var user = f.querySelector('input[name="username"]');
+      if (pass && user && pass.value && user.value) {
+        if (btn) btn.disabled = true;
+        storeKek(pass.value, user.value).then(submitForm, submitForm);
+        setTimeout(submitForm, 4000);
+      } else {
+        submitForm();
+      }
     });
+  }
+  function interceptLoginForm() {
+    interceptAuthForm('form[action^="/login"]');
   }
   function interceptRegisterForm() {
-    var form = document.querySelector('form[action^="/register"]');
-    if (!form) return;
-    form.addEventListener('submit', function () {
-      captureKek(form);
-    });
-  }
-  function captureKek(form) {
-    var pass = form.querySelector('input[name="password"]');
-    var user = form.querySelector('input[name="username"]');
-    if (pass && user && pass.value && user.value) {
-      storeKek(pass.value, user.value).catch(function () {});
-    }
+    interceptAuthForm('form[action^="/register"]');
   }
   function storeKek(password, username) {
     return deriveKek(password, username).then(function (k) {
@@ -403,7 +418,11 @@
     });
   }
 
-  // Seamless unlock: device key present -> no password. Otherwise KEK recovery.
+  // Seamless unlock. Order of attempts:
+  //  1. IndexedDB already has the account (same browser)          -> ready, no prompt.
+  //  2. A password KEK is in sessionStorage (just logged in)      -> silent recovery.
+  //  3. No backup exists on the server (nothing to recover)       -> silent key creation.
+  //  4. A backup exists but we have no password key               -> prompt once.
   function ensureReady(opts) {
     opts = opts || {};
     return getOrCreateDeviceKey().then(function () {
@@ -413,29 +432,45 @@
         return loadSelfSessions().then(function () { return true; });
       }
       var storedKek = sessionStorage.getItem(KEK_SESSION_KEY);
-      if (!storedKek) {
-        if (opts.onNeedsPassword) opts.onNeedsPassword();
-        return false;
+      if (storedKek) {
+        return importKek(storedKek).then(function (k) {
+          kek = k;
+          return loadLegacyKey(kek);
+        }).then(function () {
+          return fetchBackup();
+        }).then(function (data) {
+          if (!data.backup) {
+            return createAndPublishAccount().then(function () { return uploadBackup(account.pickle(PICKLE_KEY)); });
+          }
+          return decryptWithKek(data.backup, kek).then(function (pickle) {
+            account = new Olm.Account();
+            account.unpickle(PICKLE_KEY, pickle);
+            var k = JSON.parse(account.identity_keys());
+            myIdKeys = { curve25519: k.curve25519, ed25519: k.ed25519 };
+          }).then(function () { return maybeReplenishPrekeys(); });
+        }).then(function () { return saveAccount(); }).then(function () {
+          sessionStorage.removeItem(KEK_SESSION_KEY);
+          if (opts.onReady) opts.onReady();
+          return true;
+        });
       }
-      return importKek(storedKek).then(function (k) {
-        kek = k;
-        return loadLegacyKey(kek);
-      }).then(function () {
+      return initOlm().then(function () {
         return fetchBackup();
       }).then(function (data) {
-        if (!data.backup) {
-          return createAndPublishAccount().then(function () { return uploadBackup(account.pickle(PICKLE_KEY)); }).then(function () { return saveAccount(); });
+        if (data && data.backup) {
+          // A backup exists but we have no password key -> ask for it once.
+          if (opts.onNeedsPassword) opts.onNeedsPassword();
+          return false;
         }
-        return decryptWithKek(data.backup, kek).then(function (pickle) {
-          account = new Olm.Account();
-          account.unpickle(PICKLE_KEY, pickle);
-          var k = JSON.parse(account.identity_keys());
-          myIdKeys = { curve25519: k.curve25519, ed25519: k.ed25519 };
-        }).then(function () { return maybeReplenishPrekeys(); }).then(function () { return saveAccount(); });
-      }).then(function () {
-        sessionStorage.removeItem(KEK_SESSION_KEY);
-        if (opts.onReady) opts.onReady();
-        return true;
+        // Nothing to recover -> create a fresh identity silently. No password is
+        // available so there is nothing to upload as a recovery backup.
+        return createAndPublishAccount().then(function () { return saveAccount(); }).then(function () {
+          if (opts.onReady) opts.onReady();
+          return true;
+        });
+      }).catch(function () {
+        if (opts.onNeedsPassword) opts.onNeedsPassword();
+        return false;
       });
     });
   }
@@ -922,13 +957,18 @@
         }).then(function (acct) {
           if (acct) return loadSelfSessions();
           return fetchBackup().then(function (data) {
-            if (!data.backup) throw new Error('No encrypted backup found.');
-            return decryptWithKek(data.backup, kek);
-          }).then(function (pickle) {
-            account = new Olm.Account();
-            account.unpickle(PICKLE_KEY, pickle);
-            var k = JSON.parse(account.identity_keys());
-            myIdKeys = { curve25519: k.curve25519, ed25519: k.ed25519 };
+            if (data.backup) {
+              return decryptWithKek(data.backup, kek).then(function (pickle) {
+                account = new Olm.Account();
+                account.unpickle(PICKLE_KEY, pickle);
+                var k = JSON.parse(account.identity_keys());
+                myIdKeys = { curve25519: k.curve25519, ed25519: k.ed25519 };
+              });
+            }
+            // No backup yet (e.g. registered before key setup existed): mint one.
+            return createAndPublishAccount().then(function () {
+              return uploadBackup(account.pickle(PICKLE_KEY));
+            });
           }).then(function () { return maybeReplenishPrekeys(); });
         }).then(function () {
           return saveAccount().then(function () { return loadSelfSessions(); });
