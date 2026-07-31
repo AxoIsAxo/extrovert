@@ -9,6 +9,10 @@ const SESSION_DB_PATH = process.env.EXTV_SESSION_DB_PATH || path.join(__dirname,
 const SESSION_SECRET = process.env.SESSION_SECRET;
 
 const clients = new Map();
+// Every WS connection per user (multiple tabs) for live DM delivery. Unlike
+// `clients` (one signaling connection per user, last-wins), this tracks ALL of
+// a user's open connections so pushes reach every tab.
+const dmClients = new Map(); // userId -> Set<{ ws, username, displayName }>
 const voiceChannels = new Map();
 
 let sessionDb;
@@ -195,6 +199,10 @@ function initSignaling(wss) {
       inCall: false,
     };
     clients.set(user.id, clientData);
+
+    // Track this connection for live DM pushes (all tabs).
+    if (!dmClients.has(user.id)) dmClients.set(user.id, new Set());
+    dmClients.get(user.id).add({ ws, username: user.username, displayName: user.display_name });
 
     broadcastPresence(user.id, 'user_online');
 
@@ -401,6 +409,13 @@ function initSignaling(wss) {
 
     ws.on('close', () => {
       removeFromVoiceChannels(user.id);
+      const dmSet = dmClients.get(user.id);
+      if (dmSet) {
+        for (const c of dmSet) {
+          if (c.ws === ws) { dmSet.delete(c); break; }
+        }
+        if (dmSet.size === 0) dmClients.delete(user.id);
+      }
       const c = clients.get(user.id);
       if (c && c.ws === ws) {
         clients.delete(user.id);
@@ -453,9 +468,19 @@ function getUserPresence(username) {
   return { online: false, in_call: false };
 }
 
-// Push a new DM (ciphertext only) to the recipient's live WebSocket connection.
+// Push a new DM (ciphertext only) to EVERY open tab of the recipient.
 function sendDmEvent(toUsername, payload) {
-  return sendToUser(toUsername, Object.assign({ type: 'new_dm' }, payload));
+  const message = Object.assign({ type: 'new_dm' }, payload);
+  let delivered = false;
+  for (const [userId, conns] of dmClients) {
+    const conn = conns.values().next().value;
+    if (conn && conn.username === toUsername) {
+      for (const c of conns) {
+        try { c.ws.send(JSON.stringify(message)); delivered = true; } catch {}
+      }
+    }
+  }
+  return delivered;
 }
 
 module.exports = { initSignaling, getOnlineUsers, getUserPresence, getVoiceChannelMembers, sendDmEvent };

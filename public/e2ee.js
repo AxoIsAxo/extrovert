@@ -821,13 +821,32 @@
     container.scrollTop = container.scrollHeight;
   }
 
-  // Live DM delivery over the signaling WebSocket.
-  function initLiveUpdates(recipientId, otherIdStr, senderCurve) {
+  // Live DM delivery over the signaling WebSocket. The listener is registered as
+  // early as possible and buffers messages until E2EE is ready, so nothing arriving
+  // during key setup is dropped.
+  var liveReady = false;
+  var liveBuffer = [];
+  var liveOtherIdStr = null;
+  var liveSenderCurve = null;
+
+  function initLiveBuffer(recipientId) {
     if (!window.ExtrovertCall || !window.ExtrovertCall.on) return;
+    var myRecipient = String(recipientId);
     window.ExtrovertCall.on('new_dm', function (data) {
       var m = data.message;
-      if (!m || String(m.from_id) !== String(recipientId)) return;
-      addLiveIncomingMsg(m, otherIdStr, data.sender_curve || senderCurve);
+      if (!m || String(m.from_id) !== myRecipient) return;
+      if (!liveReady) { liveBuffer.push(data); return; }
+      addLiveIncomingMsg(m, liveOtherIdStr, data.sender_curve || liveSenderCurve);
+    });
+  }
+
+  function startLiveUpdates(otherIdStr, senderCurve) {
+    liveOtherIdStr = otherIdStr;
+    liveSenderCurve = senderCurve;
+    liveReady = true;
+    var pending = liveBuffer.splice(0, liveBuffer.length);
+    pending.forEach(function (data) {
+      addLiveIncomingMsg(data.message, liveOtherIdStr, data.sender_curve || liveSenderCurve);
     });
   }
 
@@ -835,7 +854,7 @@
     var sendForm = document.querySelector('.chat-form');
     if (!sendForm) return;
 
-    initLiveUpdates(recipientId, otherIdStr, recipientCurve);
+    startLiveUpdates(otherIdStr, recipientCurve);
 
     sendForm.addEventListener('submit', function (e) {
       e.stopImmediatePropagation();
@@ -1091,6 +1110,8 @@
     var recipientId = sendForm.getAttribute('data-recipient') || '';
     var recipientCurve = sendForm.getAttribute('data-recipient-curve') || '';
     var otherIdStr = String(recipientId);
+
+    initLiveBuffer(recipientId);
 
     initOlm().then(function () {
       return ensureReady({
