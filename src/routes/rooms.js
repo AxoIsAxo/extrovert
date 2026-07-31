@@ -17,6 +17,10 @@ const {
 
 const router = express.Router();
 
+// Native clients (OAuth Bearer) use the same E2EE routes as the web app.
+const { bearerOrSession } = require('../bearer-auth');
+router.use(bearerOrSession);
+
 const { getVoiceChannelMembers } = require('../webrtc-signaling');
 
 const PERM = { VIEW: 1, WRITE: 2, MANAGE_CHANNELS: 4, MANAGE_ROLES: 8, MANAGE_MESSAGES: 16, MANAGE_MEMBERS: 32, MANAGE_ROOM: 64 };

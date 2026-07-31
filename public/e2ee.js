@@ -29,6 +29,11 @@
   var PREKEYS_BACKUP_URL = '/chats/prekeys/backup';
   var PREKEY_THRESHOLD = 3;
 
+  // Native clients (Tauri app) configure the crypto bridge before this script
+  // loads: { apiBase, bearerToken, olmWasmUrl }. In the web app this is
+  // undefined and everything behaves exactly as before (same-origin + CSRF).
+  var NATIVE_CFG = window.ExtrovertE2EEConfig || null;
+
   // Runtime state
   var olmInitPromise = null;
   var deviceKey = null;        // non-extractable CryptoKey (Kd)
@@ -144,7 +149,8 @@
   // ---- Olm ----
   function initOlm() {
     if (olmInitPromise) return olmInitPromise;
-    olmInitPromise = Olm.init({ locateFile: function () { return '/static/lib/olm.wasm?v=1'; } });
+    var wasmUrl = (NATIVE_CFG && NATIVE_CFG.olmWasmUrl) || '/static/lib/olm.wasm?v=1';
+    olmInitPromise = Olm.init({ locateFile: function () { return wasmUrl; } });
     return olmInitPromise;
   }
 
@@ -296,7 +302,7 @@
   }
 
   function fetchBundle(otherUsername) {
-    return fetch('/chats/' + encodeURIComponent(otherUsername) + '/bundle', { credentials: 'same-origin' }).then(function (r) { return r.json(); });
+    return e2eeFetch('/chats/' + encodeURIComponent(otherUsername) + '/bundle').then(function (r) { return r.json(); });
   }
 
   // Outgoing session (sender -> recipient). Always resolves a Session.
@@ -401,13 +407,26 @@
     var meta = document.querySelector('meta[name="csrf-token"]');
     return meta ? meta.getAttribute('content') : '';
   }
+  // One fetch path for web (same-origin + CSRF header) and native (absolute
+  // base + Bearer token). Web behavior is byte-for-byte unchanged when no
+  // EXTROVERT_E2EE_CONFIG is present.
+  function e2eeFetch(url, opts) {
+    opts = opts || {};
+    opts.headers = opts.headers || {};
+    if (NATIVE_CFG && NATIVE_CFG.bearerToken) {
+      opts.headers['Authorization'] = 'Bearer ' + NATIVE_CFG.bearerToken;
+    } else {
+      opts.credentials = 'same-origin';
+      opts.headers['X-CSRF-Token'] = csrfToken();
+    }
+    var base = (NATIVE_CFG && NATIVE_CFG.apiBase) || '';
+    return fetch(base + url, opts);
+  }
   function csrfFetch(url, opts) {
     opts = opts || {};
-    opts.credentials = 'same-origin';
     opts.headers = opts.headers || {};
     opts.headers['Content-Type'] = opts.headers['Content-Type'] || 'application/json';
-    opts.headers['X-CSRF-Token'] = csrfToken();
-    return fetch(url, opts);
+    return e2eeFetch(url, opts);
   }
 
   // ---- Form interception: derive KEK from password for recovery ----
@@ -533,7 +552,7 @@
 
   // ---- Safety number ----
   function getSafetyNumber(otherUsername) {
-    return fetch('/chats/' + encodeURIComponent(otherUsername) + '/safety', { credentials: 'same-origin' })
+    return e2eeFetch('/chats/' + encodeURIComponent(otherUsername) + '/safety')
       .then(function (r) { return r.json(); }).then(function (data) {
         if (!data.my_ed25519 || !data.their_ed25519) return null;
         var sorted = [data.my_ed25519, data.their_ed25519].sort().join('');
@@ -1098,6 +1117,45 @@
     });
   }
 
+  // Password unlock — shared by the web overlay and native clients. Resolves
+  // with the username passed in when successful; rejects on wrong password.
+  function unlockWithPassword(password, username) {
+    var pass = String(password || '').trim();
+    if (!pass) return Promise.reject(new Error('password required'));
+    return initOlm().then(function () {
+      return deriveKek(pass, username).then(function (k) {
+        kek = k;
+        return loadLegacyKey(k);
+      }).then(function () {
+        return getOrCreateDeviceKey();
+      }).then(function () {
+        return loadAccountFromStorage();
+      }).then(function (acct) {
+        if (acct) return loadSelfSessions();
+        return fetchBackup().then(function (data) {
+          if (data.backup) {
+            return decryptWithKek(data.backup, kek).then(function (pickle) {
+              account = new Olm.Account();
+              account.unpickle(PICKLE_KEY, pickle);
+              var k = JSON.parse(account.identity_keys());
+              myIdKeys = { curve25519: k.curve25519, ed25519: k.ed25519 };
+            });
+          }
+          // No backup yet (e.g. registered before key setup existed): mint one.
+          return createAndPublishAccount().then(function () {
+            return uploadBackup(account.pickle(PICKLE_KEY));
+          });
+        }).then(function () { return maybeReplenishPrekeys(); });
+      }).then(function () {
+        return saveAccount().then(function () { return loadSelfSessions(); });
+      }).then(function () {
+        sessionStorage.removeItem(KEK_SESSION_KEY);
+        saveSelfSessions();
+        return username;
+      });
+    });
+  }
+
   function showUnlockOverlay(onUnlocked) {
     var overlay = document.getElementById('e2ee-unlock-overlay');
     if (!overlay) return;
@@ -1115,46 +1173,17 @@
       btn.textContent = 'Unlocking…';
       var overlayEl = document.getElementById('e2ee-unlock-overlay');
       var username = overlayEl ? overlayEl.getAttribute('data-username') : '';
-      initOlm().then(function () {
-        return deriveKek(pass, username).then(function (k) {
-          kek = k;
-          return loadLegacyKey(k);
-        }).then(function () {
-          return getOrCreateDeviceKey();
-        }).then(function () {
-          return loadAccountFromStorage();
-        }).then(function (acct) {
-          if (acct) return loadSelfSessions();
-          return fetchBackup().then(function (data) {
-            if (data.backup) {
-              return decryptWithKek(data.backup, kek).then(function (pickle) {
-                account = new Olm.Account();
-                account.unpickle(PICKLE_KEY, pickle);
-                var k = JSON.parse(account.identity_keys());
-                myIdKeys = { curve25519: k.curve25519, ed25519: k.ed25519 };
-              });
-            }
-            // No backup yet (e.g. registered before key setup existed): mint one.
-            return createAndPublishAccount().then(function () {
-              return uploadBackup(account.pickle(PICKLE_KEY));
-            });
-          }).then(function () { return maybeReplenishPrekeys(); });
-        }).then(function () {
-          return saveAccount().then(function () { return loadSelfSessions(); });
-        }).then(function () {
-          sessionStorage.removeItem(KEK_SESSION_KEY);
-          overlay.style.display = 'none';
-          if (error) error.style.display = 'none';
-          saveSelfSessions();
-          if (onUnlocked) onUnlocked();
-        }).catch(function (err) {
-          console.error('unlock failed', err);
-          if (error) { error.textContent = 'Wrong password or unlock failed.'; error.style.display = 'block'; }
-          btn.disabled = false;
-          btn.textContent = 'Unlock';
-          input.value = '';
-          input.focus();
-        });
+      unlockWithPassword(pass, username).then(function () {
+        overlay.style.display = 'none';
+        if (error) error.style.display = 'none';
+        if (onUnlocked) onUnlocked();
+      }).catch(function (err) {
+        console.error('unlock failed', err);
+        if (error) { error.textContent = 'Wrong password or unlock failed.'; error.style.display = 'block'; }
+        btn.disabled = false;
+        btn.textContent = 'Unlock';
+        input.value = '';
+        input.focus();
       });
     }
 
@@ -1255,5 +1284,14 @@
     encryptRoomMessage: encryptRoomMessage,
     decryptRoomMessage: decryptRoomMessage,
     showUnlockOverlay: showUnlockOverlay,
+    // ---- DM bridge (used by the native client; web pages use the DOM wiring) ----
+    unlock: unlockWithPassword,
+    encryptDm: encryptOlm,
+    decryptDm: decryptOlm,
+    decryptLegacyDm: decryptLegacyRSA,
+    replenishPrekeys: maybeReplenishPrekeys,
+    fetchRecipientBundle: fetchBundle,
+    myEd25519: function () { return myIdKeys ? myIdKeys.ed25519 : null; },
+    ready: function () { return !!account; },
   };
 })();

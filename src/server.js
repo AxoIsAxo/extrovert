@@ -11,6 +11,7 @@ const crypto = require('node:crypto');
 const { WebSocketServer } = require('ws');
 const SqliteStore = require('./session-store');
 const { optionalAuth, requireAuth } = require('./auth');
+const { bearerUser } = require('./bearer-auth');
 const { initSignaling } = require('./webrtc-signaling');
 
 const app = express();
@@ -66,6 +67,24 @@ app.use('/api', (req, res, next) => {
   res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Idempotency-Key, X-CSRF-Token');
   res.set('Access-Control-Max-Age', '86400');
   if (req.method === 'OPTIONS') return res.status(204).end();
+  next();
+});
+
+// CORS for native clients: the webview runs a different origin but authenticates
+// with an explicit Bearer header (no cookies), so '*' is safe here.
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-CSRF-Token, X-Requested-With');
+    res.set('Access-Control-Max-Age', '86400');
+    return res.status(204).end();
+  }
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-CSRF-Token, X-Requested-With');
+  }
   next();
 });
 
@@ -127,6 +146,16 @@ app.use('/api', apiLimiter);
 
 // CSRF middleware — generates and validates tokens per session.
 app.use((req, res, next) => {
+  // Skip CSRF check for API routes (Bearer token auth) and multipart forms.
+  if (req.path.startsWith('/api/')) return next();
+
+  // Native clients authenticate every request with a Bearer token; CSRF is
+  // irrelevant when the credential isn't a cookie, and creating a session for
+  // them is pointless.
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ') && bearerUser(req)) {
+    return next();
+  }
+
   if (!req.session.csrfToken) {
     req.session.csrfToken = crypto.randomBytes(32).toString('hex');
     console.log('CSRF: generated new token for session', req.sessionID, req.session.csrfToken);
