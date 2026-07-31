@@ -967,6 +967,9 @@ router.get('/rooms/:id/channels/:cid/messages', requireApiAuth('read'), (req, re
       display_name: m.display_name,
       avatar: m.avatar || null,
       body: m.body,
+      proto: m.proto,
+      ciphertext: m.ciphertext,
+      group_session_id: m.group_session_id,
       created_at: m.created_at,
       edited_at: m.edited_at || null,
     })),
@@ -982,10 +985,90 @@ router.post('/rooms/:id/channels/:cid/messages', requireApiAuth('write'), (req, 
   if (!channel || channel.room_id !== room.id) return errorResponse(res, 404, 'Not Found', 'Channel not found.');
 
   const body = String(req.body.body || '').trim();
-  if (!body) return errorResponse(res, 400, 'Bad Request', 'body is required.');
-
-  const msgId = db.sendRoomMessage(channel.id, req.apiUser.id, body);
+  const proto = String(req.body.proto || 'plain').trim() === 'megolm' ? 'megolm' : 'plain';
+  const ciphertext = String(req.body.ciphertext || '').trim().slice(0, 20000) || null;
+  const groupSessionId = String(req.body.group_session_id || '').trim() || null;
+  const isSticker = body.startsWith('/uploads/stickers/');
+  if (!isSticker) {
+    if (!body && !ciphertext) return errorResponse(res, 400, 'Bad Request', 'body or ciphertext is required.');
+    if (proto !== 'megolm' || !ciphertext || !groupSessionId) {
+      return errorResponse(res, 400, 'Bad Request', 'End-to-end encryption required. Room messages must be Megolm-encrypted.');
+    }
+    const gs = db.getRoomGroupSession(room.id, req.apiUser.id);
+    if (!gs || String(gs.id) !== groupSessionId) {
+      return errorResponse(res, 400, 'Bad Request', 'Unknown group session.');
+    }
+  }
+  const msgId = db.sendRoomMessage(channel.id, req.apiUser.id, isSticker ? body : '', proto, ciphertext, isSticker ? null : groupSessionId);
   res.status(201).json({ data: { id: String(msgId) } });
+});
+
+// Publish / refresh the caller's Megolm group session for a room + encrypted keys.
+router.post('/rooms/:id/session', requireApiAuth('write'), (req, res) => {
+  const room = db.getRoom(parseInt(req.params.id, 10));
+  if (!room) return errorResponse(res, 404, 'Not Found', 'Room not found.');
+  if (!db.isRoomMember(room.id, req.apiUser.id)) return errorResponse(res, 403, 'Forbidden', 'Not a member.');
+  const keys = Array.isArray(req.body.keys) ? req.body.keys : [];
+  const memberIds = Array.isArray(req.body.member_ids) ? req.body.member_ids.map(Number) : [];
+  const rotate = req.body.rotate === true || req.body.rotate === 'true';
+  const sessionId = db.publishRoomGroupSession(room.id, req.apiUser.id, rotate);
+  const roomMembers = new Set(db.getRoomMembers(room.id).map(m => m.user_id));
+  for (const k of keys) {
+    const rid = Number(k.recipient_id);
+    const ek = String(k.encrypted_key || '').trim();
+    if (!rid || !ek || ek.length > 200000) continue;
+    if (!roomMembers.has(rid)) continue;
+    db.saveRoomSessionKeys(sessionId, rid, ek);
+  }
+  for (const mid of memberIds) {
+    if (roomMembers.has(mid)) db.ensureRoomSessionRecipient(sessionId, mid);
+  }
+  responseEnvelope(res, { session_id: sessionId });
+});
+
+// Pending Megolm session keys for the caller.
+router.get('/rooms/:id/session/keys', requireApiAuth('read'), (req, res) => {
+  const room = db.getRoom(parseInt(req.params.id, 10));
+  if (!room) return errorResponse(res, 404, 'Not Found', 'Room not found.');
+  if (!db.isRoomMember(room.id, req.apiUser.id)) return errorResponse(res, 403, 'Forbidden', 'Not a member.');
+  const keys = db.getPendingRoomSessionKeys(req.apiUser.id).map(k => ({
+    key_id: k.key_id, session_id: k.session_id, room_id: k.room_id, sender_id: k.sender_id, encrypted_key: k.encrypted_key,
+  }));
+  responseEnvelope(res, { keys });
+});
+
+// Mark delivered session keys as received.
+router.post('/rooms/:id/session/keys/delivered', requireApiAuth('write'), (req, res) => {
+  const room = db.getRoom(parseInt(req.params.id, 10));
+  if (!room) return errorResponse(res, 404, 'Not Found', 'Room not found.');
+  if (!db.isRoomMember(room.id, req.apiUser.id)) return errorResponse(res, 403, 'Forbidden', 'Not a member.');
+  const ids = Array.isArray(req.body.key_ids) ? req.body.key_ids.map(Number) : [];
+  for (const id of ids) db.markRoomSessionKeyDelivered(id);
+  responseEnvelope(res, { ok: true });
+});
+
+// Which members hold the caller's session keys.
+router.get('/rooms/:id/session/status', requireApiAuth('read'), (req, res) => {
+  const room = db.getRoom(parseInt(req.params.id, 10));
+  if (!room) return errorResponse(res, 404, 'Not Found', 'Room not found.');
+  if (!db.isRoomMember(room.id, req.apiUser.id)) return errorResponse(res, 403, 'Forbidden', 'Not a member.');
+  const gs = db.getRoomGroupSession(room.id, req.apiUser.id);
+  if (!gs) return responseEnvelope(res, { session_id: null, recipients: [], empty_keys_for: [] });
+  responseEnvelope(res, { session_id: gs.id, recipients: db.getRoomSessionRecipients(gs.id), empty_keys_for: db.getRoomSessionEmptyKeyRecipients(gs.id) });
+});
+
+// Room-scoped prekey bundle (no mutual-follower requirement).
+router.get('/rooms/:id/bundle/:username', requireApiAuth('read'), (req, res) => {
+  const room = db.getRoom(parseInt(req.params.id, 10));
+  if (!room) return errorResponse(res, 404, 'Not Found', 'Room not found.');
+  if (!db.isRoomMember(room.id, req.apiUser.id)) return errorResponse(res, 403, 'Forbidden', 'Not a member.');
+  const other = db.getUserByUsername(req.params.username);
+  if (!other) return errorResponse(res, 404, 'Not Found', 'User not found.');
+  if (!db.isRoomMember(room.id, other.id)) return errorResponse(res, 403, 'Forbidden', 'Target is not a member.');
+  const id = db.getOlmIdentity(other.id);
+  if (!id) return errorResponse(res, 404, 'Not Found', 'Target has no encryption keys.');
+  const oneTimeKey = db.claimOlmPrekey(other.id);
+  responseEnvelope(res, { identity_key: id.identity_key, ed25519_key: id.ed25519_key, fallback_key: id.fallback_key, one_time_key: oneTimeKey });
 });
 
 // ======== Direct Messages (E2E) ========
@@ -1113,10 +1196,8 @@ router.post('/conversations/:username/messages', requireApiAuth('write:direct'),
   const senderCiphertext = String(req.body.sender_ciphertext || '').trim().slice(0, 5000) || null;
 
   if (!body.startsWith('/uploads/stickers/')) {
-    if (proto === 'olm') {
-      if (!senderCiphertext) return errorResponse(res, 400, 'Bad Request', 'End-to-end encryption required. All messages must be encrypted.');
-    } else if (!keyForSender || !keyForRecipient) {
-      return errorResponse(res, 400, 'Bad Request', 'End-to-end encryption required. All messages must be encrypted.');
+    if (proto !== 'olm' || !senderCiphertext) {
+      return errorResponse(res, 400, 'Bad Request', 'End-to-end encryption required. All messages must be Olm-encrypted.');
     }
   }
 
@@ -1194,6 +1275,9 @@ router.patch('/messages/:id', requireApiAuth('write:direct'), (req, res) => {
   const keyForRecipient = String(req.body.key_for_recipient || '').trim() || null;
   const proto = String(req.body.proto || 'rsa').trim() === 'olm' ? 'olm' : 'rsa';
   const senderCiphertext = String(req.body.sender_ciphertext || '').trim().slice(0, 5000) || null;
+  if (!body.startsWith('/uploads/stickers/') && (proto !== 'olm' || !senderCiphertext)) {
+    return errorResponse(res, 400, 'Bad Request', 'End-to-end encryption required. All messages must be Olm-encrypted.');
+  }
   const ok = dm.editMessage(parseInt(req.params.id, 10), req.apiUser.id, body, keyForSender, keyForRecipient, proto, senderCiphertext);
   if (!ok) return errorResponse(res, 404, 'Not Found', 'Message not found or not yours.');
   db.auditLog('dm_edited', req.apiUser.id, `Message ${req.params.id}`);

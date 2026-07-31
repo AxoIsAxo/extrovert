@@ -11,6 +11,8 @@ const {
   getRoomMessages, sendRoomMessage, joinDefaultRole, hasRoomPermission, getUserById, getUserByUsername, db,
   createReport,
   createJoinRequest, getJoinRequests, approveJoinRequest, rejectJoinRequest, hasPendingRequest,
+  publishRoomGroupSession, getRoomGroupSession, saveRoomSessionKeys, ensureRoomSessionRecipient, getPendingRoomSessionKeys, markRoomSessionKeyDelivered, getRoomSessionRecipients, getRoomSessionEmptyKeyRecipients,
+  getOlmIdentity,
 } = require('../db');
 
 const router = express.Router();
@@ -372,9 +374,108 @@ router.post('/:id/channels/:cid/send', (req, res) => {
   }
   if (!checkPerm(room.id, res.locals.currentUser.id, PERM.WRITE)) return res.status(403).json({ error: 'No write permission' });
   const body = String(req.body.body || '').trim();
-  if (!body) return res.status(400).json({ error: 'Message is empty' });
-  const msgId = sendRoomMessage(channel.id, res.locals.currentUser.id, body);
+  const proto = String(req.body.proto || 'plain').trim() === 'megolm' ? 'megolm' : 'plain';
+  const ciphertext = String(req.body.ciphertext || '').trim().slice(0, 20000) || null;
+  const groupSessionId = String(req.body.group_session_id || '').trim() || null;
+  const isSticker = body.startsWith('/uploads/stickers/');
+  if (!isSticker) {
+    if (!body && !ciphertext) return res.status(400).json({ error: 'Message is empty' });
+    if (proto !== 'megolm' || !ciphertext || !groupSessionId) {
+      return res.status(400).json({ error: 'End-to-end encryption required. Room messages must be Megolm-encrypted.' });
+    }
+    const gs = getRoomGroupSession(room.id, res.locals.currentUser.id);
+    if (!gs || String(gs.id) !== groupSessionId) {
+      return res.status(400).json({ error: 'Unknown group session.' });
+    }
+  }
+  const msgId = sendRoomMessage(channel.id, res.locals.currentUser.id, isSticker ? body : '', proto, ciphertext, isSticker ? null : groupSessionId);
   res.json({ id: msgId });
+});
+
+// --- Megolm (group E2EE) session management ---
+
+// Publish (or refresh) the current user's outbound Megolm session for a room,
+// along with encrypted session keys for each recipient (wrapped in that
+// recipient's 1:1 Olm session). Server only ever sees ciphertext.
+router.post('/:id/session', (req, res) => {
+  if (!res.locals.currentUser) return res.status(401).json({ error: 'Not logged in' });
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+  if (!isRoomMember(room.id, res.locals.currentUser.id)) return res.status(403).json({ error: 'Not a member' });
+  const keys = Array.isArray(req.body.keys) ? req.body.keys : [];
+  const memberIds = Array.isArray(req.body.member_ids) ? req.body.member_ids.map(Number) : [];
+  const rotate = req.body.rotate === true || req.body.rotate === 'true';
+  const sessionId = publishRoomGroupSession(room.id, res.locals.currentUser.id, rotate);
+  const roomMembers = new Set(getRoomMembers(room.id).map(m => m.user_id));
+  for (const k of keys) {
+    const rid = Number(k.recipient_id);
+    const ek = String(k.encrypted_key || '').trim();
+    if (!rid || !ek || ek.length > 200000) continue;
+    if (!roomMembers.has(rid)) continue;
+    saveRoomSessionKeys(sessionId, rid, ek);
+  }
+  for (const mid of memberIds) {
+    if (roomMembers.has(mid)) ensureRoomSessionRecipient(sessionId, mid);
+  }
+  res.json({ session_id: sessionId });
+});
+
+// Pending Megolm session keys waiting for the current user (decrypted client-side
+// with their 1:1 Olm session with each sender).
+router.get('/:id/session/keys', (req, res) => {
+  if (!res.locals.currentUser) return res.status(401).json({ error: 'Not logged in' });
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+  if (!isRoomMember(room.id, res.locals.currentUser.id)) return res.status(403).json({ error: 'Not a member' });
+  const keys = getPendingRoomSessionKeys(res.locals.currentUser.id).map(k => ({
+    key_id: k.key_id,
+    session_id: k.session_id,
+    room_id: k.room_id,
+    sender_id: k.sender_id,
+    encrypted_key: k.encrypted_key,
+  }));
+  res.json({ keys });
+});
+
+// Mark delivered session keys as received (called by the client after decrypting).
+router.post('/:id/session/keys/delivered', (req, res) => {
+  if (!res.locals.currentUser) return res.status(401).json({ error: 'Not logged in' });
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+  if (!isRoomMember(room.id, res.locals.currentUser.id)) return res.status(403).json({ error: 'Not a member' });
+  const ids = Array.isArray(req.body.key_ids) ? req.body.key_ids.map(Number) : [];
+  for (const id of ids) markRoomSessionKeyDelivered(id);
+  res.json({ ok: true });
+});
+
+// Which members already hold the current user's session keys (so the client can
+// re-share to newly joined members).
+router.get('/:id/session/status', (req, res) => {
+  if (!res.locals.currentUser) return res.status(401).json({ error: 'Not logged in' });
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+  if (!isRoomMember(room.id, res.locals.currentUser.id)) return res.status(403).json({ error: 'Not a member' });
+  const gs = getRoomGroupSession(room.id, res.locals.currentUser.id);
+  if (!gs) return res.json({ session_id: null, recipients: [], empty_keys_for: [] });
+  res.json({ session_id: gs.id, recipients: getRoomSessionRecipients(gs.id), empty_keys_for: getRoomSessionEmptyKeyRecipients(gs.id) });
+});
+
+// Room-scoped prekey bundle fetch for session-key sharing. Unlike the DM bundle
+// this does NOT require mutual followers — just that both users are in the room.
+router.get('/:id/bundle/:username', (req, res) => {
+  if (!res.locals.currentUser) return res.status(401).json({ error: 'Not logged in' });
+  const room = getRoom(Number(req.params.id));
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+  const user = res.locals.currentUser;
+  if (!isRoomMember(room.id, user.id)) return res.status(403).json({ error: 'Not a member' });
+  const other = getUserByUsername(req.params.username);
+  if (!other) return res.status(404).json({ error: 'not found' });
+  if (!isRoomMember(room.id, other.id)) return res.status(403).json({ error: 'not a member' });
+  const id = getOlmIdentity(other.id);
+  if (!id) return res.status(404).json({ error: 'no keys' });
+  const oneTimeKey = claimOlmPrekey(other.id);
+  const fallback = id.fallback_key;
+  res.json({ identity_key: id.identity_key, ed25519_key: id.ed25519_key, fallback_key: fallback, one_time_key: oneTimeKey });
 });
 
 // Delete a message
@@ -407,8 +508,21 @@ router.post('/:id/channels/:cid/messages/:mid/edit', (req, res) => {
   const channel = getRoomChannel(Number(req.params.cid));
   if (!channel || channel.room_id !== room.id) return res.status(404).json({ error: 'Channel not found' });
   const body = String(req.body.body || '').trim();
-  if (!body) return res.status(400).json({ error: 'Message is empty' });
-  const ok = editRoomMessage(Number(req.params.mid), userId, body);
+  const proto = String(req.body.proto || 'plain').trim() === 'megolm' ? 'megolm' : 'plain';
+  const ciphertext = String(req.body.ciphertext || '').trim().slice(0, 20000) || null;
+  const groupSessionId = String(req.body.group_session_id || '').trim() || null;
+  const isSticker = body.startsWith('/uploads/stickers/');
+  if (!isSticker) {
+    if (!body && !ciphertext) return res.status(400).json({ error: 'Message is empty' });
+    if (proto !== 'megolm' || !ciphertext || !groupSessionId) {
+      return res.status(400).json({ error: 'End-to-end encryption required. Room messages must be Megolm-encrypted.' });
+    }
+    const gs = getRoomGroupSession(room.id, userId);
+    if (!gs || String(gs.id) !== groupSessionId) {
+      return res.status(400).json({ error: 'Unknown group session.' });
+    }
+  }
+  const ok = editRoomMessage(Number(req.params.mid), userId, isSticker ? body : '', proto, ciphertext, isSticker ? null : groupSessionId);
   if (!ok) return res.status(403).json({ error: 'Not your message' });
   res.json({ ok: true });
 });

@@ -43,10 +43,10 @@
     <div class="room-channel-header" id="channel-header">
       # <span id="channel-name"><%= firstChannel ? firstChannel.name : '' %></span>
     </div>
-    <div class="room-messages" id="room-messages" data-channel-id="<%= firstChannel ? firstChannel.id : '' %>" data-user-id="<%= locals.currentUser.id %>">
+    <div class="room-messages" id="room-messages" data-channel-id="<%= firstChannel ? firstChannel.id : '' %>" data-room-id="<%= room.id %>" data-user-id="<%= locals.currentUser.id %>">
       <% messages.forEach(function(m) { %>
         <% var mRole = roles.find(function(r) { var mem = members.find(function(mm) { return mm.user_id === m.user_id; }); return mem && mem.role_id === r.id; }); %>
-        <div class="room-msg<%= m.user_id === locals.currentUser.id ? ' self' : '' %>">
+        <div class="room-msg<%= m.user_id === locals.currentUser.id ? ' self' : '' %>"<% if (m.proto === 'megolm') { %> data-proto="megolm" data-sender-id="<%= m.user_id %>" data-ciphertext="<%= m.ciphertext || '' %>" data-group-session-id="<%= m.group_session_id || '' %>"<% } %>>
           <div class="room-msg-body">
             <div class="room-msg-row">
               <div class="room-msg-avatar-wrap">
@@ -57,7 +57,7 @@
                   <span class="room-msg-author" style="color:<%= mRole ? mRole.color : '#ccc' %>"><%= m.display_name || m.username %></span>
                   <span class="room-msg-time"><%= locals.relTime ? locals.relTime(m.created_at) : new Date(m.created_at).toLocaleString() %></span>
                 </div>
-                <span class="room-msg-text"><%= m.body %></span>
+                <span class="room-msg-text"><%= m.proto === 'megolm' ? '…' : m.body %></span>
                 <% if (m.edited_at) { %><span class="edited-indicator" title="<%= new Date(m.edited_at).toLocaleString() %>">(edited)</span><% } %>
               </div>
             </div>
@@ -98,6 +98,9 @@
     </form>
   </div>
 </div>
-  <script src="/static/rooms.js?v=5"></script>
+  <div id="room-members" style="display:none" data-room-id="<%= room.id %>" data-user-id="<%= locals.currentUser.id %>" data-username="<%= locals.currentUser.username %>" data-members='<%= JSON.stringify(members.map(function(m){ return { id: m.user_id, username: m.username }; })) %>'></div>
+  <div id="room-e2ee-status" class="muted" style="font-size:0.75rem;text-align:center"></div>
+  <script src="/static/rooms.js?v=6"></script>
+  <script src="/static/room-e2ee.js?v=1"></script>
   <script src="/static/webrtc-room.js?v=2"></script>
 <%- include('../partials/footer') %>

@@ -32,17 +32,29 @@ document.addEventListener('DOMContentLoaded', function() {
     input.disabled = true;
 
     var csrf = getCsrf();
-    fetch('/rooms/' + roomId() + '/channels/' + cid + '/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
-      body: 'body=' + encodeURIComponent(body)
-    }).then(function(r) { return r.json(); }).then(function(d) {
-      if (d.error) { input.disabled = false; return; }
-      input.value = '';
-      input.disabled = false;
-      input.focus();
-      loadMessages(cid);
-    }).catch(function() { input.disabled = false; });
+    var url = '/rooms/' + roomId() + '/channels/' + cid + '/send';
+    var doPost = function(params) {
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
+        body: params
+      }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.error) { input.disabled = false; return; }
+        input.value = '';
+        input.disabled = false;
+        input.focus();
+        loadMessages(cid);
+      }).catch(function() { input.disabled = false; });
+    };
+
+    var e2ee = window.ExtrovertRoomE2EE;
+    if (e2ee && e2ee.ready()) {
+      e2ee.encryptMessage(body).then(function(r) {
+        doPost('proto=megolm&ciphertext=' + encodeURIComponent(r.ciphertext) + '&group_session_id=' + encodeURIComponent(r.group_session_id));
+      }).catch(function() { input.disabled = false; });
+      return;
+    }
+    doPost('body=' + encodeURIComponent(body));
   });
 
   // Edit button: delegation
@@ -85,17 +97,28 @@ document.addEventListener('DOMContentLoaded', function() {
       var msgId = saveBtn.dataset.msgId;
       var cid = sendForm ? sendForm.dataset.channelId : '';
       var csrf = getCsrf();
-      fetch('/rooms/' + roomId() + '/channels/' + cid + '/messages/' + msgId + '/edit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
-        body: 'body=' + encodeURIComponent(newBody)
-      }).then(function(r) { return r.json(); }).then(function(d) {
-        if (d.ok) {
-          loadMessages(cid);
-        } else {
-          cancelEditRoomMsg(msgDiv, saveBtn, newBody);
-        }
-      });
+      var url = '/rooms/' + roomId() + '/channels/' + cid + '/messages/' + msgId + '/edit';
+      var doEditPost = function(params) {
+        fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
+          body: params
+        }).then(function(r) { return r.json(); }).then(function(d) {
+          if (d.ok) {
+            loadMessages(cid);
+          } else {
+            cancelEditRoomMsg(msgDiv, saveBtn, newBody);
+          }
+        });
+      };
+      var e2ee = window.ExtrovertRoomE2EE;
+      if (e2ee && e2ee.ready()) {
+        e2ee.encryptMessage(newBody).then(function(r) {
+          doEditPost('proto=megolm&ciphertext=' + encodeURIComponent(r.ciphertext) + '&group_session_id=' + encodeURIComponent(r.group_session_id));
+        });
+        return;
+      }
+      doEditPost('body=' + encodeURIComponent(newBody));
       return;
     }
     var delBtn = e.target.closest('.room-msg-delete');
@@ -209,7 +232,15 @@ document.addEventListener('DOMContentLoaded', function() {
       innerDiv.appendChild(headerDiv);
       var textSpan = document.createElement('span');
       textSpan.className = 'room-msg-text';
-      textSpan.textContent = m.body;
+      if (m.proto === 'megolm') {
+        div.setAttribute('data-proto', 'megolm');
+        div.setAttribute('data-sender-id', m.user_id);
+        div.setAttribute('data-ciphertext', m.ciphertext || '');
+        div.setAttribute('data-group-session-id', m.group_session_id || '');
+        textSpan.textContent = '';
+      } else {
+        textSpan.textContent = m.body;
+      }
       innerDiv.appendChild(textSpan);
       if (m.edited_at) {
         var editedSpan = document.createElement('span');

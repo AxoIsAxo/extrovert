@@ -473,6 +473,202 @@
     }).catch(function () {});
   }
 
+  // ---- Megolm group sessions (rooms) ----
+  // One OutboundGroupSession per room (this device's sending session) plus one
+  // InboundGroupSession per (room, sender, server session id) so that session
+  // rotation never breaks history decryption.
+  var groupOutbound = {};  // roomId -> Olm.OutboundGroupSession
+  var groupOutIds = {};    // roomId -> server session id
+  var groupInbound = {};   // 'roomId:senderId:sessionId' -> Olm.InboundGroupSession
+
+  function loadGroupOutbound(roomId) {
+    if (groupOutbound[roomId]) return Promise.resolve(groupOutbound[roomId]);
+    return idbGet(STORE_OLM, 'groupOut:' + roomId).then(function (enc) {
+      if (!enc) return null;
+      return decryptWithKd(enc).then(function (json) {
+        var rec = JSON.parse(json);
+        var s = new Olm.OutboundGroupSession();
+        s.unpickle(PICKLE_KEY, rec.pickle);
+        groupOutbound[roomId] = s;
+        groupOutIds[roomId] = rec.id;
+        return s;
+      });
+    });
+  }
+  function saveGroupOutbound(roomId, session, sessionId) {
+    groupOutbound[roomId] = session;
+    groupOutIds[roomId] = sessionId;
+    return encryptWithKd(JSON.stringify({ id: sessionId, pickle: session.pickle(PICKLE_KEY) })).then(function (enc) {
+      return idbSet(STORE_OLM, 'groupOut:' + roomId, enc);
+    });
+  }
+  function loadGroupInbound(roomId, senderId, sessionId) {
+    var key = roomId + ':' + senderId + ':' + sessionId;
+    if (groupInbound[key]) return Promise.resolve(groupInbound[key]);
+    return idbGet(STORE_OLM, 'groupIn:' + key).then(function (enc) {
+      if (!enc) return null;
+      return decryptWithKd(enc).then(function (pickle) {
+        var s = new Olm.InboundGroupSession();
+        s.unpickle(PICKLE_KEY, pickle);
+        groupInbound[key] = s;
+        return s;
+      });
+    });
+  }
+  function saveGroupInbound(roomId, senderId, sessionId, session) {
+    var key = roomId + ':' + senderId + ':' + sessionId;
+    groupInbound[key] = session;
+    return encryptWithKd(session.pickle(PICKLE_KEY)).then(function (enc) {
+      return idbSet(STORE_OLM, 'groupIn:' + key, enc);
+    });
+  }
+
+  // Room-scoped prekey bundle (no mutual-follower requirement).
+  function fetchRoomBundle(roomId, username) {
+    return fetch('/rooms/' + encodeURIComponent(roomId) + '/bundle/' + encodeURIComponent(username), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); });
+  }
+
+  // Get-or-create a 1:1 Olm session with a room member (used to wrap group keys).
+  function getOrCreateRoomOutboundSession(roomId, otherId, otherUsername) {
+    var otherIdStr = String(otherId);
+    return sessions[otherIdStr] || loadSession(otherIdStr).then(function (s) { return s || null; }).then(function (existing) {
+      if (existing) return existing;
+      return fetchRoomBundle(roomId, otherUsername).then(function (bundle) {
+        if (!bundle.identity_key || (!bundle.one_time_key && !bundle.fallback_key)) {
+          throw new Error('Recipient has no encryption keys.');
+        }
+        var theirOtk = bundle.one_time_key ? bundle.one_time_key.public_key : bundle.fallback_key;
+        var s = new Olm.Session();
+        s.create_outbound(account, bundle.identity_key, theirOtk);
+        return saveSession(otherIdStr, s).then(function () { return s; });
+      });
+    });
+  }
+
+  function roomSessionKeyEnvelope(roomId, session, recipientId, recipientUsername) {
+    return getOrCreateRoomOutboundSession(roomId, recipientId, recipientUsername).then(function (s) {
+      var msg = s.encrypt(session.session_key());
+      return saveSession(String(recipientId), s).then(function () {
+        return JSON.stringify({ t: msg.type, b: msg.body });
+      });
+    });
+  }
+
+  // Publish (or rotate) this device's outbound Megolm session and share keys to members.
+  function shareRoomSession(roomId, session, members, allMemberIds, rotate) {
+    var perRecipient = members.map(function (m) {
+      return roomSessionKeyEnvelope(roomId, session, m.id, m.username).then(function (enc) {
+        return { recipient_id: m.id, encrypted_key: enc };
+      }).catch(function (err) {
+        console.warn('skipping room key share to member', m.id, err.message);
+        return null;
+      });
+    });
+    return Promise.all(perRecipient).then(function (keys) {
+      keys = keys.filter(Boolean);
+      return csrfFetch('/rooms/' + encodeURIComponent(roomId) + '/session', {
+        method: 'POST',
+        body: JSON.stringify({ keys: keys, member_ids: allMemberIds, rotate: !!rotate }),
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        if (d.error) throw new Error(d.error);
+        return d.session_id;
+      });
+    }).then(function (sessionId) {
+      return saveGroupOutbound(roomId, session, sessionId);
+    });
+  }
+
+  // Fetch + import pending Megolm session keys meant for us.
+  function fetchAndImportRoomKeys(roomId, myId) {
+    return csrfFetch('/rooms/' + encodeURIComponent(roomId) + '/session/keys').then(function (r) { return r.json(); }).then(function (data) {
+      var keys = data.keys || [];
+      var deliveredIds = [];
+      var ops = keys.filter(function (k) { return String(k.room_id) === String(roomId) && String(k.sender_id) !== String(myId); })
+        .map(function (k) {
+          return loadSession(String(k.sender_id)).then(function (s) {
+            var env = JSON.parse(k.encrypted_key);
+            if (env.t === 0) {
+              var ns = new Olm.Session();
+              ns.create_inbound(account, env.b);
+              account.remove_one_time_keys(ns);
+              return saveSession(String(k.sender_id), ns).then(function () { return ns.decrypt(env.t, env.b); });
+            }
+            if (!s) throw new Error('No session to decrypt room key');
+            return s.decrypt(env.t, env.b);
+          }).then(function (sessionKey) {
+            var ig = new Olm.InboundGroupSession();
+            ig.create(sessionKey);
+            return saveGroupInbound(k.room_id, k.sender_id, k.session_id, ig).then(function () {
+              deliveredIds.push(k.key_id);
+            });
+          }).catch(function (err) { console.error('room key import failed', err); });
+        });
+      return Promise.all(ops).then(function () {
+        if (!deliveredIds.length) return;
+        return csrfFetch('/rooms/' + encodeURIComponent(roomId) + '/session/keys/delivered', {
+          method: 'POST',
+          body: JSON.stringify({ key_ids: deliveredIds }),
+        }).catch(function () {});
+      });
+    });
+  }
+
+  // Full room sync: import pending keys, ensure our outbound session, and share
+  // to any member missing it (rotating when the membership changed so the new
+  // member never sees history).
+  function syncRoomSessions(roomId, myId, members) {
+    var others = members.filter(function (m) { return Number(m.id) !== Number(myId); });
+    var allIds = members.map(function (m) { return Number(m.id); });
+    return fetchAndImportRoomKeys(roomId, myId).then(function () {
+      return loadGroupOutbound(roomId);
+    }).then(function (out) {
+      return csrfFetch('/rooms/' + encodeURIComponent(roomId) + '/session/status').then(function (r) { return r.json(); }).then(function (status) {
+        var ok = out && groupOutIds[roomId] && String(groupOutIds[roomId]) === String(status.session_id);
+        if (ok) {
+          var have = (status.recipients || []).map(Number);
+          var empty = (status.empty_keys_for || []).map(Number);
+          // Members who joined after this session was created -> rotate so they
+          // can never read history.
+          var joined = others.filter(function (m) { return have.indexOf(Number(m.id)) === -1; });
+          if (joined.length) {
+            var fresh = new Olm.OutboundGroupSession();
+            fresh.create();
+            return shareRoomSession(roomId, fresh, others, allIds, true);
+          }
+          // Members who are covered but never got a real key (set up E2EE late) -> re-share.
+          var needKey = others.filter(function (m) { return empty.indexOf(Number(m.id)) !== -1; });
+          if (needKey.length) {
+            return shareRoomSession(roomId, out, needKey, allIds, false);
+          }
+          return;
+        }
+        var fresh = new Olm.OutboundGroupSession();
+        fresh.create();
+        return shareRoomSession(roomId, fresh, others, allIds, true);
+      });
+    });
+  }
+
+  function encryptRoomMessage(roomId, plaintext) {
+    if (!groupOutbound[roomId]) {
+      return Promise.reject(new Error('No room session. Try reloading the room.'));
+    }
+    var ct = groupOutbound[roomId].encrypt(plaintext);
+    var sid = groupOutIds[roomId];
+    return saveGroupOutbound(roomId, groupOutbound[roomId], sid).then(function () {
+      return { ciphertext: ct, group_session_id: String(sid) };
+    });
+  }
+
+  function decryptRoomMessage(roomId, senderId, ciphertext, groupSessionId) {
+    return loadGroupInbound(roomId, senderId, groupSessionId).then(function (ig) {
+      if (!ig) throw new Error('No inbound group session for sender');
+      var result = ig.decrypt(ciphertext);
+      return saveGroupInbound(roomId, senderId, groupSessionId, ig).then(function () { return result.plaintext; });
+    });
+  }
+
   // ---- Decrypt messages already rendered in the DOM ----
   function decryptExistingMessages(otherIdStr, recipientCurve) {
     document.querySelectorAll('.chat-msg').forEach(function (el) {
@@ -789,4 +985,14 @@
     renderSafetyNumber(otherUsername);
     initChatHandlers(recipientId, otherIdStr, otherUsername, recipientCurve);
   }
+
+  // Room pages (and any future consumer) drive Megolm through this global.
+  window.ExtrovertE2EE = {
+    ensureReady: ensureReady,
+    initOlm: initOlm,
+    syncRoomSessions: syncRoomSessions,
+    encryptRoomMessage: encryptRoomMessage,
+    decryptRoomMessage: decryptRoomMessage,
+    showUnlockOverlay: showUnlockOverlay,
+  };
 })();

@@ -328,6 +328,35 @@ try { db.exec(`
   );
 `); } catch {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_olm_prekeys_user ON olm_prekeys(user_id, used)`); } catch {}
+
+// --- Megolm (group) room encryption ---
+// room_messages: protocol column + Megolm ciphertext + which group session encrypted it.
+try { db.exec(`ALTER TABLE room_messages ADD COLUMN proto TEXT NOT NULL DEFAULT 'plain'`); } catch {}
+try { db.exec(`ALTER TABLE room_messages ADD COLUMN ciphertext TEXT`); } catch {}
+try { db.exec(`ALTER TABLE room_messages ADD COLUMN group_session_id TEXT`); } catch {}
+// One active Megolm session per (room, sender). Private half lives client-side.
+try { db.exec(`
+  CREATE TABLE IF NOT EXISTS room_group_sessions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id    INTEGER NOT NULL REFERENCES rooms(id),
+    sender_id  INTEGER NOT NULL REFERENCES users(id),
+    created_at INTEGER NOT NULL,
+    UNIQUE(room_id, sender_id)
+  );
+`); } catch {}
+// Pending encrypted session keys awaiting delivery to each recipient.
+// encrypted_key is the Megolm session key wrapped in the recipient's 1:1 Olm session.
+try { db.exec(`
+  CREATE TABLE IF NOT EXISTS room_group_session_keys (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id    INTEGER NOT NULL REFERENCES room_group_sessions(id),
+    recipient_id  INTEGER NOT NULL REFERENCES users(id),
+    encrypted_key TEXT NOT NULL,
+    delivered     INTEGER NOT NULL DEFAULT 0,
+    created_at    INTEGER NOT NULL
+  );
+`); } catch {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_room_gs_keys_recipient ON room_group_session_keys(recipient_id, delivered)`); } catch {}
 // Fix stale referred_by links for users whose referrer no longer has a referral code.
 db.prepare(`UPDATE users SET referred_by = NULL WHERE referred_by IS NOT NULL AND referred_by IN (SELECT id FROM users WHERE referral_code IS NULL)`).run();
 // Ensure avatar paths have /uploads/ prefix for template rendering.
@@ -566,13 +595,13 @@ function editMessage(msgId, userId, newBody, keyForSender, keyForRecipient, prot
   return true;
 }
 
-function editRoomMessage(msgId, userId, newBody) {
+function editRoomMessage(msgId, userId, newBody, proto, ciphertext, groupSessionId) {
   const msg = db.prepare(`SELECT * FROM room_messages WHERE id = ? AND user_id = ?`).get(msgId, userId);
   if (!msg) return false;
   const now = Date.now();
   db.prepare(`INSERT INTO edit_history (entity_type, entity_id, old_body, new_body, edited_at, edited_by) VALUES (?,?,?,?,?,?)`)
     .run('room_message', msgId, msg.body, newBody, now, userId);
-  db.prepare(`UPDATE room_messages SET body = ?, edited_at = ? WHERE id = ?`).run(newBody, now, msgId);
+  db.prepare(`UPDATE room_messages SET body = ?, proto = COALESCE(?, proto), ciphertext = COALESCE(?, ciphertext), group_session_id = COALESCE(?, group_session_id), edited_at = ? WHERE id = ?`).run(newBody, proto || null, ciphertext || null, groupSessionId || null, now, msgId);
   return true;
 }
 
@@ -844,6 +873,8 @@ function deleteUser(userId) {
   db.prepare(`DELETE FROM room_messages WHERE user_id = ?`).run(userId);
   db.prepare(`DELETE FROM room_members WHERE user_id = ?`).run(userId);
   db.prepare(`DELETE FROM join_requests WHERE user_id = ?`).run(userId);
+  db.prepare(`DELETE FROM room_group_sessions WHERE sender_id = ?`).run(userId);
+  db.prepare(`DELETE FROM room_group_session_keys WHERE recipient_id = ?`).run(userId);
   db.prepare(`UPDATE rooms SET creator_id = NULL WHERE creator_id = ?`).run(userId);
   // Reports cleanup.
   db.prepare(`UPDATE reports SET reporter_id = NULL WHERE reporter_id = ?`).run(userId);
@@ -1002,12 +1033,66 @@ function deleteRoomChannel(id) {
 }
 function getRoomMessages(channelId, beforeId) {
   if (beforeId) {
-    return db.prepare(`SELECT m.id, m.body, m.created_at, m.edited_at, u.id AS user_id, u.username, u.display_name, u.avatar FROM room_messages m INNER JOIN users u ON u.id = m.user_id WHERE m.channel_id = ? AND m.id < ? ORDER BY m.id DESC LIMIT 50`).all(channelId, beforeId);
+    return db.prepare(`SELECT m.id, m.body, m.proto, m.ciphertext, m.group_session_id, m.created_at, m.edited_at, u.id AS user_id, u.username, u.display_name, u.avatar FROM room_messages m INNER JOIN users u ON u.id = m.user_id WHERE m.channel_id = ? AND m.id < ? ORDER BY m.id DESC LIMIT 50`).all(channelId, beforeId);
   }
-  return db.prepare(`SELECT m.id, m.body, m.created_at, m.edited_at, u.id AS user_id, u.username, u.display_name, u.avatar FROM room_messages m INNER JOIN users u ON u.id = m.user_id WHERE m.channel_id = ? ORDER BY m.id DESC LIMIT 50`).all(channelId).reverse();
+  return db.prepare(`SELECT m.id, m.body, m.proto, m.ciphertext, m.group_session_id, m.created_at, m.edited_at, u.id AS user_id, u.username, u.display_name, u.avatar FROM room_messages m INNER JOIN users u ON u.id = m.user_id WHERE m.channel_id = ? ORDER BY m.id DESC LIMIT 50`).all(channelId).reverse();
 }
-function sendRoomMessage(channelId, userId, body) {
-  return db.prepare(`INSERT INTO room_messages (channel_id, user_id, body, created_at) VALUES (?,?,?,?)`).run(channelId, userId, body, Date.now()).lastInsertRowid;
+function sendRoomMessage(channelId, userId, body, proto, ciphertext, groupSessionId) {
+  return db.prepare(`INSERT INTO room_messages (channel_id, user_id, body, proto, ciphertext, group_session_id, created_at) VALUES (?,?,?,?,?,?,?)`).run(channelId, userId, body, proto || 'plain', ciphertext || null, groupSessionId || null, Date.now()).lastInsertRowid;
+}
+
+// ---------- Megolm room group sessions ----------
+// rotate=true deletes the existing (room, sender) session so a fresh id is issued.
+function publishRoomGroupSession(roomId, senderId, rotate) {
+  if (rotate) {
+    const existing = db.prepare(`SELECT id FROM room_group_sessions WHERE room_id = ? AND sender_id = ?`).get(roomId, senderId);
+    if (existing) {
+      db.prepare(`DELETE FROM room_group_session_keys WHERE session_id = ?`).run(existing.id);
+      db.prepare(`DELETE FROM room_group_sessions WHERE id = ?`).run(existing.id);
+    }
+  }
+  db.prepare(`INSERT OR IGNORE INTO room_group_sessions (room_id, sender_id, created_at) VALUES (?,?,?)`).run(roomId, senderId, Date.now());
+  const row = db.prepare(`SELECT id FROM room_group_sessions WHERE room_id = ? AND sender_id = ?`).get(roomId, senderId);
+  return row.id;
+}
+function getRoomGroupSession(roomId, senderId) {
+  return db.prepare(`SELECT id FROM room_group_sessions WHERE room_id = ? AND sender_id = ?`).get(roomId, senderId) || null;
+}
+// Upsert: re-sharing replaces the key and re-queues delivery.
+function saveRoomSessionKeys(sessionId, recipientId, encryptedKey) {
+  const existing = db.prepare(`SELECT id FROM room_group_session_keys WHERE session_id = ? AND recipient_id = ?`).get(sessionId, recipientId);
+  if (existing) {
+    db.prepare(`UPDATE room_group_session_keys SET encrypted_key = ?, delivered = 0, created_at = ? WHERE id = ?`).run(encryptedKey, Date.now(), existing.id);
+  } else {
+    db.prepare(`INSERT INTO room_group_session_keys (session_id, recipient_id, encrypted_key, created_at) VALUES (?,?,?,?)`).run(sessionId, recipientId, encryptedKey, Date.now());
+  }
+}
+// Cover a member even when no real key could be produced (no E2EE setup yet),
+// so the sender doesn't rotate on every visit for that member.
+function ensureRoomSessionRecipient(sessionId, recipientId) {
+  const existing = db.prepare(`SELECT id FROM room_group_session_keys WHERE session_id = ? AND recipient_id = ?`).get(sessionId, recipientId);
+  if (!existing) {
+    db.prepare(`INSERT INTO room_group_session_keys (session_id, recipient_id, encrypted_key, created_at) VALUES (?,?,?,?)`).run(sessionId, recipientId, '', Date.now());
+  }
+}
+function getPendingRoomSessionKeys(userId) {
+  return db.prepare(`
+    SELECT k.id AS key_id, k.encrypted_key, gs.id AS session_id, gs.room_id, gs.sender_id
+    FROM room_group_session_keys k
+    JOIN room_group_sessions gs ON gs.id = k.session_id
+    WHERE k.recipient_id = ? AND k.delivered = 0 AND k.encrypted_key <> ''
+  `).all(userId);
+}
+function markRoomSessionKeyDelivered(keyId) {
+  db.prepare(`UPDATE room_group_session_keys SET delivered = 1 WHERE id = ?`).run(keyId);
+}
+// Everyone ever given (or targeted for) a key for this session.
+function getRoomSessionRecipients(sessionId) {
+  return db.prepare(`SELECT DISTINCT recipient_id FROM room_group_session_keys WHERE session_id = ?`).all(sessionId).map(r => r.recipient_id);
+}
+// Members who are covered but have no real key yet — the sender should re-share.
+function getRoomSessionEmptyKeyRecipients(sessionId) {
+  return db.prepare(`SELECT DISTINCT recipient_id FROM room_group_session_keys WHERE session_id = ? AND encrypted_key = ''`).all(sessionId).map(r => r.recipient_id);
 }
 function joinDefaultRole(roomId) {
   return db.prepare(`SELECT id FROM room_roles WHERE room_id = ? AND is_founder = 0 ORDER BY position DESC, id LIMIT 1`).get(roomId);
@@ -1324,6 +1409,7 @@ module.exports = {
   createRoomRole, getRoomRole, getRoomRoles, updateRoomRole, deleteRoomRole, transferFounder,
   createRoomChannel, getRoomChannel, getRoomChannels, updateRoomChannel, deleteRoomChannel,
   getRoomMessages, sendRoomMessage, deleteRoomMessage, joinDefaultRole, hasRoomPermission,
+  publishRoomGroupSession, getRoomGroupSession, saveRoomSessionKeys, ensureRoomSessionRecipient, getPendingRoomSessionKeys, markRoomSessionKeyDelivered, getRoomSessionRecipients, getRoomSessionEmptyKeyRecipients,
   // reports
   createReport, getPendingReports, getReport, resolveReport, dismissReport,
   // admin rooms

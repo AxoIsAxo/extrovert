@@ -156,10 +156,8 @@ router.post('/:username/send', (req, res) => {
   const senderCiphertext = String(req.body.sender_ciphertext || '').trim().slice(0, 5000) || null;
   const isSticker = body.startsWith('/uploads/stickers/');
   if (body && !isSticker) {
-    if (proto === 'olm') {
-      if (!senderCiphertext) return req.xhr ? res.json({ error: 'End-to-end encryption required. All messages must be encrypted.' }) : res.status(400).send('E2EE required');
-    } else if (!keyForSender || !keyForRecipient) {
-      return req.xhr ? res.json({ error: 'End-to-end encryption required. All messages must be encrypted.' }) : res.status(400).send('E2EE required');
+    if (proto !== 'olm' || !senderCiphertext) {
+      return req.xhr ? res.json({ error: 'End-to-end encryption required. All messages must be Olm-encrypted.' }) : res.status(400).send('E2EE required');
     }
   }
   if (body) {
@@ -183,6 +181,9 @@ router.post('/:username/edit/:mid', (req, res) => {
   const keyForRecipient = String(req.body.key_for_recipient || '').trim() || null;
   const proto = String(req.body.proto || 'rsa').trim() === 'olm' ? 'olm' : 'rsa';
   const senderCiphertext = String(req.body.sender_ciphertext || '').trim().slice(0, 5000) || null;
+  if (!body.startsWith('/uploads/stickers/') && (proto !== 'olm' || !senderCiphertext)) {
+    return req.xhr ? res.json({ error: 'End-to-end encryption required. All messages must be Olm-encrypted.' }) : res.status(400).send('E2EE required');
+  }
   const ok = editMessage(Number(req.params.mid), user.id, body, keyForSender, keyForRecipient, proto, senderCiphertext);
   if (!ok) return req.xhr ? res.json({ error: 'not found or not yours' }) : res.status(404).send('Message not found or not yours.');
   if (req.xhr) {

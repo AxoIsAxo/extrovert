@@ -8,7 +8,7 @@ const { canView } = require('../src/network');
 const { db: raw } = db;
 
 function reset() {
-  for (const t of ['follows_from_post','shares','comments','likes','posts','follows','profile_customization','olm_prekeys','olm_identity','messages','users']) {
+  for (const t of ['follows_from_post','shares','comments','likes','posts','follows','profile_customization','olm_prekeys','olm_identity','room_group_session_keys','room_group_sessions','messages','users']) {
     raw.exec(`DELETE FROM ${t}`);
   }
 }
