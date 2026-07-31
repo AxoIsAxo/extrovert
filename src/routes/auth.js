@@ -1,7 +1,7 @@
 'use strict';
 
 const express = require('express');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { createUser, getUserByUsername, getUserByReferralCode, getUserById } = db;
 const { adminExists } = db;

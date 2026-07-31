@@ -19,6 +19,8 @@
 
     ExtrovertCall.on('incoming_call', onIncomingCall);
     ExtrovertCall.on('calling', onCalling);
+    ExtrovertCall.on('calling_offline', onCallingOffline);
+    ExtrovertCall.on('call_unanswered', onCallUnanswered);
     ExtrovertCall.on('call_connected', onCallConnected);
     ExtrovertCall.on('call_ended', onCallEnded);
     ExtrovertCall.on('call_declined', onCallDeclined);
@@ -37,6 +39,7 @@
     incomingOverlay.innerHTML =
       '<div style="font-size:2rem;font-weight:700" id="call-incoming-label">Incoming call...</div>' +
       '<div style="font-size:1.2rem;color:var(--text-muted)" id="call-incoming-from"></div>' +
+      '<div style="font-size:0.9rem;color:var(--text-muted);min-height:1.2em" id="call-incoming-hint"></div>' +
       '<div style="display:flex;gap:16px;margin-top:8px">' +
         '<button id="call-answer-btn" style="padding:12px 32px;background:#22c55e;color:#fff;border:none;border-radius:var(--radius-lg);font-size:1.1rem;cursor:pointer">Answer</button>' +
         '<button id="call-decline-btn" style="padding:12px 32px;background:var(--danger);color:#fff;border:none;border-radius:var(--radius-lg);font-size:1.1rem;cursor:pointer">Decline</button>' +
@@ -119,9 +122,19 @@
     if (channelId) return;
     pendingIncoming = { username: username, sdp: sdp };
     document.getElementById('call-incoming-from').textContent = displayName || username;
+    var hintEl = document.getElementById('call-incoming-hint');
+    var answerBtn = document.getElementById('call-answer-btn');
+    if (sdp) {
+      if (hintEl) hintEl.textContent = '';
+      if (answerBtn) { answerBtn.disabled = false; answerBtn.style.opacity = '1'; answerBtn.style.cursor = 'pointer'; }
+    } else {
+      if (hintEl) hintEl.textContent = 'connecting…';
+      if (answerBtn) { answerBtn.disabled = true; answerBtn.style.opacity = '0.5'; answerBtn.style.cursor = 'default'; }
+    }
     incomingOverlay.style.display = 'flex';
     showRingingOverlay();
     startRinging();
+    if (ringingTimeout) { clearTimeout(ringingTimeout); ringingTimeout = null; }
     ringingTimeout = setTimeout(function () {
       if (pendingIncoming) {
         ExtrovertCall.declineCall(pendingIncoming.username);
@@ -129,11 +142,24 @@
         hideIncomingOverlay();
         stopRinging();
       }
-    }, 30000);
+    }, 45000);
   }
 
   function onCalling(username) {
     showCallingBar(username);
+  }
+
+  function onCallingOffline(username) {
+    showCallingOfflineBar(username);
+  }
+
+  function onCallUnanswered(username) {
+    stopRinging();
+    hideIncomingOverlay();
+    hideActiveCallBar();
+    cleanupRemoteAudio();
+    stopCallTimer();
+    showFlash(username + ' didn\'t come online');
   }
 
   function onCallConnected(username) {
@@ -216,6 +242,23 @@
     activeCallBar.style.display = 'flex';
   }
 
+  function showCallingOfflineBar(username) {
+    document.getElementById('call-bar-label').textContent = 'Calling ' + username + '… (offline — will ring when they\'re back)';
+    activeCallBar.style.display = 'flex';
+  }
+
+  function showFlash(text) {
+    var el = document.createElement('div');
+    el.textContent = text;
+    el.style.cssText = 'position:fixed;bottom:64px;left:50%;transform:translateX(-50%);background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);padding:8px 16px;z-index:9997;font-size:0.9rem;box-shadow:0 2px 12px rgba(0,0,0,0.2)';
+    document.body.appendChild(el);
+    setTimeout(function () {
+      el.style.transition = 'opacity 0.4s';
+      el.style.opacity = '0';
+      setTimeout(function () { el.remove(); }, 400);
+    }, 3000);
+  }
+
   function showConnectedBar(username) {
     document.getElementById('call-bar-label').textContent = 'Call with ' + username;
     activeCallBar.style.display = 'flex';
@@ -263,9 +306,13 @@
     document.querySelectorAll('.call-btn').forEach(function (btn) {
       var user = btn.dataset.username;
       if (onlineStatuses[user] !== undefined) {
-        btn.disabled = !onlineStatuses[user];
-        btn.style.opacity = onlineStatuses[user] ? '1' : '0.4';
-        btn.title = onlineStatuses[user] ? 'Call ' + user : user + ' is offline';
+        // Offline users can still be called (offline-call flow). Keep the
+        // button enabled; dim it slightly and hint at the behaviour.
+        btn.disabled = false;
+        btn.style.opacity = onlineStatuses[user] ? '1' : '0.7';
+        btn.title = onlineStatuses[user]
+          ? 'Call ' + user
+          : user + ' is offline — they\'ll be notified and rung when they\'re back';
       }
     });
   }

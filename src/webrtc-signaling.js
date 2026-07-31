@@ -3,7 +3,8 @@
 const crypto = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 const path = require('node:path');
-const { getUserById, areMutualFollowers, getRoomChannel, isRoomMember } = require('./db');
+const { getUserById, getUserByUsername, areMutualFollowers, getRoomChannel, isRoomMember, getOAuthToken, createNotification } = require('./db');
+const { sendCallPush } = require('./push');
 
 const SESSION_DB_PATH = process.env.EXTV_SESSION_DB_PATH || path.join(__dirname, '..', 'data', 'sessions.db');
 const SESSION_SECRET = process.env.SESSION_SECRET;
@@ -14,6 +15,16 @@ const clients = new Map();
 // a user's open connections so pushes reach every tab.
 const dmClients = new Map(); // userId -> Set<{ ws, username, displayName }>
 const voiceChannels = new Map();
+
+// Pending calls to offline users: calleeUserId -> pending record.
+// Lets a caller "ring" an offline peer: the callee gets a missed_call
+// notification (persisted + pushed via SSE) and a real WebRTC offer the moment
+// they reconnect (their WS connect handler checks pendingCalls). If they never
+// come back, the caller is told after PENDING_TTL and the attempt ends.
+const PENDING_TTL = 120000;
+const pendingCalls = new Map();
+// calleeUserId -> { callerId, callerUsername, callerDisplayName, cancelToken,
+//                   createdAt, expiresAt, timer }
 
 let sessionDb;
 try {
@@ -64,20 +75,35 @@ function getSession(sid) {
 }
 
 function lookupUserFromRequest(req) {
-  if (!SESSION_SECRET) { console.log('lookupUser: no SESSION_SECRET'); return null; }
-  if (!sessionDb) { console.log('lookupUser: no sessionDb'); return null; }
-  const cookies = parseCookies(req.headers.cookie);
-  const rawSid = cookies['connect.sid'];
-  if (!rawSid) { console.log('lookupUser: no connect.sid cookie'); return null; }
-  const signedSid = decodeURIComponent(rawSid);
-  const sid = unsignSessionId(signedSid, SESSION_SECRET);
-  if (!sid) { console.log('lookupUser: unsign failed for', signedSid.substring(0, 20)); return null; }
-  const session = getSession(sid);
-  if (!session) { console.log('lookupUser: no session for sid', sid.substring(0, 10)); return null; }
-  if (!session.userId) { console.log('lookupUser: session has no userId', JSON.stringify(session).substring(0, 100)); return null; }
-  const user = getUserById(session.userId);
-  if (!user) { console.log('lookupUser: no user for userId', session.userId); return null; }
-  return user;
+  // 1. Session cookie (browser clients)
+  if (SESSION_SECRET && sessionDb) {
+    const cookies = parseCookies(req.headers.cookie);
+    const rawSid = cookies['connect.sid'];
+    if (rawSid) {
+      const signedSid = decodeURIComponent(rawSid);
+      const sid = unsignSessionId(signedSid, SESSION_SECRET);
+      if (sid) {
+        const session = getSession(sid);
+        if (session && session.userId) {
+          const user = getUserById(session.userId);
+          if (user) return user;
+        }
+      }
+    }
+  }
+  // 2. Bearer token via ?token= query param (native/mobile clients)
+  try {
+    const url = new URL(req.url, 'http://localhost');
+    const token = url.searchParams.get('token');
+    if (token) {
+      const tokenRecord = getOAuthToken(token);
+      if (tokenRecord && (!tokenRecord.expires_at || tokenRecord.expires_at > Date.now())) {
+        const user = getUserById(tokenRecord.user_id);
+        if (user) return user;
+      }
+    }
+  } catch {}
+  return null;
 }
 
 function isMutualFollowerOnline(aId, bId) {
@@ -176,6 +202,45 @@ function routeToChannelMember(msg, user, forwardType) {
   }
 }
 
+function cancelPendingCall(calleeId, reason) {
+  const p = pendingCalls.get(calleeId);
+  if (!p) return false;
+  pendingCalls.delete(calleeId);
+  clearTimeout(p.timer);
+  const caller = clients.get(p.callerId);
+  if (caller) {
+    caller.inCall = false;
+    const callee = getUserById(calleeId);
+    const calleeUsername = callee ? callee.username : '';
+    try {
+      caller.ws.send(JSON.stringify({
+        type: reason === 'timeout' ? 'call_unanswered' : 'call_declined',
+        from: calleeUsername,
+        to: calleeUsername,
+      }));
+    } catch {}
+  }
+  return true;
+}
+
+function cancelPendingCallByToken(cancelToken) {
+  for (const [calleeId, p] of pendingCalls) {
+    if (p.cancelToken === cancelToken) {
+      return cancelPendingCall(calleeId, 'declined');
+    }
+  }
+  return false;
+}
+
+// Cancel any pending call this user (as caller) is waiting on.
+function cancelOutgoingPending(callerId, reason) {
+  for (const [calleeId, p] of pendingCalls) {
+    if (p.callerId === callerId) {
+      cancelPendingCall(calleeId, reason);
+    }
+  }
+}
+
 function initSignaling(wss) {
   wss.on('connection', (ws, req) => {
     const user = lookupUserFromRequest(req);
@@ -219,6 +284,31 @@ function initSignaling(wss) {
       }
     }
 
+    // If this user just came back online and someone is waiting to call them
+    // (offline call), ring them now and tell the caller to produce the offer.
+    const pending = pendingCalls.get(user.id);
+    if (pending && clients.has(pending.callerId)) {
+      pendingCalls.delete(user.id);
+      clearTimeout(pending.timer);
+      try {
+        ws.send(JSON.stringify({
+          type: 'incoming_call',
+          from: pending.callerUsername,
+          from_display: pending.callerDisplayName,
+        }));
+      } catch {}
+      const caller = clients.get(pending.callerId);
+      if (caller) {
+        try {
+          caller.ws.send(JSON.stringify({ type: 'callee_ringing', to: user.username }));
+        } catch {}
+      }
+    } else if (pending) {
+      // Caller is gone — drop the pending call silently.
+      pendingCalls.delete(user.id);
+      clearTimeout(pending.timer);
+    }
+
     ws.on('message', (raw) => {
       let msg;
       try { msg = JSON.parse(raw.toString()); } catch { return; }
@@ -227,6 +317,77 @@ function initSignaling(wss) {
         case 'ping':
           try { ws.send(JSON.stringify({ type: 'pong' })); } catch {}
           break;
+
+        // First step of a 1:1 call: ask the server whether the callee is
+        // reachable. Server replies callee_available (proceed with offer),
+        // user_busy, or calling_offline (callee is offline but has been
+        // queued for ring-on-reconnect + notified of a missed call).
+        case 'call_request': {
+          if (msg.channel_id) break; // room voice channels use call_offer directly
+          console.log('WS msg call_request from', user.username, 'to', msg.to);
+          const target = findUserByUsername(msg.to);
+          if (target) {
+            if (target.inCall) {
+              console.log('  -> target busy');
+              try { ws.send(JSON.stringify({ type: 'user_busy', from: msg.to })); } catch {}
+            } else {
+              console.log('  -> target online, callee_available');
+              try { ws.send(JSON.stringify({ type: 'callee_available', to: msg.to })); } catch {}
+            }
+            break;
+          }
+          // Target offline: resolve via DB and queue a pending call.
+          const callee = getUserByUsername(msg.to);
+          if (!callee) {
+            console.log('  -> callee not found');
+            try { ws.send(JSON.stringify({ type: 'user_offline', from: msg.to })); } catch {}
+            break;
+          }
+          if (!areMutualFollowers(user.id, callee.id)) {
+            console.log('  -> not mutual followers');
+            try { ws.send(JSON.stringify({ type: 'user_offline', from: msg.to })); } catch {}
+            break;
+          }
+          if (pendingCalls.has(callee.id)) {
+            console.log('  -> callee already has a pending call');
+            try { ws.send(JSON.stringify({ type: 'user_busy', from: msg.to })); } catch {}
+            break;
+          }
+          const cancelToken = crypto.randomUUID();
+          const createdAt = Date.now();
+          const expiresAt = createdAt + PENDING_TTL;
+          const timer = setTimeout(() => {
+            cancelPendingCall(callee.id, 'timeout');
+          }, PENDING_TTL);
+          pendingCalls.set(callee.id, {
+            callerId: user.id,
+            callerUsername: user.username,
+            callerDisplayName: user.display_name,
+            cancelToken,
+            createdAt,
+            expiresAt,
+            timer,
+          });
+          clientData.inCall = true;
+          try {
+            createNotification({ userId: callee.id, type: 'missed_call', actorId: user.id });
+          } catch (e) { console.error('createNotification missed_call:', e); }
+          try { sendCallPush(callee, user, cancelToken); } catch {}
+          console.log('  -> callee offline, queued pending call');
+          try {
+            ws.send(JSON.stringify({ type: 'calling_offline', to: msg.to, expires_at: expiresAt }));
+          } catch {}
+          break;
+        }
+
+        // Caller aborts an offline-call wait (or cancels before the callee
+        // reconnects). Clears the pending call and frees the caller.
+        case 'call_cancel': {
+          if (msg.channel_id) break;
+          cancelOutgoingPending(user.id, 'declined');
+          clientData.inCall = false;
+          break;
+        }
 
         case 'call_offer':
           console.log('WS msg call_offer from', user.username, 'to', msg.to, 'channel:', msg.channel_id);
@@ -256,6 +417,7 @@ function initSignaling(wss) {
             const target = findUserByUsername(msg.to);
             if (!target) {
               console.log('  -> target not found (offline?)');
+              try { ws.send(JSON.stringify({ type: 'user_offline', from: msg.to })); } catch {}
               break;
             }
             if (target.inCall) {
@@ -409,6 +571,7 @@ function initSignaling(wss) {
 
     ws.on('close', () => {
       removeFromVoiceChannels(user.id);
+      cancelOutgoingPending(user.id, 'declined');
       const dmSet = dmClients.get(user.id);
       if (dmSet) {
         for (const c of dmSet) {
@@ -483,4 +646,4 @@ function sendDmEvent(toUsername, payload) {
   return delivered;
 }
 
-module.exports = { initSignaling, getOnlineUsers, getUserPresence, getVoiceChannelMembers, sendDmEvent };
+module.exports = { initSignaling, getOnlineUsers, getUserPresence, getVoiceChannelMembers, sendDmEvent, cancelPendingCallByToken };

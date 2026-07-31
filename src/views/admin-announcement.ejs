@@ -1,0 +1,47 @@
+<%- include('partials/header') %>
+  <div class="card ann-admin-card" style="max-width:620px;margin:0 auto">
+    <div class="ann-admin-head">
+      <span class="ann-admin-icon"><%- include('partials/icon', { name: 'megaphone', size: 22 }) %></span>
+      <div>
+        <h2>Server announcement</h2>
+        <p class="muted">A single announcement shown to every signed-in user in the top bar. Setting a new one replaces the current.</p>
+      </div>
+    </div>
+
+    <% if (locals.error) { %>
+      <div class="ann-admin-error"><%- include('partials/icon', { name: 'alert', size: 16 }) %> <%= error %></div>
+    <% } %>
+
+    <form method="post" action="/admin/announcement" class="ann-admin-form">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <label for="ann-body">Message</label>
+      <textarea id="ann-body" name="body" rows="5" maxlength="280" placeholder="What should every user see right now?"><%= announcement ? announcement.body : '' %></textarea>
+      <div class="ann-admin-actions">
+        <span class="ann-admin-counter" id="ann-counter"><%= announcement ? announcement.body.length : 0 %>/280</span>
+        <button class="btn" type="submit"><%- include('partials/icon', { name: 'check', size: 16 }) %> Publish</button>
+      </div>
+    </form>
+
+    <% if (announcement) { %>
+      <div class="ann-admin-preview">
+        <div class="ann-admin-preview-label">Preview · what users see in the top bar</div>
+        <div class="ann-admin-preview-pill">
+          <span class="ann-pill-glow" aria-hidden="true"></span>
+          <%- include('partials/icon', { name: 'megaphone', size: 16 }) %>
+          <span class="ann-pill-text"><%= announcement.body %></span>
+        </div>
+        <div class="ann-admin-preview-meta">
+          <% if (announcement.author_display_name || announcement.author_username) { %>
+            set by <strong><%= announcement.author_display_name || announcement.author_username %></strong>
+          <% } %>
+          <% if (announcement.updated_at) { %> · updated <%= locals.relTime(announcement.updated_at) %><% } %>
+        </div>
+        <form method="post" action="/admin/announcement/clear" class="ann-admin-clear">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button class="btn ghost danger small"><%- include('partials/icon', { name: 'trash', size: 14 }) %> Clear announcement</button>
+        </form>
+      </div>
+    <% } %>
+  </div>
+<script src="/static/announcement-admin.js?v=1"></script>
+<%- include('partials/footer') %>

@@ -610,6 +610,49 @@ All API body fields use **millisecond Unix timestamps** (e.g. "created_at", "upd
         responses: { '200': { description: 'Presence object' } },
       },
     },
+    '/api/v1/push/vapid-public': {
+      get: {
+        summary: 'Get the VAPID public key for Web Push subscription',
+        tags: ['Push'],
+        security: [{ oauth2: ['read'] }],
+        responses: { '200': { description: '{ publicKey: string }' } },
+      },
+    },
+    '/api/v1/push/subscribe': {
+      post: {
+        summary: 'Register a push subscription (device token for FCM/APNs or Web Push endpoint)',
+        tags: ['Push'],
+        security: [{ oauth2: ['write'] }],
+        requestBody: {
+          content: { 'application/json': { schema: {
+            type: 'object',
+            required: ['platform', 'endpoint'],
+            properties: {
+              platform: { type: 'string', enum: ['web', 'fcm', 'apns'], description: 'Push provider' },
+              endpoint: { type: 'string', description: 'Push endpoint URL (web) or device token (fcm/apns)' },
+              p256dh: { type: 'string', description: 'Web Push only: client public key' },
+              auth:   { type: 'string', description: 'Web Push only: client auth secret' },
+            },
+          }}},
+        },
+        responses: { '200': { description: '{ ok: true }' } },
+      },
+    },
+    '/api/v1/push/unsubscribe': {
+      post: {
+        summary: 'Remove a push subscription',
+        tags: ['Push'],
+        security: [{ oauth2: ['write'] }],
+        requestBody: {
+          content: { 'application/json': { schema: {
+            type: 'object',
+            required: ['endpoint'],
+            properties: { endpoint: { type: 'string' } },
+          }}},
+        },
+        responses: { '200': { description: '{ ok: true }' } },
+      },
+    },
     '/api/v1/search': {
       get: {
         summary: 'Search accounts and posts',

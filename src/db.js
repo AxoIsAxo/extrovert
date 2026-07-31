@@ -273,10 +273,32 @@ function init() {
       edited_by   INTEGER NOT NULL REFERENCES users(id)
     );
     CREATE INDEX IF NOT EXISTS idx_edit_history_entity ON edit_history(entity_type, entity_id);
+
+    -- Server-wide announcement (singleton, id always 1).
+    CREATE TABLE IF NOT EXISTS announcement (
+      id         INTEGER PRIMARY KEY CHECK(id = 1),
+      body       TEXT NOT NULL,
+      author_id  INTEGER REFERENCES users(id),
+      updated_at INTEGER NOT NULL
+    );
   `);
 }
 
 init();
+
+// Push subscriptions for waking offline devices (web-push / FCM / APNs).
+try { db.exec(`
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id),
+    platform   TEXT NOT NULL DEFAULT 'web',
+    endpoint   TEXT NOT NULL,
+    p256dh     TEXT,
+    auth       TEXT,
+    created_at INTEGER NOT NULL,
+    UNIQUE(user_id, platform, endpoint)
+  );
+`); } catch {}
 
 // Migrations.
 try { db.exec(`ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'default'`); } catch {}
@@ -697,6 +719,29 @@ function countUnreadNotifications(userId) {
 
 function markNotificationsRead(userId) {
   db.prepare(`UPDATE notifications SET read = 1 WHERE user_id = ? AND read = 0`).run(userId);
+}
+
+// ---------- push subscriptions ----------
+function addPushSubscription({ userId, platform, endpoint, p256dh, auth }) {
+  db.prepare(
+    `INSERT INTO push_subscriptions (user_id, platform, endpoint, p256dh, auth, created_at)
+     VALUES (?,?,?,?,?,?)
+     ON CONFLICT(user_id, platform, endpoint) DO UPDATE SET p256dh=excluded.p256dh, auth=excluded.auth`
+  ).run(userId, platform || 'web', endpoint, p256dh || null, auth || null, Date.now());
+}
+
+function getPushSubscriptions(userId) {
+  return db.prepare(
+    `SELECT id, platform, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?`
+  ).all(userId);
+}
+
+function removePushSubscription(userId, endpoint) {
+  db.prepare(`DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint = ?`).run(userId, endpoint);
+}
+
+function deletePushSubscriptionsByEndpoint(endpoint) {
+  db.prepare(`DELETE FROM push_subscriptions WHERE endpoint = ?`).run(endpoint);
 }
 
 // ---------- user lists ----------
@@ -1369,6 +1414,30 @@ function auditLog(action, actorId, details) {
   } catch {}
 }
 
+// ---------- Announcement (singleton) ----------
+// JOINs the author's username/display_name so callers don't need a second lookup.
+function getAnnouncement() {
+  return db.prepare(`
+    SELECT a.*, u.username AS author_username, u.display_name AS author_display_name
+    FROM announcement a LEFT JOIN users u ON u.id = a.author_id
+    WHERE a.id = 1
+  `).get();
+}
+
+function setAnnouncement(body, authorId) {
+  const trimmed = String(body || '').trim();
+  if (!trimmed) throw new Error('Announcement body cannot be empty');
+  db.prepare(`
+    INSERT INTO announcement (id, body, author_id, updated_at) VALUES (1, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET body = excluded.body, author_id = excluded.author_id, updated_at = excluded.updated_at
+  `).run(trimmed, authorId || null, Date.now());
+  return getAnnouncement();
+}
+
+function clearAnnouncement() {
+  db.prepare(`DELETE FROM announcement WHERE id = 1`).run();
+}
+
 module.exports = {
   db,
   // users
@@ -1391,6 +1460,8 @@ module.exports = {
   getCustomization, setCustomization,
   // notifications
   createNotification, getNotifications, countUnreadNotifications, markNotificationsRead,
+  // push subscriptions
+  addPushSubscription, getPushSubscriptions, removePushSubscription, deletePushSubscriptionsByEndpoint,
   // user lists
   getFollowers, getFollowing,
   // mutual follow
@@ -1441,4 +1512,6 @@ module.exports = {
   searchUsers, searchPosts,
   // audit
   auditLog,
+  // announcement (singleton, server-wide)
+  getAnnouncement, setAnnouncement, clearAnnouncement,
 };

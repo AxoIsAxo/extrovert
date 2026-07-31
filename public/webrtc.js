@@ -15,6 +15,8 @@
     channelId: null,
     channelMembers: {},
     callStartTime: null,
+    pendingCall: null,
+    callWaitTimeout: null,
   };
 
   var listeners = {};
@@ -51,6 +53,11 @@
       reconnectAttempts = 0;
       console.log('WebRTC WS connected');
       send({ type: 'ping' });
+      var params = new URLSearchParams(window.location.search);
+      var callUser = params.get('call');
+      if (callUser && state.callState === 'idle') {
+        startCall(callUser);
+      }
     };
 
     ws.onmessage = function (e) {
@@ -108,6 +115,51 @@
         state.peerUsername = msg.from;
         state.channelId = msg.channel_id || null;
         emit('incoming_call', msg.from, msg.from_display || msg.from, msg.sdp, msg.channel_id);
+        break;
+
+      case 'callee_available':
+        // Callee is online and free: produce the real WebRTC offer now.
+        if (state.callState === 'calling' && state.peerUsername) {
+          produceOfferAndSend(state.peerUsername);
+        }
+        break;
+
+      case 'calling_offline':
+        // Callee is offline: queued for ring-on-reconnect. Wait without media.
+        if (state.callState === 'calling') {
+          state.pendingCall = msg.to;
+          emit('calling_offline', msg.to);
+          if (state.callWaitTimeout) clearTimeout(state.callWaitTimeout);
+          var waitMs = msg.expires_at ? Math.min(60000, Math.max(0, msg.expires_at - Date.now())) : 60000;
+          state.callWaitTimeout = setTimeout(function () {
+            state.callWaitTimeout = null;
+            if (state.callState === 'calling' && state.pendingCall) {
+              emit('call_unanswered', state.pendingCall);
+              send({ type: 'call_cancel', to: state.pendingCall });
+              endCallInternal();
+            }
+          }, waitMs);
+        }
+        break;
+
+      case 'callee_ringing':
+        // Callee just came online; server has rung them. Send the real offer.
+        if (state.callWaitTimeout) { clearTimeout(state.callWaitTimeout); state.callWaitTimeout = null; }
+        state.pendingCall = null;
+        if (state.callState === 'calling' && state.peerUsername) {
+          produceOfferAndSend(state.peerUsername);
+        }
+        break;
+
+      case 'user_offline':
+        emit('call_declined', msg.from);
+        endCallInternal();
+        break;
+
+      case 'call_unanswered':
+        if (state.callWaitTimeout) { clearTimeout(state.callWaitTimeout); state.callWaitTimeout = null; }
+        emit('call_unanswered', msg.to || msg.from);
+        endCallInternal();
         break;
 
       case 'call_answered':
@@ -237,22 +289,15 @@
     pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(sdp))).catch(function () {});
   }
 
-  function startCall(username) {
-    if (state.callState !== 'idle') {
-      console.log('startCall ignored: state is', state.callState);
-      return;
-    }
-    state.callState = 'calling';
-    state.peerUsername = username;
-
-    getMedia().then(function () {
+  function produceOfferAndSend(username) {
+    return getMedia().then(function () {
       return createPeerConnection(username);
     }).then(function (pc) {
       return pc.createOffer().then(function (offer) {
         return pc.setLocalDescription(offer);
       }).then(function () {
         if (state.callState !== 'calling') {
-          console.log('startCall aborted: state changed to', state.callState);
+          console.log('produceOfferAndSend aborted: state changed to', state.callState);
           return;
         }
         send({
@@ -270,9 +315,25 @@
     });
   }
 
+  function startCall(username) {
+    if (state.callState !== 'idle') {
+      console.log('startCall ignored: state is', state.callState);
+      return;
+    }
+    state.callState = 'calling';
+    state.peerUsername = username;
+    send({ type: 'call_request', to: username });
+    emit('calling', username);
+  }
+
   function answerCall(username, sdp) {
     if (state.callState !== 'ringing') {
       console.log('answerCall ignored: state is', state.callState);
+      return;
+    }
+    if (!sdp) {
+      // Ringing invite hasn't delivered the offer yet; wait for it.
+      console.log('answerCall ignored: no SDP yet');
       return;
     }
     state.peerUsername = username;
@@ -315,6 +376,11 @@
       send({ type: 'leave_channel', channel_id: state.channelId });
       emit('call_ended', '');
       endCallInternal();
+    } else if (state.pendingCall && Object.keys(state.peerConnections).length === 0) {
+      // Waiting on an offline callee who hasn't reconnected yet: cancel.
+      send({ type: 'call_cancel', to: state.pendingCall });
+      emit('call_ended', state.pendingCall);
+      endCallInternal();
     } else {
       var peer = state.peerUsername || '';
       send({ type: 'call_end', to: peer });
@@ -329,6 +395,8 @@
     state.channelId = null;
     state.callStartTime = null;
     state.channelMembers = {};
+    state.pendingCall = null;
+    if (state.callWaitTimeout) { clearTimeout(state.callWaitTimeout); state.callWaitTimeout = null; }
     Object.keys(state.peerConnections).forEach(closePeerConnection);
     state.peerConnections = {};
     if (state.localStream) {

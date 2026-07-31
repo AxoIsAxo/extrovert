@@ -16,7 +16,7 @@
     "test:session-reload": "node scripts/session-reload-test.js"
   },
   "dependencies": {
-    "bcrypt": "^5.1.1",
+    "bcryptjs": "^2.4.3",
     "ejs": "^3.1.10",
     "express": "^4.21.0",
     "express-rate-limit": "^8.5.2",
@@ -25,6 +25,7 @@
     "multer": "^1.4.5-lts.1",
     "sanitize-html": "^2.13.0",
     "sharp": "^0.35.3",
+    "web-push": "^3.6.7",
     "ws": "^8.21.1"
   },
   "devDependencies": {

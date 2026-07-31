@@ -1,7 +1,7 @@
 'use strict';
 
 const express = require('express');
-const { getAllUsers, getUserById, removeReferralBadge, banUser, unbanUser, deleteUser, getAllRooms, deleteRoom, getPendingReports, getReport, resolveReport, dismissReport, promoteUser } = require('../db');
+const { getAllUsers, getUserById, removeReferralBadge, banUser, unbanUser, deleteUser, getAllRooms, deleteRoom, getPendingReports, getReport, resolveReport, dismissReport, promoteUser, getAnnouncement, setAnnouncement, clearAnnouncement } = require('../db');
 
 const router = express.Router();
 
@@ -89,6 +89,32 @@ router.post('/reports/:id/dismiss', requireAdmin, (req, res) => {
   if (report.status !== 'pending') return res.status(400).send('Report already resolved');
   dismissReport(report.id);
   res.redirect('/admin/reports');
+});
+
+// Announcement CRUD — only one server-wide announcement exists at a time.
+router.get('/announcement', requireAdmin, (req, res) => {
+  res.render('admin-announcement', {
+    announcement: getAnnouncement(),
+    error: null,
+  });
+});
+
+router.post('/announcement', requireAdmin, (req, res) => {
+  const user = res.locals.currentUser;
+  const body = (req.body && req.body.body) || '';
+  if (!String(body).trim()) {
+    return res.render('admin-announcement', {
+      announcement: getAnnouncement(),
+      error: 'Announcement cannot be empty.',
+    });
+  }
+  setAnnouncement(body, user.id);
+  res.redirect('/admin');
+});
+
+router.post('/announcement/clear', requireAdmin, (req, res) => {
+  clearAnnouncement();
+  res.redirect('/admin');
 });
 
 module.exports = router;

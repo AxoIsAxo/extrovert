@@ -12,9 +12,10 @@ const { canView } = require('../network');
 const feed = require('../feed');
 const { requireApiAuth, clientAppAuth, generateToken, VALID_SCOPES } = require('../api-auth');
 const { signIdToken, ISSUER } = require('../oidc');
-const { getOnlineUsers, getUserPresence, sendDmEvent } = require('../webrtc-signaling');
+const { getOnlineUsers, getUserPresence, sendDmEvent, cancelPendingCallByToken } = require('../webrtc-signaling');
 const { onNotification } = require('../notif-broadcaster');
 const dm = require('../dm');
+const { getVapidPublicKey } = require('../push');
 
 const router = express.Router();
 
@@ -910,6 +911,35 @@ router.get('/calls/presence', requireApiAuth, (req, res) => {
 router.get('/calls/presence/:username', requireApiAuth, (req, res) => {
   const presence = getUserPresence(req.params.username);
   res.json(presence);
+});
+
+// ======== Push subscriptions (native/mobile + PWA) ========
+
+router.get('/push/vapid-public', requireApiAuth, (req, res) => {
+  const key = getVapidPublicKey();
+  if (!key) return res.status(404).json({ error: 'Push not configured' });
+  res.json({ data: { publicKey: key } });
+});
+
+router.post('/push/subscribe', requireApiAuth, (req, res) => {
+  const { platform, endpoint, p256dh, auth: pushAuth } = req.body || {};
+  if (!endpoint) return res.status(400).json({ error: 'endpoint is required' });
+  if (!platform) return res.status(400).json({ error: 'platform is required' });
+  db.addPushSubscription({
+    userId: req.apiUser.id,
+    platform,
+    endpoint,
+    p256dh,
+    auth: pushAuth,
+  });
+  res.json({ data: { ok: true } });
+});
+
+router.post('/push/unsubscribe', requireApiAuth, (req, res) => {
+  const { endpoint } = req.body || {};
+  if (!endpoint) return res.status(400).json({ error: 'endpoint is required' });
+  db.removePushSubscription(req.apiUser.id, endpoint);
+  res.json({ data: { ok: true } });
 });
 
 // ======== Rooms ========
