@@ -768,6 +768,28 @@
   }
 
   // ---- Chat page wiring ----
+  function showRecipientNotice() {
+    var notice = document.getElementById('e2ee-recipient-notice');
+    var form = document.querySelector('.chat-form');
+    var sendError = document.getElementById('chat-send-error');
+    if (notice) notice.style.display = 'block';
+    if (form) {
+      var input = form.querySelector('input[name="body"]');
+      var btn = form.querySelector('button[type="submit"]');
+      if (input) input.disabled = true;
+      if (btn) btn.disabled = true;
+    }
+    if (sendError) { sendError.textContent = ''; sendError.style.display = 'none'; }
+  }
+
+  function showSendError(msg) {
+    var el = document.getElementById('chat-send-error');
+    if (!el) return;
+    el.textContent = msg;
+    el.style.display = 'block';
+    setTimeout(function () { el.style.display = 'none'; }, 6000);
+  }
+
   function initChatHandlers(recipientId, otherIdStr, otherUsername, recipientCurve) {
     var sendForm = document.querySelector('.chat-form');
     if (!sendForm) return;
@@ -816,6 +838,11 @@
       }).catch(function (err) {
         console.error('E2EE encrypt error', err);
         input.disabled = false;
+        if (err && /no encryption keys/i.test(err.message)) {
+          showRecipientNotice();
+        } else {
+          showSendError('Could not encrypt this message. Please reload the chat and try again.');
+        }
       });
     });
 
