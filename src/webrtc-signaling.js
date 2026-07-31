@@ -14,6 +14,12 @@ const clients = new Map();
 // `clients` (one signaling connection per user, last-wins), this tracks ALL of
 // a user's open connections so pushes reach every tab.
 const dmClients = new Map(); // userId -> Set<{ ws, username, displayName }>
+// Push-channel connections: the native app's foreground service keeps a WS
+// open so calls reach the phone even when the app UI is closed. The service
+// sends {type:'push_register'} after connecting; it is NOT a signaling client
+// (the user stays "offline" for calls, so the pending-call flow still runs and
+// the ring is delivered here as a push).
+const pushClients = new Map(); // userId -> Set<ws>
 const voiceChannels = new Map();
 
 // Pending calls to offline users: calleeUserId -> pending record.
@@ -226,8 +232,15 @@ function cancelPendingCall(calleeId, reason) {
     try {
       const callee = getUserById(calleeId);
       const callerUser = getUserById(p.callerId);
-      if (callee && callerUser) sendMissedCallPush(callee, callerUser);
-    } catch (e) { console.error('sendMissedCallPush:', e && e.message); }
+      if (callee) {
+        if (callerUser) sendMissedCallPush(callee, callerUser);
+        sendWsPush(calleeId, {
+          type: 'missed_call',
+          from: callerUser ? callerUser.username : '',
+          from_display: callerUser ? (callerUser.display_name || callerUser.username) : 'Someone',
+        });
+      }
+    } catch (e) { console.error('missed-call push:', e && e.message); }
   }
   return true;
 }
@@ -260,67 +273,91 @@ function initSignaling(wss) {
     }
     console.log('WS connected:', user.username, '(id:', user.id + ')');
 
-    const existing = clients.get(user.id);
-    if (existing) {
-      try { existing.ws.close(4002, 'New connection'); } catch {}
-    }
+    // A connection is only a signaling client once it proves it isn't a push
+    // channel: the first message is either {type:'push_register'} (native push
+    // service — never appears online, calls are pushed to it) or anything else
+    // (the web/native UI client, which sends {type:'ping'} on open).
+    let registered = false;
+    let clientData = null;
 
-    const clientData = {
-      ws,
-      username: user.username,
-      displayName: user.display_name,
-      userId: user.id,
-      inCall: false,
-    };
-    clients.set(user.id, clientData);
+    function registerSignalingClient() {
+      if (registered) return;
+      registered = true;
+      const existing = clients.get(user.id);
+      if (existing) {
+        try { existing.ws.close(4002, 'New connection'); } catch {}
+      }
 
-    // Track this connection for live DM pushes (all tabs).
-    if (!dmClients.has(user.id)) dmClients.set(user.id, new Set());
-    dmClients.get(user.id).add({ ws, username: user.username, displayName: user.display_name });
+      clientData = {
+        ws,
+        username: user.username,
+        displayName: user.display_name,
+        userId: user.id,
+        inCall: false,
+      };
+      clients.set(user.id, clientData);
 
-    broadcastPresence(user.id, 'user_online');
+      // Track this connection for live DM pushes (all tabs).
+      if (!dmClients.has(user.id)) dmClients.set(user.id, new Set());
+      dmClients.get(user.id).add({ ws, username: user.username, displayName: user.display_name });
 
-    for (const [otherId, client] of clients) {
-      if (otherId === user.id) continue;
-      if (areMutualFollowers(user.id, otherId)) {
+      broadcastPresence(user.id, 'user_online');
+
+      for (const [otherId, client] of clients) {
+        if (otherId === user.id) continue;
+        if (areMutualFollowers(user.id, otherId)) {
+          try {
+            ws.send(JSON.stringify({
+              type: 'user_online',
+              username: client.username,
+              display_name: client.displayName,
+            }));
+          } catch {}
+        }
+      }
+
+      // If this user just came back online and someone is waiting to call them
+      // (offline call), ring them now and tell the caller to produce the offer.
+      const pending = pendingCalls.get(user.id);
+      if (pending && clients.has(pending.callerId)) {
+        pendingCalls.delete(user.id);
+        clearTimeout(pending.timer);
         try {
           ws.send(JSON.stringify({
-            type: 'user_online',
-            username: client.username,
-            display_name: client.displayName,
+            type: 'incoming_call',
+            from: pending.callerUsername,
+            from_display: pending.callerDisplayName,
           }));
         } catch {}
+        const caller = clients.get(pending.callerId);
+        if (caller) {
+          try {
+            caller.ws.send(JSON.stringify({ type: 'callee_ringing', to: user.username }));
+          } catch {}
+        }
+      } else if (pending) {
+        // Caller is gone — drop the pending call silently.
+        pendingCalls.delete(user.id);
+        clearTimeout(pending.timer);
       }
-    }
-
-    // If this user just came back online and someone is waiting to call them
-    // (offline call), ring them now and tell the caller to produce the offer.
-    const pending = pendingCalls.get(user.id);
-    if (pending && clients.has(pending.callerId)) {
-      pendingCalls.delete(user.id);
-      clearTimeout(pending.timer);
-      try {
-        ws.send(JSON.stringify({
-          type: 'incoming_call',
-          from: pending.callerUsername,
-          from_display: pending.callerDisplayName,
-        }));
-      } catch {}
-      const caller = clients.get(pending.callerId);
-      if (caller) {
-        try {
-          caller.ws.send(JSON.stringify({ type: 'callee_ringing', to: user.username }));
-        } catch {}
-      }
-    } else if (pending) {
-      // Caller is gone — drop the pending call silently.
-      pendingCalls.delete(user.id);
-      clearTimeout(pending.timer);
     }
 
     ws.on('message', (raw) => {
       let msg;
       try { msg = JSON.parse(raw.toString()); } catch { return; }
+
+      // First message decides the connection's role.
+      if (!registered) {
+        if (msg.type === 'push_register') {
+          registered = true;
+          if (!pushClients.has(user.id)) pushClients.set(user.id, new Set());
+          pushClients.get(user.id).add(ws);
+          console.log('push channel registered:', user.username, '(id:', user.id + ')');
+          try { ws.send(JSON.stringify({ type: 'push_registered' })); } catch {}
+          return;
+        }
+        registerSignalingClient();
+      }
 
       switch (msg.type) {
         case 'ping':
@@ -381,7 +418,17 @@ function initSignaling(wss) {
           try {
             createNotification({ userId: callee.id, type: 'missed_call', actorId: user.id });
           } catch (e) { console.error('createNotification missed_call:', e); }
+          // Ring the phone: browser subscriptions via web-push, the native
+          // app's push service via its always-on WS connection.
           try { sendCallPush(callee, user, cancelToken); } catch {}
+          try {
+            sendWsPush(callee.id, {
+              type: 'call',
+              from: user.username,
+              from_display: user.display_name,
+              cancel_token: cancelToken,
+            });
+          } catch {}
           console.log('  -> callee offline, queued pending call');
           try {
             ws.send(JSON.stringify({ type: 'calling_offline', to: msg.to, expires_at: expiresAt }));
@@ -588,6 +635,11 @@ function initSignaling(wss) {
         }
         if (dmSet.size === 0) dmClients.delete(user.id);
       }
+      const pushSet = pushClients.get(user.id);
+      if (pushSet) {
+        pushSet.delete(ws);
+        if (pushSet.size === 0) pushClients.delete(user.id);
+      }
       const c = clients.get(user.id);
       if (c && c.ws === ws) {
         clients.delete(user.id);
@@ -655,4 +707,15 @@ function sendDmEvent(toUsername, payload) {
   return delivered;
 }
 
+// Deliver a push payload to every push-channel connection (the native app's
+// foreground service) of a user. Returns true if at least one was delivered.
+function sendWsPush(userId, payload) {
+  const conns = pushClients.get(userId);
+  if (!conns) return false;
+  let delivered = false;
+  for (const ws of conns) {
+    try { ws.send(JSON.stringify(payload)); delivered = true; } catch {}
+  }
+  return delivered;
+}
 module.exports = { initSignaling, getOnlineUsers, getUserPresence, getVoiceChannelMembers, sendDmEvent, cancelPendingCallByToken };

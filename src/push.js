@@ -1,18 +1,11 @@
 'use strict';
 
-// Multi-provider push dispatcher (web-push / UnifiedPush).
+// Web-push (VAPID) for browser subscriptions only.
 //
-// Wakes offline devices when someone calls them. sendCallPush is invoked by
-// the signaling server when an offline call is queued; it fans out to every
-// push subscription the callee has registered. Dead endpoints/tokens are
-// auto-pruned.
-//
-// Web push env:  VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT
-// UnifiedPush:   No env needed — the endpoint URL stored per-device is all
-//                that's needed. The server does a plain HTTP POST to it.
-//
-// If a provider's env is unset, that branch is skipped (the offline-call flow
-// still works via ring-on-reconnect + missed-call notification).
+// The native app does NOT use a third-party push relay: its foreground
+// service keeps a WebSocket to the signaling server (push_register) and the
+// server delivers call/missed-call payloads over that connection directly.
+// See webrtc-signaling.js sendWsPush.
 
 const db = require('./db');
 
@@ -60,32 +53,8 @@ async function sendWebPush(sub, payload) {
   }
 }
 
-// UnifiedPush: the endpoint URL is the user's chosen distributor (ntfy,
-// Gotify, Nextcloud, etc.). We just HTTP POST the payload — no Google APIs,
-// no service-account keys, no special auth. The endpoint URL IS the auth
-// (unique per device subscription).
-async function sendUnifiedPush(endpoint, payload) {
-  try {
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(10000),
-    });
-    if (res.status === 404 || res.status === 410 || res.status === 403) {
-      try { db.deletePushSubscriptionsByEndpoint(endpoint); } catch {}
-    } else if (!res.ok) {
-      console.error('push: UnifiedPush send failed:', res.status, await res.text().catch(() => ''));
-    }
-  } catch (e) {
-    if (e.name === 'TimeoutError') {
-      console.error('push: UnifiedPush send timed out:', endpoint);
-    } else {
-      console.error('push: UnifiedPush send error:', e && e.message);
-    }
-  }
-}
-
+// The native app's devices are reached via the signaling WS (sendWsPush in
+// webrtc-signaling.js), so this only fans out to browser (web) subscriptions.
 async function sendCallPush(calleeUser, callerUser, cancelToken) {
   try {
     const subs = db.getPushSubscriptions(calleeUser.id);
@@ -99,18 +68,15 @@ async function sendCallPush(calleeUser, callerUser, cancelToken) {
     for (const sub of subs) {
       if (sub.platform === 'web') {
         await sendWebPush(sub, payload);
-      } else if (sub.platform === 'unifiedpush') {
-        await sendUnifiedPush(sub.endpoint, payload);
       }
-      // apns -> TODO (future iOS / CallKit VoIP)
     }
   } catch (e) {
     console.error('push: sendCallPush error:', e && e.message);
   }
 }
 
-// Offline-call timeout: tell the callee's devices the call was missed so they
-// get a normal (non-full-screen) missed-call notification.
+// Offline-call timeout: tell the callee's browsers the call was missed.
+// (The native app gets this over the signaling WS instead.)
 async function sendMissedCallPush(calleeUser, callerUser) {
   try {
     const subs = db.getPushSubscriptions(calleeUser.id);
@@ -123,8 +89,6 @@ async function sendMissedCallPush(calleeUser, callerUser) {
     for (const sub of subs) {
       if (sub.platform === 'web') {
         await sendWebPush(sub, payload);
-      } else if (sub.platform === 'unifiedpush') {
-        await sendUnifiedPush(sub.endpoint, payload);
       }
     }
   } catch (e) {
