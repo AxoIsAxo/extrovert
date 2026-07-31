@@ -503,6 +503,19 @@ a.conv-row:hover { color: var(--primary); }
   flex: 1 1 auto;
   overflow-y: auto;
   min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+/* Slim, unobtrusive scrollbar: invisible until the list is hovered/scrolled. */
+.chat-scroll::-webkit-scrollbar { width: 6px; }
+.chat-scroll::-webkit-scrollbar-track { background: transparent; }
+.chat-scroll::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+}
+.chat-scroll:hover::-webkit-scrollbar-thumb,
+.chat-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--border);
 }
 .chat-header-card {
   position: sticky;
