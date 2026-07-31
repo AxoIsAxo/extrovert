@@ -1,7 +1,7 @@
 'use strict';
 
 const express = require('express');
-const { getUserPresence } = require('../webrtc-signaling');
+const { getUserPresence, sendDmEvent } = require('../webrtc-signaling');
 const {
   db, getUserByUsername, getUserById, areMutualFollowers,
   sendMessage, getConversations, getMessages, markConversationRead,
@@ -163,8 +163,16 @@ router.post('/:username/send', (req, res) => {
   if (body) {
     const msgId = sendMessage(user.id, other.id, body, keyForSender, keyForRecipient, proto, senderCiphertext);
     createNotification({ userId: other.id, type: 'message', actorId: user.id });
+    const msg = db.prepare(`SELECT id, from_id, body, created_at, key_for_sender, key_for_recipient, proto, sender_ciphertext FROM messages WHERE id = ?`).get(msgId);
+    // Live-deliver the ciphertext to the recipient's open tab(s).
+    const senderId = getOlmIdentity(user.id);
+    sendDmEvent(other.username, {
+      message: msg,
+      sender_curve: senderId ? senderId.identity_key : null,
+      from_username: user.username,
+      from_display: user.display_name,
+    });
     if (req.xhr) {
-      const msg = db.prepare(`SELECT id, from_id, body, created_at, key_for_sender, key_for_recipient, proto, sender_ciphertext FROM messages WHERE id = ?`).get(msgId);
       return res.json({ message: msg });
     }
   }

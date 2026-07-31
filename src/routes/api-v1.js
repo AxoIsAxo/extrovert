@@ -12,7 +12,7 @@ const { canView } = require('../network');
 const feed = require('../feed');
 const { requireApiAuth, clientAppAuth, generateToken, VALID_SCOPES } = require('../api-auth');
 const { signIdToken, ISSUER } = require('../oidc');
-const { getOnlineUsers, getUserPresence } = require('../webrtc-signaling');
+const { getOnlineUsers, getUserPresence, sendDmEvent } = require('../webrtc-signaling');
 const { onNotification } = require('../notif-broadcaster');
 const dm = require('../dm');
 
@@ -1205,6 +1205,14 @@ router.post('/conversations/:username/messages', requireApiAuth('write:direct'),
   db.createNotification({ userId: other.id, type: 'message', actorId: req.apiUser.id });
 
   const msg = db.db.prepare(`SELECT id, from_id, to_id, body, created_at, key_for_sender, key_for_recipient, proto, sender_ciphertext FROM messages WHERE id = ?`).get(msgId);
+  const senderId = db.getOlmIdentity(req.apiUser.id);
+  const apiUserRow = db.db.prepare(`SELECT username, display_name FROM users WHERE id = ?`).get(req.apiUser.id);
+  sendDmEvent(other.username, {
+    message: msg,
+    sender_curve: senderId ? senderId.identity_key : null,
+    from_username: apiUserRow.username,
+    from_display: apiUserRow.display_name,
+  });
 
   res.status(201).json({
     data: {

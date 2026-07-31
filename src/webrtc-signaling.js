@@ -453,4 +453,9 @@ function getUserPresence(username) {
   return { online: false, in_call: false };
 }
 
-module.exports = { initSignaling, getOnlineUsers, getUserPresence, getVoiceChannelMembers };
+// Push a new DM (ciphertext only) to the recipient's live WebSocket connection.
+function sendDmEvent(toUsername, payload) {
+  return sendToUser(toUsername, Object.assign({ type: 'new_dm' }, payload));
+}
+
+module.exports = { initSignaling, getOnlineUsers, getUserPresence, getVoiceChannelMembers, sendDmEvent };

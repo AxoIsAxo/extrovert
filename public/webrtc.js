@@ -166,6 +166,10 @@
         emit('user_left_channel', msg.channel_id, msg.username);
         break;
 
+      case 'new_dm':
+        emit('new_dm', msg);
+        break;
+
       case 'error':
         emit('error', msg.message);
         break;

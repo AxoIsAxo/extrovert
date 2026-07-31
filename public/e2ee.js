@@ -790,9 +790,52 @@
     setTimeout(function () { el.style.display = 'none'; }, 6000);
   }
 
+  function addLiveIncomingMsg(m, otherIdStr, senderCurve) {
+    var container = document.querySelector('.chat-messages');
+    if (!container) return;
+    var div = document.createElement('div');
+    div.className = 'chat-msg';
+    var bubble = document.createElement('div');
+    bubble.className = 'chat-bubble';
+    div.appendChild(bubble);
+    var time = document.createElement('div');
+    time.className = 'muted';
+    time.style.cssText = 'font-size:0.7rem;padding:0 4px';
+    time.textContent = window.relTime ? window.relTime(m.created_at) : new Date(m.created_at).toLocaleString();
+    div.appendChild(time);
+    container.appendChild(div);
+
+    var proto = m.proto || 'rsa';
+    var decryptP;
+    if (proto === 'olm') {
+      decryptP = decryptOlm({ body: m.body, sender_ciphertext: m.sender_ciphertext }, false, otherIdStr, senderCurve);
+    } else {
+      var keyForDecrypt = m.key_for_recipient;
+      decryptP = keyForDecrypt ? decryptLegacyRSA(m.body, keyForDecrypt) : Promise.reject(new Error('no key'));
+    }
+    decryptP.then(function (plain) {
+      bubble.textContent = plain;
+    }).catch(function () {
+      bubble.textContent = '[unable to decrypt]';
+    });
+    container.scrollTop = container.scrollHeight;
+  }
+
+  // Live DM delivery over the signaling WebSocket.
+  function initLiveUpdates(recipientId, otherIdStr, senderCurve) {
+    if (!window.ExtrovertCall || !window.ExtrovertCall.on) return;
+    window.ExtrovertCall.on('new_dm', function (data) {
+      var m = data.message;
+      if (!m || String(m.from_id) !== String(recipientId)) return;
+      addLiveIncomingMsg(m, otherIdStr, data.sender_curve || senderCurve);
+    });
+  }
+
   function initChatHandlers(recipientId, otherIdStr, otherUsername, recipientCurve) {
     var sendForm = document.querySelector('.chat-form');
     if (!sendForm) return;
+
+    initLiveUpdates(recipientId, otherIdStr, recipientCurve);
 
     sendForm.addEventListener('submit', function (e) {
       e.stopImmediatePropagation();
