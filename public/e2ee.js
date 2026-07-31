@@ -996,12 +996,26 @@
   }
 
   // ---- Main ----
+  // Background key setup on every authenticated page (not just chats/rooms), so
+  // IndexedDB is populated right after login and no tab ever needs a prompt.
+  function prewarm() {
+    if (document.querySelector('form[action^="/login"]')) return; // login page
+    if (document.querySelector('form[action^="/register"]')) return; // register page
+    if (!document.querySelector('meta[name="csrf-token"]')) return; // not logged in
+    initOlm().then(function () {
+      return ensureReady({ onNeedsPassword: function () {} });
+    }).catch(function () {});
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     interceptLoginForm();
     interceptRegisterForm();
 
     var sendForm = document.querySelector('.chat-form');
-    if (!sendForm) return; // not a chat page — login/register hooks already attached
+    if (!sendForm) {
+      prewarm();
+      return; // not a chat page — login/register hooks + background setup attached
+    }
 
     var otherUsername = (document.querySelector('h2') || {}).textContent.trim() || '';
     var recipientId = sendForm.getAttribute('data-recipient') || '';
