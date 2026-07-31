@@ -758,6 +758,7 @@
 
   // ---- Decrypt messages already rendered in the DOM ----
   function decryptExistingMessages(otherIdStr, recipientCurve) {
+    var pending = [];
     document.querySelectorAll('.chat-msg').forEach(function (el) {
       var bubble = el.querySelector('.chat-bubble');
       if (!bubble || !bubble.childNodes.length) return;
@@ -770,27 +771,33 @@
 
       if (proto === 'olm') {
         var msg = { body: body, sender_ciphertext: senderCt };
-        decryptOlm(msg, isOwn, otherIdStr, recipientCurve).then(function (plain) {
+        pending.push(decryptOlm(msg, isOwn, otherIdStr, recipientCurve).then(function (plain) {
           bubble.textContent = plain;
         }).catch(function (err) {
           console.error('DM decrypt failed', isOwn ? 'own' : 'incoming', 'msg', el.getAttribute('data-msg-id'), err && err.message);
           blobFail(bubble);
-        });
+        }));
         return;
       }
       var keyForDecrypt = isOwn ? keySender : keyRecipient;
       if (body && keyForDecrypt) {
-        decryptLegacyRSA(body, keyForDecrypt).then(function (plain) {
+        pending.push(decryptLegacyRSA(body, keyForDecrypt).then(function (plain) {
           bubble.innerHTML = '';
           bubble.appendChild(document.createTextNode(plain));
-        }).catch(function () {});
+        }).catch(function () {}));
       }
     });
+    return Promise.all(pending);
   }
 
   function blobFail(bubble) {
     if (bubble.textContent === '[unable to decrypt]') return;
     bubble.textContent = '[unable to decrypt]';
+  }
+
+  function scrollChatBottom() {
+    var scroller = document.querySelector('.chat-scroll');
+    if (scroller) scroller.scrollTop = scroller.scrollHeight;
   }
 
   function addChatMsg(container, msg) {
@@ -811,7 +818,7 @@
     time.textContent = window.relTime ? window.relTime(msg.created_at) : new Date(msg.created_at).toLocaleString();
     div.appendChild(time);
     container.appendChild(div);
-    container.scrollTop = container.scrollHeight;
+    scrollChatBottom();
   }
 
   // Render an outgoing encrypted message with the known plaintext (the server
@@ -831,7 +838,7 @@
     time.textContent = window.relTime ? window.relTime(msg.created_at) : new Date(msg.created_at).toLocaleString();
     div.appendChild(time);
     container.appendChild(div);
-    container.scrollTop = container.scrollHeight;
+    scrollChatBottom();
   }
 
   function esc(s) {
@@ -891,7 +898,7 @@
     }).catch(function () {
       bubble.textContent = '[unable to decrypt]';
     });
-    container.scrollTop = container.scrollHeight;
+    scrollChatBottom();
   }
 
   // Live DM delivery over the signaling WebSocket. The listener is registered as
@@ -1184,6 +1191,8 @@
     var recipientCurve = sendForm.getAttribute('data-recipient-curve') || '';
     var otherIdStr = String(recipientId);
 
+    scrollChatBottom();
+
     initLiveBuffer(recipientId);
 
     initOlm().then(function () {
@@ -1199,7 +1208,7 @@
   });
 
   function finishChatInit(recipientId, recipientCurve, otherIdStr, otherUsername) {
-    decryptExistingMessages(otherIdStr, recipientCurve);
+    decryptExistingMessages(otherIdStr, recipientCurve).then(scrollChatBottom);
     renderSafetyNumber(otherUsername);
     initChatHandlers(recipientId, otherIdStr, otherUsername, recipientCurve);
   }
