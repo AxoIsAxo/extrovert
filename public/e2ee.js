@@ -37,6 +37,10 @@
   var sessions = {};           // otherUserId (string) -> Olm.Session (bidirectional)
   var selfOutbound = null;     // Olm.Session (to self, encrypts own copies)
   var selfInbound = null;      // Olm.Session (from self, decrypts own copies)
+  // Stable baseline pickle of selfInbound (its state at creation). We always
+  // persist THIS, never the advanced state — otherwise the ratchet moves past
+  // history and old sent messages become undecryptable after a reload.
+  var selfInboundBaseline = null;
   var kek = null;              // transient password-derived key (recovery only)
   var legacyPrivateKey = null; // RSA key for decrypting old proto='rsa' messages
 
@@ -182,6 +186,33 @@
     });
   }
 
+  // --- Session baselines ---
+  // The persisted per-conversation session advances its receiving chain as it
+  // decrypts, so after a send + reload it can no longer re-decrypt history. We
+  // also persist a BASELINE copy (state at creation) and use it to decrypt stored
+  // messages; the live session stays for sending + live incoming messages.
+  var sessionBaselines = {}; // idStr -> Olm.Session (recreated from baseline)
+
+  function saveSessionBaseline(idStr, session) {
+    sessionBaselines[idStr] = session;
+    return encryptWithKd(session.pickle(PICKLE_KEY)).then(function (enc) {
+      return idbSet(STORE_OLM, 'sessionBase:' + idStr, enc);
+    });
+  }
+
+  function loadSessionBaseline(idStr) {
+    if (sessionBaselines[idStr]) return Promise.resolve(sessionBaselines[idStr]);
+    return idbGet(STORE_OLM, 'sessionBase:' + idStr).then(function (enc) {
+      if (!enc) return null;
+      return decryptWithKd(enc).then(function (pickle) {
+        var s = new Olm.Session();
+        s.unpickle(PICKLE_KEY, pickle);
+        sessionBaselines[idStr] = s;
+        return s;
+      });
+    });
+  }
+
   function loadSelfSessions() {
     function loadOne(storeKey) {
       return idbGet(STORE_OLM, storeKey).then(function (enc) {
@@ -195,14 +226,22 @@
     }
     return Promise.all([
       selfOutbound ? Promise.resolve(selfOutbound) : loadOne('selfOutbound').then(function (s) { selfOutbound = s; }),
-      selfInbound ? Promise.resolve(selfInbound) : loadOne('selfInbound').then(function (s) { selfInbound = s; }),
+      selfInbound ? Promise.resolve(selfInbound) : loadOne('selfInbound').then(function (s) {
+        selfInbound = s;
+        // The stored selfInbound IS the baseline: restore it so we can re-derive
+        // the whole history ratchet. (Re-encode from the same pickle.)
+        selfInboundBaseline = selfInbound.pickle(PICKLE_KEY);
+        return s;
+      }),
     ]);
   }
 
   function saveSelfSessions() {
     var ops = [];
     if (selfOutbound) ops.push(encryptWithKd(selfOutbound.pickle(PICKLE_KEY)).then(function (e) { return idbSet(STORE_OLM, 'selfOutbound', e); }));
-    if (selfInbound) ops.push(encryptWithKd(selfInbound.pickle(PICKLE_KEY)).then(function (e) { return idbSet(STORE_OLM, 'selfInbound', e); }));
+    // Persist the BASELINE inbound pickle, never the advanced in-memory state.
+    var inboundPickle = selfInboundBaseline || (selfInbound ? selfInbound.pickle(PICKLE_KEY) : null);
+    if (inboundPickle) ops.push(encryptWithKd(inboundPickle).then(function (e) { return idbSet(STORE_OLM, 'selfInbound', e); }));
     return Promise.all(ops);
   }
 
@@ -260,9 +299,10 @@
     return fetch('/chats/' + encodeURIComponent(otherUsername) + '/bundle', { credentials: 'same-origin' }).then(function (r) { return r.json(); });
   }
 
-  // Outgoing session (sender -> recipient).
+  // Outgoing session (sender -> recipient). Always resolves a Session.
   function getOrCreateOutboundSession(otherId, otherIdStr, otherUsername) {
-    return sessions[otherIdStr] || loadSession(otherIdStr).then(function (s) { return s || null; }).then(function (existing) {
+    if (sessions[otherIdStr]) return Promise.resolve(sessions[otherIdStr]);
+    return loadSession(otherIdStr).then(function (s) { return s || null; }).then(function (existing) {
       if (existing) return existing;
       return fetchBundle(otherUsername).then(function (bundle) {
         if (!bundle.identity_key || (!bundle.one_time_key && !bundle.fallback_key)) {
@@ -271,7 +311,9 @@
         var theirOtk = bundle.one_time_key ? bundle.one_time_key.public_key : bundle.fallback_key;
         var s = new Olm.Session();
         s.create_outbound(account, bundle.identity_key, theirOtk);
-        return saveSession(otherIdStr, s).then(function () { return s; });
+        return saveSessionBaseline(otherIdStr, s).then(function () {
+          return saveSession(otherIdStr, s);
+        }).then(function () { return s; });
       });
     });
   }
@@ -291,6 +333,7 @@
       selfInbound = new Olm.Session();
       selfInbound.create_inbound(account, initMsg.body);
       account.remove_one_time_keys(selfInbound);
+      selfInboundBaseline = selfInbound.pickle(PICKLE_KEY);
       return saveSelfSessions().then(function () { return saveAccount(); });
     });
   }
@@ -323,14 +366,20 @@
         return selfInbound.decrypt(env.t, env.b);
       });
     }
-    return loadSession(otherIdStr).then(function (s) {
-      var e = JSON.parse(msg.body);
-      if (s) return s.decrypt(e.t, e.b);
+    // Incoming messages always decrypt through the baseline (creation-state)
+    // session, so history and live messages are readable regardless of how far
+    // the live session's ratchet has advanced. The baseline chain re-derives the
+    // full history in order on every reload.
+    var e = JSON.parse(msg.body);
+    return loadSessionBaseline(otherIdStr).then(function (base) {
+      if (base) return base.decrypt(e.t, e.b);
       if (e.t !== 0) throw new Error('No session for sender and message is not a PreKey.');
       if (!theirCurve25519) throw new Error('Missing sender identity key.');
       var ns = new Olm.Session();
       ns.create_inbound_from(account, theirCurve25519, e.b);
-      return saveSession(otherIdStr, ns).then(function () { return ns.decrypt(e.t, e.b); });
+      return saveSessionBaseline(otherIdStr, ns).then(function () {
+        return saveSession(otherIdStr, ns);
+      }).then(function () { return ns.decrypt(e.t, e.b); });
     });
   }
 
@@ -567,7 +616,8 @@
   // Get-or-create a 1:1 Olm session with a room member (used to wrap group keys).
   function getOrCreateRoomOutboundSession(roomId, otherId, otherUsername) {
     var otherIdStr = String(otherId);
-    return sessions[otherIdStr] || loadSession(otherIdStr).then(function (s) { return s || null; }).then(function (existing) {
+    if (sessions[otherIdStr]) return Promise.resolve(sessions[otherIdStr]);
+    return loadSession(otherIdStr).then(function (s) { return s || null; }).then(function (existing) {
       if (existing) return existing;
       return fetchRoomBundle(roomId, otherUsername).then(function (bundle) {
         if (!bundle.identity_key || (!bundle.one_time_key && !bundle.fallback_key)) {
@@ -576,7 +626,9 @@
         var theirOtk = bundle.one_time_key ? bundle.one_time_key.public_key : bundle.fallback_key;
         var s = new Olm.Session();
         s.create_outbound(account, bundle.identity_key, theirOtk);
-        return saveSession(otherIdStr, s).then(function () { return s; });
+        return saveSessionBaseline(otherIdStr, s).then(function () {
+          return saveSession(otherIdStr, s);
+        }).then(function () { return s; });
       });
     });
   }
@@ -720,7 +772,8 @@
         var msg = { body: body, sender_ciphertext: senderCt };
         decryptOlm(msg, isOwn, otherIdStr, recipientCurve).then(function (plain) {
           bubble.textContent = plain;
-        }).catch(function () {
+        }).catch(function (err) {
+          console.error('DM decrypt failed', isOwn ? 'own' : 'incoming', 'msg', el.getAttribute('data-msg-id'), err && err.message);
           blobFail(bubble);
         });
         return;
@@ -751,6 +804,26 @@
     } else {
       bubble.appendChild(document.createTextNode(msg.body));
     }
+    div.appendChild(bubble);
+    var time = document.createElement('div');
+    time.className = 'muted';
+    time.style.cssText = 'font-size:0.7rem;padding:0 4px';
+    time.textContent = window.relTime ? window.relTime(msg.created_at) : new Date(msg.created_at).toLocaleString();
+    div.appendChild(time);
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  // Render an outgoing encrypted message with the known plaintext (the server
+  // returns ciphertext, so we must not display msg.body for olm messages).
+  function addOwnMsg(plaintext, msg) {
+    var container = document.querySelector('.chat-messages');
+    if (!container) return;
+    var div = document.createElement('div');
+    div.className = 'chat-msg own';
+    var bubble = document.createElement('div');
+    bubble.className = 'chat-bubble';
+    bubble.textContent = plaintext;
     div.appendChild(bubble);
     var time = document.createElement('div');
     time.className = 'muted';
@@ -892,7 +965,7 @@
           body: usp,
         }).then(function (r) { return r.json(); }).then(function (data) {
           if (data.error) { input.disabled = false; return; }
-          if (data.message) addChatMsg(document.querySelector('.chat-messages'), data.message);
+          if (data.message) addOwnMsg(plaintext, data.message);
           input.value = '';
           input.disabled = false;
           maybeReplenishPrekeys();

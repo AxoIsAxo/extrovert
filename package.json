@@ -11,7 +11,9 @@
     "test:crypto": "node scripts/crypto-test.js",
     "test:megolm": "node scripts/megolm-room-test.js",
     "test:megolm:integration": "node scripts/megolm-integration-test.js",
-    "test:live-dm": "node scripts/live-dm-test.js"
+    "test:live-dm": "node scripts/live-dm-test.js",
+    "test:self-session": "node scripts/self-session-test.js",
+    "test:session-reload": "node scripts/session-reload-test.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
