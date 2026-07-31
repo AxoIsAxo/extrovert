@@ -256,15 +256,15 @@
     }).catch(function () {});
   }
 
-  function fetchBundle(otherId) {
-    return fetch('/chats/' + encodeURIComponent(otherId) + '/bundle', { credentials: 'same-origin' }).then(function (r) { return r.json(); });
+  function fetchBundle(otherUsername) {
+    return fetch('/chats/' + encodeURIComponent(otherUsername) + '/bundle', { credentials: 'same-origin' }).then(function (r) { return r.json(); });
   }
 
   // Outgoing session (sender -> recipient).
-  function getOrCreateOutboundSession(otherId, otherIdStr) {
+  function getOrCreateOutboundSession(otherId, otherIdStr, otherUsername) {
     return sessions[otherIdStr] || loadSession(otherIdStr).then(function (s) { return s || null; }).then(function (existing) {
       if (existing) return existing;
-      return fetchBundle(otherId).then(function (bundle) {
+      return fetchBundle(otherUsername).then(function (bundle) {
         if (!bundle.identity_key || (!bundle.one_time_key && !bundle.fallback_key)) {
           throw new Error('Recipient has no encryption keys yet.');
         }
@@ -295,9 +295,9 @@
     });
   }
 
-  function encryptOlm(plaintext, otherId, otherIdStr) {
+  function encryptOlm(plaintext, otherId, otherIdStr, otherUsername) {
     var out;
-    return getOrCreateOutboundSession(otherId, otherIdStr).then(function (s) {
+    return getOrCreateOutboundSession(otherId, otherIdStr, otherUsername).then(function (s) {
       out = s;
       return ensureSelfSessions();
     }).then(function () {
@@ -819,7 +819,7 @@
       }
 
       input.disabled = true;
-      encryptOlm(plaintext, recipientId, otherIdStr).then(function (result) {
+      encryptOlm(plaintext, recipientId, otherIdStr, otherUsername).then(function (result) {
         var usp = new URLSearchParams();
         usp.set('proto', 'olm');
         usp.set('body', result.recipientCipher);
@@ -850,11 +850,11 @@
       var editBtn = e.target.closest('.edit-msg-btn');
       if (!editBtn) return;
       e.preventDefault();
-      editMessageInline(editBtn, recipientId, otherIdStr);
+      editMessageInline(editBtn, recipientId, otherIdStr, otherUsername);
     });
   }
 
-  function editMessageInline(editBtn, recipientId, otherIdStr) {
+  function editMessageInline(editBtn, recipientId, otherIdStr, otherUsername) {
     var msgDiv = editBtn.closest('.chat-msg');
     if (!msgDiv) return;
     var proto = msgDiv.getAttribute('data-proto') || 'rsa';
@@ -920,7 +920,7 @@
       var req = { proto: proto, body: '', sender_ciphertext: '' };
       var cryptoP;
       if (proto === 'olm') {
-        cryptoP = encryptOlm(val, recipientId, otherIdStr).then(function (r) {
+        cryptoP = encryptOlm(val, recipientId, otherIdStr, otherUsername).then(function (r) {
           req.body = r.recipientCipher;
           req.sender_ciphertext = r.senderCipher;
         });
@@ -1044,7 +1044,7 @@
       return; // not a chat page — login/register hooks + background setup attached
     }
 
-    var otherUsername = (document.querySelector('h2') || {}).textContent.trim() || '';
+    var otherUsername = sendForm.getAttribute('data-recipient-username') || '';
     var recipientId = sendForm.getAttribute('data-recipient') || '';
     var recipientCurve = sendForm.getAttribute('data-recipient-curve') || '';
     var otherIdStr = String(recipientId);
