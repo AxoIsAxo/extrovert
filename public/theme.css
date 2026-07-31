@@ -188,8 +188,10 @@ h4 { font-size: var(--fs-lg); font-family: var(--font-body); font-weight: 700; l
 
 .feed-layout {
   display: grid;
-  grid-template-columns: 1fr 240px 680px 240px 1fr;
+  grid-template-columns: 1fr 240px minmax(0, 680px) 240px 1fr;
   gap: 24px;
+  max-width: 1320px;
+  margin: 0 auto;
   padding: 36px 24px 96px;
 }
 .feed-main { grid-column: 3; width: 680px; }
