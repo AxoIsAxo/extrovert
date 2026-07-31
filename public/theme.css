@@ -489,6 +489,31 @@ label { display: block; font-size: var(--fs-sm); color: var(--text-secondary); m
 a.conv-row { display: flex; gap: 12px; align-items: center; text-decoration: none; color: inherit; padding: 13px 0; border-bottom: 1px solid var(--border-soft); transition: color var(--t-fast) var(--ease-soft); }
 a.conv-row:hover { color: var(--primary); }
 
+/* Chat page fills the viewport: card pinned on top (messages scroll under it),
+   message list scrolls independently, send form pinned at the bottom. */
+.chat-wrap {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 62px);
+  height: calc(100dvh - 62px);
+  overflow: hidden;
+  padding: 0 20px 16px;
+}
+.chat-scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+}
+.chat-header-card {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--surface);
+}
+.chat-wrap .chat-form,
+.chat-wrap .chat-send-error {
+  flex: 0 0 auto;
+}
 .chat-messages { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .chat-msg { display: flex; flex-direction: column; max-width: 75%; }
 .chat-msg.own { align-self: flex-end; align-items: flex-end; }
@@ -782,6 +807,7 @@ hr { border: none; border-top: 1px solid var(--border-soft); margin: 24px 0; }
   .nav a, .nav button { font-size: var(--fs-xs); padding: 7px 9px; gap: 4px; }
   .nav .nav-text { display: none; }
   .wrap { padding: 22px 14px 84px; }
+  .chat-wrap { padding: 0 12px 12px; }
   .feed-layout { padding: 22px 14px 84px; gap: 12px; }
   .card { padding: 16px; border-radius: var(--radius); }
   .post { padding: 16px; border-radius: var(--radius); }

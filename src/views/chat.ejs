@@ -1,5 +1,6 @@
 <%- include('partials/header') %>
-  <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+  <div class="chat-scroll">
+  <div class="card chat-header-card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
     <div>
       <a href="/chats" class="muted" style="font-size:0.85rem;display:inline-flex;align-items:center;gap:4px"><%- include('partials/icon', { name: 'arrowLeft', size: 13 }) %> Chats</a>
       <h2 style="margin:2px 0 0;font-size:var(--fs-lg)"><%= other.display_name %></h2>
@@ -42,6 +43,7 @@
         </div>
       <% }) %>
     <% } %>
+  </div>
   </div>
 
   <form class="chat-form" method="post" action="/chats/<%= other.username %>/send"

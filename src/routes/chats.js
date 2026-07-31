@@ -138,7 +138,7 @@ router.get('/:username', (req, res) => {
   const recipientPubKey = getPublicKey(other.id);
   const recipientCurve = getOlmIdentity(other.id);
   markConversationRead(user.id, other.id);
-  res.render('chat', { other, messages, recipientPubKey, recipientCurve });
+  res.render('chat', { other, messages, recipientPubKey, recipientCurve, wrapClass: 'chat-wrap' });
 });
 
 // Send a message.
