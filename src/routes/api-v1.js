@@ -1162,7 +1162,7 @@ router.get('/conversations', requireApiAuth('read:direct'), (req, res) => {
       last_message: c.last_message,
       last_at: c.last_at,
       unread: c.unread,
-      last_from: c.last_from,
+      last_from: c.last_from != null ? String(c.last_from) : null,
       last_proto: c.last_proto,
       last_key_for_sender: c.last_key_for_sender,
       last_key_for_recipient: c.last_key_for_recipient,
