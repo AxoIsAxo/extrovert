@@ -943,7 +943,7 @@
         formData.delete('sender_ciphertext');
         fetch(sendForm.getAttribute('action'), {
           method: 'POST', credentials: 'same-origin',
-          headers: { 'X-CSRF-Token': csrfToken() },
+          headers: { 'X-CSRF-Token': csrfToken(), 'X-Requested-With': 'XMLHttpRequest' },
           body: formData,
         }).then(function (r) { return r.json(); }).then(function (data) {
           if (data.message) addChatMsg(document.querySelector('.chat-messages'), data.message);
@@ -961,7 +961,7 @@
         usp.set('sender_ciphertext', result.senderCipher);
         fetch(sendForm.getAttribute('action'), {
           method: 'POST', credentials: 'same-origin',
-          headers: { 'X-CSRF-Token': csrfToken() },
+          headers: { 'X-CSRF-Token': csrfToken(), 'X-Requested-With': 'XMLHttpRequest' },
           body: usp,
         }).then(function (r) { return r.json(); }).then(function (data) {
           if (data.error) { input.disabled = false; return; }
@@ -1042,7 +1042,7 @@
         saveBtn.textContent = 'Saving…';
         fetch(action, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf, 'X-Requested-With': 'XMLHttpRequest' },
           body: 'body=' + encodeURIComponent(val) + '&_csrf=' + encodeURIComponent(csrf),
         }).then(function (r) { return r.json(); }).then(function (d) {
           if (d.ok) { restore(val); } else { location.reload(); }
@@ -1069,7 +1069,7 @@
           '&_csrf=' + encodeURIComponent(csrf);
         return fetch(action, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf, 'X-Requested-With': 'XMLHttpRequest' },
           body: params,
         }).then(function (r) { return r.json(); }).then(function (d) {
           if (d.ok || d.message) { restore(val); } else { location.reload(); }
