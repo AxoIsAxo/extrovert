@@ -1,5 +1,7 @@
 # Overview & concepts
 
+> **Where this wiki lives:** the same pages you're reading are served inside the app at `/docs` (from Settings → Documentation). The repository copies are in `docs/` with the rest of the source.
+
 ## What Extrovert is
 
 Extrovert is a self-hosted social network built on a deliberately simple idea: **your feed only ever contains content from people in your social graph** — you, the people you follow (your *friends*), and the people they follow (your *friends-of-friends*). Everyone else is invisible to you, and you are invisible to them.

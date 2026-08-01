@@ -271,6 +271,9 @@ app.use('/.well-known', require('./routes/well-known'));
 // Developer docs (Swagger UI + OpenAPI spec).
 app.use('/developers', require('./routes/docs'));
 
+// In-app wiki (markdown docs rendered at /docs).
+app.use('/docs', require('./routes/wiki'));
+
 // Redirect for discoverability.
 app.get('/api/v1/openapi.json', (req, res) => res.redirect('/developers/openapi.json'));
 app.get('/api/v1/docs', (req, res) => res.redirect('/developers/docs'));

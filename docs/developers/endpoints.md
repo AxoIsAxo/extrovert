@@ -180,4 +180,4 @@ The full HTML surface for reference — all require login and CSRF:
 | Push | `GET /push/vapid-public`, `POST /push/subscribe|unsubscribe`, `POST /push/cancel-pending` (no auth, token-gated) |
 | Admin | `GET /admin`, `POST /admin/ban|unban|delete|make-admin|remove-referral/:id`, `POST /admin/rooms/:id/delete`, `GET/POST /admin/reports*`, `GET/POST /admin/announcement*` |
 | Stickers | `GET /stickers/manage`, `POST /stickers/upload|add`, `GET /stickers/mine` |
-| Docs | `GET /developers/docs`, `GET /developers/openapi.json` |
+| Docs | `GET /docs` and `GET /docs/*` (in-app wiki), `GET /developers/docs` (Swagger UI), `GET /developers/openapi.json` (OpenAPI 3.1) |

@@ -1,0 +1,31 @@
+<%- include('partials/header') %>
+  <div class="docs-layout">
+    <aside class="docs-nav" aria-label="Documentation">
+      <a class="docs-nav-brand" href="/docs"><%- include('partials/rings', { size: 18 }) %> Docs</a>
+      <% nav.forEach(group => { %>
+        <div class="docs-group">
+          <div class="docs-group-title"><%= group.title %></div>
+          <% group.pages.forEach(page => { %>
+            <a class="docs-nav-link<%= page.url === currentUrl ? ' active' : '' %>" href="/docs<%= page.url %>"><%= page.title %></a>
+          <% }) %>
+        </div>
+      <% }) %>
+      <div class="docs-group">
+        <div class="docs-group-title">API</div>
+        <a class="docs-nav-link" href="/developers/docs">OpenAPI reference (Swagger UI)</a>
+      </div>
+    </aside>
+    <article class="docs-content">
+      <header class="docs-head">
+        <h1><%= pageTitle %></h1>
+        <% if (currentGroup) { %><span class="docs-crumb"><%= currentGroup %> · <%= currentPageTitle %></span><% } %>
+      </header>
+      <div class="docs-body">
+        <%- contentHtml %>
+      </div>
+      <footer class="docs-foot">
+        <a href="/developers/docs">Machine-readable API reference (Swagger UI) &rarr;</a>
+      </footer>
+    </article>
+  </div>
+<%- include('partials/footer') %>

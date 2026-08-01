@@ -7,6 +7,8 @@ const spec = {
     version: '1.0.0',
     description: `Public REST API for [Extrovert](https://extrovert.redforged.eu), a social network where content is discovered through your network of friends and friends-of-friends.
 
+> Full documentation, including every endpoint's request/response details, E2EE flows, and usage guides, lives in the [in-app wiki](/docs/developers/api-overview).
+
 ## Authentication
 
 This API implements **OAuth 2.0** (Authorization Code flow with PKCE) and **OpenID Connect** for third-party authentication.
@@ -235,6 +237,32 @@ All API body fields use **millisecond Unix timestamps** (e.g. "created_at", "upd
         ],
         responses: {
           '302': { description: 'Redirect to login or authorize page' },
+          '401': { description: 'Unknown client_id' },
+          '400': { description: 'Unsupported response_type or redirect_uri mismatch' },
+        },
+      },
+      post: {
+        summary: 'OAuth authorization consent (form submission from the consent page)',
+        tags: ['OAuth'],
+        security: [{ sessionAuth: [] }],
+        requestBody: {
+          content: { 'application/x-www-form-urlencoded': { schema: {
+            type: 'object',
+            required: ['approve'],
+            properties: {
+              client_id: { type: 'string' },
+              redirect_uri: { type: 'string' },
+              scope: { type: 'string' },
+              state: { type: 'string' },
+              nonce: { type: 'string' },
+              code_challenge: { type: 'string' },
+              code_challenge_method: { type: 'string' },
+              approve: { type: 'string', description: '"yes" to approve; anything else denies and redirects with error=access_denied' },
+            },
+          }}},
+        },
+        responses: {
+          '302': { description: 'Redirect to redirect_uri with ?code=... or ?error=access_denied' },
         },
       },
     },
@@ -597,15 +625,15 @@ All API body fields use **millisecond Unix timestamps** (e.g. "created_at", "upd
       get: {
         summary: 'Get online presence of your network',
         tags: ['Calls'],
-        security: [{ oauth2: ['read'] }],
-        responses: { '200': { description: 'List of online users in your network' } },
+        security: [{ oauth2: [] }],
+        responses: { '200': { description: 'List of online users in your network (mutual followers only)' } },
       },
     },
     '/api/v1/calls/presence/{username}': {
       get: {
         summary: 'Get presence of a specific user',
         tags: ['Calls'],
-        security: [{ oauth2: ['read'] }],
+        security: [{ oauth2: [] }],
         parameters: [{ name: 'username', in: 'path', required: true, schema: { type: 'string' } }],
         responses: { '200': { description: 'Presence object' } },
       },
@@ -614,7 +642,7 @@ All API body fields use **millisecond Unix timestamps** (e.g. "created_at", "upd
       get: {
         summary: 'Get the VAPID public key for Web Push subscription',
         tags: ['Push'],
-        security: [{ oauth2: ['read'] }],
+        security: [{ oauth2: [] }],
         responses: { '200': { description: '{ publicKey: string }' } },
       },
     },
@@ -622,14 +650,14 @@ All API body fields use **millisecond Unix timestamps** (e.g. "created_at", "upd
       post: {
         summary: 'Register a push subscription (device token for FCM/APNs or Web Push endpoint)',
         tags: ['Push'],
-        security: [{ oauth2: ['write'] }],
+        security: [{ oauth2: [] }],
         requestBody: {
           content: { 'application/json': { schema: {
             type: 'object',
             required: ['platform', 'endpoint'],
             properties: {
-              platform: { type: 'string', enum: ['web', 'fcm', 'apns'], description: 'Push provider' },
-              endpoint: { type: 'string', description: 'Push endpoint URL (web) or device token (fcm/apns)' },
+              platform: { type: 'string', enum: ['web', 'fcm', 'apns', 'ws'], description: 'Push provider (ws = built-in WebSocket channel for native clients)' },
+              endpoint: { type: 'string', description: 'Push endpoint URL (web) or device token (fcm/apns/ws)' },
               p256dh: { type: 'string', description: 'Web Push only: client public key' },
               auth:   { type: 'string', description: 'Web Push only: client auth secret' },
             },
@@ -642,7 +670,7 @@ All API body fields use **millisecond Unix timestamps** (e.g. "created_at", "upd
       post: {
         summary: 'Remove a push subscription',
         tags: ['Push'],
-        security: [{ oauth2: ['write'] }],
+        security: [{ oauth2: [] }],
         requestBody: {
           content: { 'application/json': { schema: {
             type: 'object',
@@ -667,6 +695,364 @@ All API body fields use **millisecond Unix timestamps** (e.g. "created_at", "upd
           '200': { description: 'Search results. Accounts are platform-wide; statuses are network-bound.' },
           '400': { description: 'Missing query parameter "q"' },
         },
+      },
+    },
+    '/api/v1/accounts/relationships': {
+      get: {
+        summary: 'Check follow relationships with multiple accounts',
+        tags: ['Accounts'],
+        security: [{ oauth2: ['read'] }],
+        parameters: [{ name: 'id', in: 'query', required: true, schema: { type: 'string' }, description: 'Comma-separated account IDs' }],
+        responses: { '200': { description: 'List of { id, following, followed_by } per account' } },
+      },
+    },
+    '/api/v1/accounts/avatar': {
+      post: {
+        summary: 'Upload a new avatar (multipart, field "avatar")',
+        tags: ['Accounts'],
+        security: [{ oauth2: ['profile'] }],
+        requestBody: {
+          content: { 'multipart/form-data': { schema: {
+            type: 'object',
+            required: ['avatar'],
+            properties: { avatar: { type: 'string', format: 'binary' } },
+          }}},
+        },
+        responses: {
+          '200': { description: 'Updated account with new avatar' },
+          '400': { description: 'No file uploaded or image could not be processed' },
+        },
+      },
+    },
+    '/api/v1/statuses/{id}/comment': {
+      post: {
+        summary: 'Comment on a post',
+        tags: ['Statuses'],
+        security: [{ oauth2: ['write'] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: {
+            type: 'object',
+            required: ['body'],
+            properties: { body: { type: 'string', maxLength: 1000 } },
+          }}},
+        },
+        responses: { '200': { description: 'Created comment' } },
+      },
+    },
+    '/api/v1/notifications/unread_count': {
+      get: {
+        summary: 'Get the number of unread notifications',
+        tags: ['Notifications'],
+        security: [{ oauth2: ['notifications'] }],
+        responses: { '200': { description: '{ count: number }' } },
+      },
+    },
+    '/api/v1/notifications/stream': {
+      get: {
+        summary: 'Server-Sent Events stream of new notifications (event: "notification", heartbeat every 15s)',
+        tags: ['Notifications'],
+        security: [{ oauth2: ['notifications'] }],
+        responses: { '200': { description: 'text/event-stream' } },
+      },
+    },
+    '/api/v1/announcement': {
+      get: {
+        summary: 'Get the server-wide announcement banner (null if none set)',
+        tags: ['General'],
+        security: [{ oauth2: ['read'] }],
+        responses: { '200': { description: '{ body, author_display_name, author_username, updated_at } or null' } },
+      },
+    },
+    '/api/v1/rooms': {
+      get: {
+        summary: 'List rooms you are a member of',
+        tags: ['Rooms'],
+        security: [{ oauth2: ['read'] }],
+        responses: { '200': { description: 'List of rooms' } },
+      },
+    },
+    '/api/v1/rooms/{id}': {
+      get: {
+        summary: 'View a room (channels, members, HTML/CSS)',
+        tags: ['Rooms'],
+        security: [{ oauth2: ['read'] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+        responses: { '200': { description: 'Room object' } },
+      },
+    },
+    '/api/v1/rooms/{id}/channels/{cid}/messages': {
+      get: {
+        summary: 'Fetch messages in a channel (last 50, or older than ?cursor=<message id>)',
+        tags: ['Rooms'],
+        security: [{ oauth2: ['read'] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'integer' } },
+          { name: 'cid', in: 'path', required: true, schema: { type: 'integer' } },
+          { name: 'cursor', in: 'query', schema: { type: 'integer' }, description: 'Message ID; returns messages older than it' },
+        ],
+        responses: { '200': { description: '{ messages: [...], next: id-or-null }' } },
+      },
+      post: {
+        summary: 'Send a room message (must be Megolm-encrypted unless it is a sticker path)',
+        tags: ['Rooms'],
+        security: [{ oauth2: ['write'] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'integer' } },
+          { name: 'cid', in: 'path', required: true, schema: { type: 'integer' } },
+        ],
+        requestBody: {
+          content: { 'application/json': { schema: {
+            type: 'object',
+            properties: {
+              body: { type: 'string', description: 'Sticker path (/uploads/stickers/...) or empty' },
+              proto: { type: 'string', enum: ['megolm'], default: 'megolm' },
+              ciphertext: { type: 'string', maxLength: 20000 },
+              group_session_id: { type: 'string' },
+            },
+          }}},
+        },
+        responses: {
+          '201': { description: '{ id: messageId }' },
+          '400': { description: 'End-to-end encryption required / unknown group session' },
+        },
+      },
+    },
+    '/api/v1/rooms/{id}/session': {
+      post: {
+        summary: 'Publish or refresh your Megolm group session for a room, with encrypted keys per member',
+        tags: ['Rooms'],
+        security: [{ oauth2: ['write'] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+        requestBody: {
+          content: { 'application/json': { schema: {
+            type: 'object',
+            properties: {
+              keys: { type: 'array', items: { type: 'object', properties: {
+                recipient_id: { type: 'integer' },
+                encrypted_key: { type: 'string' },
+              }}},
+              member_ids: { type: 'array', items: { type: 'integer' }, description: 'Members to mark as key recipients' },
+              rotate: { type: 'boolean', description: 'Force session rotation' },
+            },
+          }}},
+        },
+        responses: { '200': { description: '{ session_id }' } },
+      },
+    },
+    '/api/v1/rooms/{id}/session/keys': {
+      get: {
+        summary: 'Get pending Megolm session keys addressed to you',
+        tags: ['Rooms'],
+        security: [{ oauth2: ['read'] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+        responses: { '200': { description: '{ keys: [{ key_id, session_id, room_id, sender_id, encrypted_key }] }' } },
+      },
+    },
+    '/api/v1/rooms/{id}/session/keys/delivered': {
+      post: {
+        summary: 'Mark delivered session keys as received',
+        tags: ['Rooms'],
+        security: [{ oauth2: ['write'] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+        requestBody: {
+          content: { 'application/json': { schema: {
+            type: 'object',
+            properties: { key_ids: { type: 'array', items: { type: 'integer' } } },
+          }}},
+        },
+        responses: { '200': { description: '{ ok: true }' } },
+      },
+    },
+    '/api/v1/rooms/{id}/session/status': {
+      get: {
+        summary: "Which members hold the caller's room session keys",
+        tags: ['Rooms'],
+        security: [{ oauth2: ['read'] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+        responses: { '200': { description: '{ session_id, recipients: [...], empty_keys_for: [...] }' } },
+      },
+    },
+    '/api/v1/rooms/{id}/bundle/{username}': {
+      get: {
+        summary: 'Room-scoped Olm prekey bundle of another member (no mutual-follower requirement)',
+        tags: ['Rooms'],
+        security: [{ oauth2: ['read'] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'integer' } },
+          { name: 'username', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        responses: { '200': { description: '{ identity_key, ed25519_key, fallback_key, one_time_key }' } },
+      },
+    },
+    '/api/v1/conversations': {
+      get: {
+        summary: 'List direct-message conversations (mutual followers only)',
+        tags: ['Direct Messages'],
+        security: [{ oauth2: ['read:direct'] }],
+        responses: { '200': { description: 'List of conversations with last message info' } },
+      },
+    },
+    '/api/v1/conversations/keys': {
+      get: {
+        summary: "Fetch your own legacy RSA public key and encrypted private key",
+        tags: ['Direct Messages'],
+        security: [{ oauth2: ['read:direct'] }],
+        responses: { '200': { description: '{ public_key, encrypted_private_key }' } },
+      },
+      post: {
+        summary: 'Publish or rotate your legacy RSA public key',
+        tags: ['Direct Messages'],
+        security: [{ oauth2: ['write:direct'] }],
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: {
+            type: 'object',
+            required: ['public_key'],
+            properties: {
+              public_key: { type: 'string', maxLength: 5000 },
+              encrypted_private_key: { type: 'string' },
+            },
+          }}},
+        },
+        responses: { '200': { description: '{ ok: true }' } },
+      },
+    },
+    '/api/v1/conversations/prekeys': {
+      post: {
+        summary: 'Publish / refresh your Olm identity, ed25519 key, fallback key, and one-time prekeys (public material only)',
+        tags: ['Direct Messages'],
+        security: [{ oauth2: ['write:direct'] }],
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: {
+            type: 'object',
+            required: ['identity_key', 'ed25519_key'],
+            properties: {
+              identity_key: { type: 'string', maxLength: 5000 },
+              ed25519_key: { type: 'string', maxLength: 5000 },
+              fallback_key: { type: 'string' },
+              one_time_keys: { type: 'array', items: { type: 'object', properties: {
+                id: { type: 'string' },
+                public_key: { type: 'string', maxLength: 5000 },
+              }}},
+              backup: { type: 'string', maxLength: 200000, description: 'Password-encrypted Olm account backup for recovery' },
+            },
+          }}},
+        },
+        responses: { '200': { description: '{ ok: true, available: prekeyCount }' } },
+      },
+    },
+    '/api/v1/conversations/prekeys/backup': {
+      get: {
+        summary: 'Download your password-encrypted Olm account backup',
+        tags: ['Direct Messages'],
+        security: [{ oauth2: ['read:direct'] }],
+        responses: { '200': { description: '{ backup }' } },
+      },
+    },
+    '/api/v1/conversations/prekeys/count': {
+      get: {
+        summary: 'Count your unused one-time prekeys',
+        tags: ['Direct Messages'],
+        security: [{ oauth2: ['read:direct'] }],
+        responses: { '200': { description: '{ available }' } },
+      },
+    },
+    '/api/v1/conversations/{username}': {
+      get: {
+        summary: 'Fetch message history with a user (newest-first, then reversed; ?cursor= for older)',
+        tags: ['Direct Messages'],
+        security: [{ oauth2: ['read:direct'] }],
+        parameters: [
+          { name: 'username', in: 'path', required: true, schema: { type: 'string' } },
+          { name: 'cursor', in: 'query', schema: { type: 'string' } },
+          { name: 'limit', in: 'query', schema: { type: 'integer', default: 50, maximum: 100 } },
+        ],
+        responses: { '200': { description: 'List of messages' } },
+      },
+    },
+    '/api/v1/conversations/{username}/messages': {
+      post: {
+        summary: 'Send a message (must be Olm-encrypted unless it is a sticker path)',
+        tags: ['Direct Messages'],
+        security: [{ oauth2: ['write:direct'] }],
+        parameters: [{ name: 'username', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: {
+            type: 'object',
+            required: ['body', 'sender_ciphertext'],
+            properties: {
+              body: { type: 'string', maxLength: 5000, description: 'Sticker path (/uploads/stickers/...) or empty' },
+              proto: { type: 'string', enum: ['olm', 'rsa'], default: 'olm' },
+              sender_ciphertext: { type: 'string', maxLength: 5000, description: 'Olm payload' },
+              key_for_sender: { type: 'string' },
+              key_for_recipient: { type: 'string' },
+            },
+          }}},
+        },
+        responses: {
+          '201': { description: 'Created message' },
+          '400': { description: 'End-to-end encryption required' },
+        },
+      },
+    },
+    '/api/v1/conversations/{username}/bundle': {
+      get: {
+        summary: "Fetch a recipient's Olm bundle (identity + one claimed one-time prekey, else fallback)",
+        tags: ['Direct Messages'],
+        security: [{ oauth2: ['read:direct'] }],
+        parameters: [{ name: 'username', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: '{ identity_key, ed25519_key, one_time_key, fallback_key }' } },
+      },
+    },
+    '/api/v1/conversations/{username}/safety': {
+      get: {
+        summary: 'Recipient identity keys for safety-number verification',
+        tags: ['Direct Messages'],
+        security: [{ oauth2: ['read:direct'] }],
+        parameters: [{ name: 'username', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: '{ my_ed25519, their_ed25519, my_curve25519, their_curve25519 }' } },
+      },
+    },
+    '/api/v1/conversations/{username}/keys': {
+      get: {
+        summary: "Fetch a user's legacy RSA public key",
+        tags: ['Direct Messages'],
+        security: [{ oauth2: ['read:direct'] }],
+        parameters: [{ name: 'username', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: '{ public_key }' } },
+      },
+    },
+    '/api/v1/messages/{id}': {
+      patch: {
+        summary: 'Edit one of your messages (must be Olm-encrypted unless a sticker path)',
+        tags: ['Direct Messages'],
+        security: [{ oauth2: ['write:direct'] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+        requestBody: {
+          content: { 'application/json': { schema: {
+            type: 'object',
+            required: ['body', 'sender_ciphertext'],
+            properties: {
+              body: { type: 'string', maxLength: 5000 },
+              proto: { type: 'string', enum: ['olm', 'rsa'] },
+              sender_ciphertext: { type: 'string', maxLength: 5000 },
+              key_for_sender: { type: 'string' },
+              key_for_recipient: { type: 'string' },
+            },
+          }}},
+        },
+        responses: { '200': { description: '{ ok: true }' } },
+      },
+      delete: {
+        summary: 'Delete one of your messages',
+        tags: ['Direct Messages'],
+        security: [{ oauth2: ['write:direct'] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+        responses: { '200': { description: '{ ok: true }' } },
       },
     },
   },
@@ -702,8 +1088,8 @@ All API body fields use **millisecond Unix timestamps** (e.g. "created_at", "upd
     },
   },
   externalDocs: {
-    description: 'Getting Started Guide',
-    url: '/developers/docs',
+    description: 'Full documentation wiki (also served in-app at /docs)',
+    url: '/docs/developers/api-overview',
   },
 };
 
