@@ -55,7 +55,6 @@ function rewriteHref(href, relDir) {
   const hashIndex = href.indexOf('#');
   const pathPart = hashIndex === -1 ? href : href.slice(0, hashIndex);
   const fragment = hashIndex === -1 ? '' : href.slice(hashIndex);
-  if (!pathPart.toLowerCase().endsWith('.md')) return null;
   const resolved = path.posix.normalize(path.posix.join(relDir, pathPart));
 
   let target = null;
@@ -124,6 +123,8 @@ function resolveFile(rel) {
   } else {
     candidates.push(path.join(DOCS_ROOT, rel + '.md'), path.join(REPO_ROOT, rel + '.md'));
   }
+  // Non-markdown repo files (LICENSE, …) can be served as-is at /docs/<name>.
+  candidates.push(path.join(DOCS_ROOT, rel), path.join(REPO_ROOT, rel));
   for (const candidate of candidates) {
     if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate;
   }

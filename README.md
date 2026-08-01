@@ -81,4 +81,6 @@ You must set a `SESSION_SECRET` environment variable before the server will star
 
 ## License
 
-Not specified in this repository. See [SECURITY.md](SECURITY.md) for the security audit history.
+Extrovert is free software: you can redistribute it and/or modify it under the terms of the **GNU General Public License, version 3 or any later version** — see [LICENSE](LICENSE) for the full text. It is distributed in the hope that it will be useful, but **without any warranty**; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GPLv3 for details.
+
+The app includes bundled third-party software under their own licenses (e.g. [`@matrix-org/olm`](https://gitlab.matrix.org/matrix-org/olm) under the Apache-2.0 license).
