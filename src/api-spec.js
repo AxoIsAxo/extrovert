@@ -171,7 +171,22 @@ All API body fields use **millisecond Unix timestamps** (e.g. "created_at", "upd
 
 ## Idempotency
 
-\`POST /api/v1/statuses\` supports the \`Idempotency-Key\` header. If the same key is sent within a short window, duplicate creation is prevented and the original response is returned.
+\`POST /api/v1/statuses\` supports the \`Idempotency-Key\` header. If the same key is sent within a short window, duplicate creation is prevented and the original response is returned (with the \`X-Idempotency-Replayed: true\` header).
+
+## Errors
+
+Two error shapes are used:
+
+- **API errors** (\`errorResponse\`) — RFC 9457 problem details:
+  \`\`\`json
+  { "type": "about:blank", "title": "Bad Request", "status": 400, "detail": "body is required for text posts." }
+  \`\`\`
+- **Authentication errors** (missing/invalid/expired token, insufficient scope, banned account) — OAuth-style:
+  \`\`\`json
+  { "error": "unauthorized", "error_description": "The access token has expired. Use the refresh token to get a new one." }
+  \`\`\`
+
+Network-visibility rules: accounts and posts outside your visible set return \`404\` (never \`403\`) so their existence cannot be probed.
 `,
     contact: {
       name: 'Extrovert Admin',
@@ -269,6 +284,7 @@ All API body fields use **millisecond Unix timestamps** (e.g. "created_at", "upd
     '/api/v1/oauth/token': {
       post: {
         summary: 'Exchange authorization code or refresh token',
+        description: 'Authenticate the client by sending `client_id` in the body (or query). `client_secret` is only validated if it is actually sent — public clients using PKCE may omit it.',
         tags: ['OAuth'],
         requestBody: {
           required: true,
@@ -376,8 +392,9 @@ All API body fields use **millisecond Unix timestamps** (e.g. "created_at", "upd
               schema: {
                 type: 'object',
                 properties: {
-                  display_name: { type: 'string' },
-                  bio: { type: 'string' },
+                  display_name: { type: 'string', maxLength: 100 },
+                  bio: { type: 'string', maxLength: 500 },
+                  theme: { type: 'string', enum: ['light', 'dark', 'default'] },
                 },
               },
             },
@@ -461,7 +478,17 @@ All API body fields use **millisecond Unix timestamps** (e.g. "created_at", "upd
                 properties: {
                   type: { type: 'string', enum: ['text', 'photo', 'video', 'repost'] },
                   body: { type: 'string', maxLength: 5000 },
-                  media: { type: 'string', format: 'binary', description: 'Photo/video file for photo/video type' },
+                  media: { type: 'string', format: 'binary', description: 'Photo/video file for photo/video type (max 60 MB, jpg/jpeg/png/gif/webp/mp4/webm/mov)' },
+                  repost_of_id: { type: 'integer', description: 'Post ID to repost (for repost type)' },
+                },
+              },
+            },
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', enum: ['text', 'photo', 'video', 'repost'] },
+                  body: { type: 'string', maxLength: 5000 },
                   repost_of_id: { type: 'integer', description: 'Post ID to repost (for repost type)' },
                 },
               },
@@ -469,11 +496,12 @@ All API body fields use **millisecond Unix timestamps** (e.g. "created_at", "upd
           },
         },
         parameters: [
-          { name: 'Idempotency-Key', in: 'header', schema: { type: 'string' }, description: 'Prevents duplicate creation on retry' },
+          { name: 'Idempotency-Key', in: 'header', schema: { type: 'string' }, description: 'Prevents duplicate creation on retry; replay responses carry the X-Idempotency-Replayed: true header' },
         ],
         responses: {
           '201': { description: 'Created post' },
           '400': { description: 'Bad request' },
+          '404': { description: 'Original post not found (repost type)' },
           '409': { description: 'Already reposted' },
         },
       },
@@ -614,11 +642,14 @@ All API body fields use **millisecond Unix timestamps** (e.g. "created_at", "upd
     },
     '/api/v1/media/{id}': {
       get: {
-        summary: 'View media attachment details',
+        summary: 'View your own media attachment details',
         tags: ['Media'],
         security: [{ oauth2: ['read'] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
-        responses: { '200': { description: 'Media object' } },
+        responses: {
+          '200': { description: 'Media object' },
+          '403': { description: 'You do not have access to this media (only the uploader can view it)' },
+        },
       },
     },
     '/api/v1/calls/presence': {
@@ -643,7 +674,10 @@ All API body fields use **millisecond Unix timestamps** (e.g. "created_at", "upd
         summary: 'Get the VAPID public key for Web Push subscription',
         tags: ['Push'],
         security: [{ oauth2: [] }],
-        responses: { '200': { description: '{ publicKey: string }' } },
+        responses: {
+          '200': { description: '{ data: { publicKey: string } }' },
+          '404': { description: 'Push is not configured on this server' },
+        },
       },
     },
     '/api/v1/push/subscribe': {
@@ -792,7 +826,7 @@ All API body fields use **millisecond Unix timestamps** (e.g. "created_at", "upd
           { name: 'cid', in: 'path', required: true, schema: { type: 'integer' } },
           { name: 'cursor', in: 'query', schema: { type: 'integer' }, description: 'Message ID; returns messages older than it' },
         ],
-        responses: { '200': { description: '{ messages: [...], next: id-or-null }' } },
+        responses: { '200': { description: '{ data: { messages: [...], next: id-or-null } }' } },
       },
       post: {
         summary: 'Send a room message (must be Megolm-encrypted unless it is a sticker path)',
@@ -975,7 +1009,7 @@ All API body fields use **millisecond Unix timestamps** (e.g. "created_at", "upd
     },
     '/api/v1/conversations/{username}/messages': {
       post: {
-        summary: 'Send a message (must be Olm-encrypted unless it is a sticker path)',
+        summary: 'Send a message (Olm-encrypted unless the body is a sticker path)',
         tags: ['Direct Messages'],
         security: [{ oauth2: ['write:direct'] }],
         parameters: [{ name: 'username', in: 'path', required: true, schema: { type: 'string' } }],
@@ -983,11 +1017,11 @@ All API body fields use **millisecond Unix timestamps** (e.g. "created_at", "upd
           required: true,
           content: { 'application/json': { schema: {
             type: 'object',
-            required: ['body', 'sender_ciphertext'],
+            required: ['body'],
             properties: {
-              body: { type: 'string', maxLength: 5000, description: 'Sticker path (/uploads/stickers/...) or empty' },
+              body: { type: 'string', maxLength: 5000, description: 'Empty for encrypted messages, or a sticker path (/uploads/stickers/...) which skips encryption' },
               proto: { type: 'string', enum: ['olm', 'rsa'], default: 'olm' },
-              sender_ciphertext: { type: 'string', maxLength: 5000, description: 'Olm payload' },
+              sender_ciphertext: { type: 'string', maxLength: 5000, description: 'Olm payload (required unless the body is a sticker path)' },
               key_for_sender: { type: 'string' },
               key_for_recipient: { type: 'string' },
             },
@@ -996,6 +1030,7 @@ All API body fields use **millisecond Unix timestamps** (e.g. "created_at", "upd
         responses: {
           '201': { description: 'Created message' },
           '400': { description: 'End-to-end encryption required' },
+          '403': { description: 'You can only message mutual followers' },
         },
       },
     },
@@ -1028,18 +1063,19 @@ All API body fields use **millisecond Unix timestamps** (e.g. "created_at", "upd
     },
     '/api/v1/messages/{id}': {
       patch: {
-        summary: 'Edit one of your messages (must be Olm-encrypted unless a sticker path)',
+        summary: 'Edit one of your messages (Olm-encrypted unless a sticker path)',
         tags: ['Direct Messages'],
         security: [{ oauth2: ['write:direct'] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
         requestBody: {
+          required: true,
           content: { 'application/json': { schema: {
             type: 'object',
-            required: ['body', 'sender_ciphertext'],
+            required: ['body'],
             properties: {
-              body: { type: 'string', maxLength: 5000 },
+              body: { type: 'string', maxLength: 5000, description: 'Empty for encrypted messages, or a sticker path which skips encryption' },
               proto: { type: 'string', enum: ['olm', 'rsa'] },
-              sender_ciphertext: { type: 'string', maxLength: 5000 },
+              sender_ciphertext: { type: 'string', maxLength: 5000, description: 'Olm payload (required unless the body is a sticker path)' },
               key_for_sender: { type: 'string' },
               key_for_recipient: { type: 'string' },
             },
