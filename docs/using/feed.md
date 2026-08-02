@@ -5,7 +5,7 @@
 | Type | What it is | Media |
 |---|---|---|
 | `text` | Plain text post (up to 5,000 chars) | none |
-| `photo` | Text + one image | JPEG, PNG, GIF, WebP, BMP, SVG (web); JPEG, PNG, GIF, WebP (API) |
+| `photo` | Text + one image | JPEG, PNG, GIF, WebP, BMP (web); JPEG, PNG, GIF, WebP (API) |
 | `video` | Text + one video | MP4, WebM, MOV, AVI, MKV (web); MP4, WebM, MOV (API) |
 | `repost` | Re-publishes someone else's post into your own stream | inherited from the original |
 

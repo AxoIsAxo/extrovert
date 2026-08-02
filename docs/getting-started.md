@@ -35,7 +35,7 @@ Generate one with `openssl rand -hex 32` (or `node -e "console.log(require('cryp
 ## First run
 
 1. Open `http://localhost:3000`.
-2. **Sign up** (`/register`) — usernames are 3–20 letters, numbers, or underscores; passwords 6–128 characters.
+2. **Sign up** (`/register`) — usernames are 3–20 letters, numbers, or underscores; passwords 12–128 characters.
 3. You will be redirected to **Become Admin** (`/become-admin`): the very first account on a fresh instance is offered the admin role. Anyone can claim it as long as **no admin exists yet** — so do this immediately after setting up a new instance. Later sign-ups are never offered it.
 4. Find someone by username on the **Discover** page (`/discover`), follow them, and your feed fills with their content and their friends' content.
 
@@ -83,6 +83,15 @@ services:
 ```
 
 `SESSION_SECRET` is pulled from your shell/host environment. No extra services are required — this is the whole stack.
+
+The image runs as the **unprivileged `node` user (uid 1000)**, with `/app/data` and `/app/uploads` owned by it. Fresh named volumes inherit that ownership automatically, but **if you are upgrading an instance whose volumes were created by an older (root) image**, fix ownership once before starting the new image:
+
+```bash
+docker run --rm -v extrovert_data:/app/data -v extrovert_uploads:/app/uploads \
+  --user root axoisaxo/extrovert:latest chown -R 1000:1000 /app/data /app/uploads
+```
+
+Then `docker compose pull && docker compose up -d`.
 
 ## Resetting everything
 

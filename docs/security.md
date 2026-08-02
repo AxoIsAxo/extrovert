@@ -30,7 +30,7 @@ Security researchers may test the software under the conditions on the in-app **
 
 ## Uploads
 
-- Extension whitelists server-side for posts (`.jpg .jpeg .png .gif .webp .bmp .svg .mp4 .webm .mov .avi .mkv`), API media (`.jpg .jpeg .png .gif .webp .mp4 .webm .mov`), avatars (JPEG/PNG/WebP), and stickers (`.jpg .jpeg .png .gif .webp .bmp`) — the MIME header is not trusted on its own.
+- Extension whitelists server-side for posts (`.jpg .jpeg .png .gif .webp .bmp .mp4 .webm .mov .avi .mkv`), API media (`.jpg .jpeg .png .gif .webp .mp4 .webm .mov`), avatars (JPEG/PNG/WebP), and stickers (`.jpg .jpeg .png .gif .webp .bmp`) — the MIME header is not trusted on its own. No HTML/SVG/JS is ever accepted.
 - Size caps everywhere (60 MB media, 10 MB avatars, 500 KB stickers).
 - Random hex filenames; served with `X-Content-Type-Options: nosniff` and `Content-Disposition: inline`.
 
@@ -53,7 +53,7 @@ media-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self';
 connect-src 'self' ws: wss:; frame-ancestors 'none'
 ```
 
-`script-src 'self'` means profile pages can't load external scripts even if HTML injection slipped through. Swagger UI (`/developers/docs`) loosens CSP only for that route (jsdelivr CDN assets).
+`script-src 'self'` means profile pages can't load external scripts even if HTML injection slipped through. Swagger UI is served from the same origin (`/developers/swagger-ui/*` — vendored `swagger-ui-dist`, no CDN) under this same CSP, so no route loosens it.
 
 ## E2EE threat model
 

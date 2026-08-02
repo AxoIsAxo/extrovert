@@ -42,6 +42,15 @@ One announcement at a time, shown to everyone as a banner in the header (dismiss
 
 The API exposes the current announcement at `GET /api/v1/announcement` (any `read` token) so clients can render the banner natively.
 
+## Security reports (responsible disclosure)
+
+The public `/security` page invites security research and offers a **private** report form. Submissions land in the admin-only **security inbox**:
+
+- `GET /admin/security-reports` — all submissions (reporter name/contact, summary, details, date, status), never shown publicly.
+- `POST /admin/security-reports/:id/handle` — mark an open report handled (records which admin handled it).
+
+The nav badge for admins counts open security reports together with moderation reports. The machine-readable policy is at `/.well-known/security.txt` (RFC 9116); the contact address is set with `SECURITY_CONTACT_EMAIL`.
+
 ## Audit notes
 
 Selected admin-adjacent actions (OAuth app creation, token issuance, follows, post creation/deletion, DM key updates, avatar changes, media uploads) are written to the `audit_log` table with actor and timestamp.

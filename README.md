@@ -35,6 +35,9 @@ The signature motif is three concentric rings: **you** (inner), your **friends**
 | **Stickers** | Personal sticker packs usable in posts, comments, and messages |
 | **Admin** | Bans, user deletion, promotions, room moderation, reports queue, server-wide announcement |
 | **API** | Full REST API (OAuth 2.0 + OpenID Connect, PKCE) with an OpenAPI spec and Swagger UI |
+| **Security** | Responsible disclosure: public `/security` page with a private report form for admins, plus RFC 9116 `/.well-known/security.txt` |
+
+Security posture is documented in [docs/security.md](docs/security.md); the audit history lives in [SECURITY.md](SECURITY.md). Security researchers can test the software under the conditions on the in-app `/security` page and report findings privately.
 
 ## Quick start
 
@@ -44,6 +47,14 @@ npm start          # http://localhost:3000
 ```
 
 You must set a `SESSION_SECRET` environment variable before the server will start. See [Getting started](docs/getting-started.md) and [Configuration](docs/configuration.md).
+
+## Development & testing
+
+- `npm test` — feed algorithm + sanitization unit tests
+- `npm run test:api` — REST API integration suite
+- `npm run test:owasp` — OWASP Top 10 (2021) security suite
+- `npm run test:asvs` — OWASP ASVS v4.0 suite (automatable subset, with a MANUAL_REVIEW/N-A scorecard)
+- plus crypto, Megolm, live-DM, and session suites — see [Development & testing](docs/development.md)
 
 ## Documentation index
 

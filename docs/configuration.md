@@ -19,8 +19,7 @@ Extrovert is configured entirely through environment variables. There is no conf
 | `VAPID_PUBLIC_KEY` | no | — | Web Push public key (see Push section). Without it, push endpoints 404 and no notifications are sent. |
 | `VAPID_PRIVATE_KEY` | no | — | Web Push private key. |
 | `VAPID_SUBJECT` | no | `mailto:admin@extrovert.local` | VAPID contact — some push services require a `mailto:`. |
-| `HELPLESS` | no | — | Set to `1` to suppress debug logs. |
-| `DEBUG` | no | — | Set to `1` for verbose logging. |
+| `SECURITY_CONTACT_EMAIL` | no | `admin@extrovert.local` | Contact shown on the responsible-disclosure page (`/security`) and in `/.well-known/security.txt`. |
 
 ### `.env` files
 
