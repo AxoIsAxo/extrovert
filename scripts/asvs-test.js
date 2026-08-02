@@ -329,9 +329,15 @@ describe('OWASP ASVS v4.0 (automatable subset)', () => {
       assert.ok(csp.includes("frame-ancestors 'none'"));
     });
     it('5.2.4 — CSP without unsafe-inline and no inline scripts on pages', async () => {
-      const csp = (await req('/login')).headers.get('content-security-policy') || '';
-      const scriptSrc = (csp.match(/script-src[^;]*/) || [''])[0];
-      assert.ok(!scriptSrc.includes("'unsafe-inline'"), 'no unsafe-inline in script-src');
+      for (const p of ['/login', '/developers/docs']) {
+        const resp = await req(p, { jar: aliceSession });
+        const csp = resp.headers.get('content-security-policy') || '';
+        const scriptSrc = (csp.match(/script-src[^;]*/) || [''])[0];
+        assert.ok(scriptSrc.includes("'self'"), `script-src self on ${p}`);
+        assert.ok(!scriptSrc.includes("'unsafe-inline'"), `no unsafe-inline in script-src on ${p}`);
+        assert.ok(!scriptSrc.includes("'unsafe-eval'"), `no unsafe-eval in script-src on ${p}`);
+        assert.ok(!/https?:\/\/|cdn\./.test(scriptSrc), `no external hosts in script-src on ${p}`);
+      }
       const pages = ['/login'];
       if (aliceSession) pages.push('/settings', '/developers/docs');
       for (const p of pages) {
