@@ -40,6 +40,7 @@ src/
     settings.js        theme, account deletion, developer OAuth apps
     admin.js           user management, rooms, reports, announcement
     stickers.js        upload/manage/sticker list
+    security.js        /security responsible-disclosure page, private report form, security.txt
     push.js            VAPID public key, subscribe/unsubscribe, cancel-pending
     api-v1.js          The whole REST API (OAuth, accounts, statuses,
                        timelines, notifications, media, search, presence,

@@ -2,6 +2,10 @@
 
 This page describes how Extrovert protects itself today. The audit history (what was fixed and when) is in [SECURITY.md](../SECURITY.md).
 
+## Responsible disclosure
+
+Security researchers may test the software under the conditions on the in-app **/security** page: no harm to running instances, and all findings reported **privately** to the maintainers before any public disclosure. Reports submitted via the in-app form land in a `security_reports` table visible **only to admins** (`/admin/security-reports`), and are never rendered publicly. The machine-readable policy is served at `/.well-known/security.txt` (RFC 9116); the contact address is configurable via `SECURITY_CONTACT_EMAIL` (default `admin@extrovert.local`).
+
 ## Authentication
 
 - **Passwords:** bcrypt (10 rounds). Registration enforces a **12–128 character** password policy (ASVS 2.1.1; bcrypt truncates at 72 — the cap prevents surprise truncation).

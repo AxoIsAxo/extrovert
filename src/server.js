@@ -238,10 +238,11 @@ app.use(optionalAuth);
 // Expose user data to all templates.
 app.use((req, res, next) => {
   if (res.locals.currentUser) {
-    const { countUnreadNotifications, countUnreadMessages, getUserTheme, getPendingReports, getAnnouncement } = require('./db');
+    const { countUnreadNotifications, countUnreadMessages, getUserTheme, getPendingReports, getPendingSecurityReports, getAnnouncement } = require('./db');
     res.locals.unreadCount = countUnreadNotifications(res.locals.currentUser.id);
     res.locals.unreadMessages = countUnreadMessages(res.locals.currentUser.id);
     res.locals.pendingReports = res.locals.currentUser.is_admin ? getPendingReports().length : 0;
+    res.locals.securityReports = res.locals.currentUser.is_admin ? getPendingSecurityReports().length : 0;
     res.locals.theme = getUserTheme(res.locals.currentUser.id);
     res.locals.announcement = getAnnouncement();
   }
@@ -261,6 +262,7 @@ app.use('/push', require('./routes/push'));
 app.use('/admin', require('./routes/admin'));
 app.use('/stickers', require('./routes/stickers'));
 app.use('/rooms', require('./routes/rooms'));
+app.use('/', require('./routes/security')); // /security, /security/report, /security.txt
 
 // REST API v1.
 app.use('/api/v1', require('./routes/api-v1'));

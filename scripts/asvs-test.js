@@ -583,6 +583,54 @@ describe('OWASP ASVS v4.0 (automatable subset)', () => {
     });
   });
 
+  // ======================================= V14.3 Responsible Disclosure ====
+  describe('V14.3 Responsible Disclosure', () => {
+    it('14.3.1 — serves RFC 9116 security.txt with private contact + expiry', async () => {
+      const resp = await req('/.well-known/security.txt');
+      assert.strictEqual(resp.status, 200);
+      assert.match(resp.headers.get('content-type') || '', /text\/plain/);
+      const body = await resp.text();
+      assert.ok(body.includes('Contact: mailto:'), 'has a private Contact');
+      assert.ok(body.includes('Expires:'), 'has an Expires date');
+      assert.ok(body.includes('Policy:'), 'has a Policy link');
+    });
+    it('14.3.1 — /security.txt redirects to the well-known location', async () => {
+      const resp = await req('/security.txt');
+      assert.strictEqual(resp.status, 301);
+      assert.match(resp.headers.get('location') || '', /\.well-known\/security\.txt/);
+    });
+    it('14.3.2 — the /security disclosure page renders publicly', async () => {
+      const resp = await req('/security');
+      assert.strictEqual(resp.status, 200);
+      const body = await resp.text();
+      assert.ok(body.includes('Responsible Disclosure'), 'policy page present');
+    });
+    it('14.3.3 — security reports are private (admin-only, never public)', async () => {
+      // Anonymous researcher submits a report through the public form.
+      const jar = { cookies: {} };
+      const pre = await req('/security', { jar });
+      const csrf = extractCsrf(await pre.text());
+      const unique = 'ASVS-PRIVATE-FINDING-' + crypto.randomBytes(6).toString('hex');
+      const post = await req('/security/report', {
+        method: 'POST', jar,
+        form: { _csrf: csrf, summary: 'XSS in widget ' + unique, details: 'Steps: ' + unique, reporter_name: 'ResearchBot', reporter_contact: 'researcher@example.com' },
+      });
+      assert.strictEqual(post.status, 302, 'report accepted');
+
+      const row = db.db.prepare(`SELECT * FROM security_reports WHERE summary LIKE ?`).get(`%${unique}%`);
+      assert.ok(row, 'report stored in the private table');
+
+      // Non-admins cannot see the inbox.
+      assert.strictEqual((await req('/admin/security-reports', { jar: aliceSession })).status, 403, 'non-admin denied');
+
+      // Nothing about the report appears on any public page.
+      const pub = await (await req('/security')).text();
+      assert.ok(!pub.includes(unique), 'report content not on the public page');
+      const feed = await (await req('/', { jar: aliceSession })).text();
+      assert.ok(!feed.includes(unique), 'report content not on the feed');
+    });
+  });
+
   // ============================================================ brute force ===
   // ASVS 2.2.1 — must run last: it exhausts the shared per-IP auth rate limiter.
   describe('V2 Authentication — brute-force protection (2.2.1)', () => {

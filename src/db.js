@@ -321,6 +321,19 @@ try { db.exec(`ALTER TABLE room_messages ADD COLUMN edited_at INTEGER`); } catch
 try { db.exec(`ALTER TABLE oauth_codes ADD COLUMN nonce TEXT`); } catch {}
 try { db.exec(`ALTER TABLE oauth_tokens ADD COLUMN refresh_expires_at INTEGER`); } catch {}
 try { db.exec(`CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, reporter_id INTEGER NOT NULL REFERENCES users(id), reported_user_id INTEGER NOT NULL REFERENCES users(id), message_id INTEGER NOT NULL, message_body TEXT NOT NULL, channel_id INTEGER NOT NULL, room_id INTEGER NOT NULL, reason TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL)`); } catch {}
+// Private security reports from the responsible-disclosure form (/security).
+// Visible only to admins — never rendered on public pages.
+try { db.exec(`CREATE TABLE IF NOT EXISTS security_reports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  reporter_name TEXT,
+  reporter_contact TEXT,
+  summary TEXT NOT NULL,
+  details TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  created_at INTEGER NOT NULL,
+  handled_at INTEGER,
+  handled_by INTEGER REFERENCES users(id)
+)`); } catch {}
 try { db.exec(`CREATE TABLE IF NOT EXISTS join_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, room_id INTEGER NOT NULL REFERENCES rooms(id), user_id INTEGER NOT NULL REFERENCES users(id), status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL)`); } catch {}
 // Olm (Signal-style) end-to-end encryption: message protocol + sender-self ciphertext.
 try { db.exec(`ALTER TABLE messages ADD COLUMN proto TEXT NOT NULL DEFAULT 'rsa'`); } catch {}
@@ -1203,8 +1216,23 @@ function getReport(id) {
 function resolveReport(id) {
   db.prepare(`UPDATE reports SET status = 'resolved' WHERE id = ?`).run(id);
 }
-function dismissReport(id) {
-  db.prepare(`UPDATE reports SET status = 'dismissed' WHERE id = ?`).run(id);
+function dismissReport(id) {  db.prepare(`UPDATE reports SET status = 'dismissed' WHERE id = ?`).run(id);
+}
+
+// ---------- security reports (private responsible-disclosure inbox) ----------
+function createSecurityReport({ reporterName, reporterContact, summary, details }) {
+  return db.prepare(`INSERT INTO security_reports (reporter_name, reporter_contact, summary, details, status, created_at) VALUES (?,?,?,?,'open',?)`)
+    .run(reporterName || null, reporterContact || null, summary, details, Date.now()).lastInsertRowid;
+}
+function getSecurityReports() {
+  return db.prepare(`SELECT s.*, h.username AS handled_by_username FROM security_reports s LEFT JOIN users h ON h.id = s.handled_by ORDER BY s.created_at DESC`).all();
+}
+function getPendingSecurityReports() {
+  return db.prepare(`SELECT * FROM security_reports WHERE status = 'open' ORDER BY created_at DESC`).all();
+}
+function markSecurityReportHandled(id, adminId) {
+  const res = db.prepare(`UPDATE security_reports SET status = 'handled', handled_at = ?, handled_by = ? WHERE id = ? AND status = 'open'`).run(Date.now(), adminId || null, id);
+  return res.changes > 0;
 }
 
 // ---------- admin rooms ----------
@@ -1534,6 +1562,8 @@ module.exports = {
   publishRoomGroupSession, getRoomGroupSession, saveRoomSessionKeys, ensureRoomSessionRecipient, getPendingRoomSessionKeys, markRoomSessionKeyDelivered, getRoomSessionRecipients, getRoomSessionEmptyKeyRecipients,
   // reports
   createReport, getPendingReports, getReport, resolveReport, dismissReport,
+  // security reports (private responsible-disclosure inbox)
+  createSecurityReport, getSecurityReports, getPendingSecurityReports, markSecurityReportHandled,
   // admin rooms
   getAllRooms,
   // join requests

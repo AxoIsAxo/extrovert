@@ -2,8 +2,26 @@
 
 const express = require('express');
 const { getJwks, ISSUER } = require('../oidc');
+const { contactMailto } = require('./security');
 
 const router = express.Router();
+
+// RFC 9116 security.txt — machine-readable disclosure policy + private contact.
+router.get('/security.txt', (req, res) => {
+  const expires = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+  const lines = [
+    '# Extrovert security policy',
+    `Contact: ${contactMailto()}`,
+    `Contact: ${ISSUER}/security`,
+    `Expires: ${expires}`,
+    `Policy: ${ISSUER}/security`,
+    'Preferred-Languages: en',
+    `Canonical: ${ISSUER}/.well-known/security.txt`,
+    '',
+  ];
+  res.type('text/plain; charset=utf-8');
+  res.send(lines.join('\n'));
+});
 
 router.get('/openid-configuration', (req, res) => {
   const base = ISSUER;

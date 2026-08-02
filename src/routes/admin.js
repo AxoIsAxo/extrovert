@@ -1,7 +1,7 @@
 'use strict';
 
 const express = require('express');
-const { getAllUsers, getUserById, removeReferralBadge, banUser, unbanUser, deleteUser, getAllRooms, deleteRoom, getPendingReports, getReport, resolveReport, dismissReport, promoteUser, getAnnouncement, setAnnouncement, clearAnnouncement } = require('../db');
+const { getAllUsers, getUserById, removeReferralBadge, banUser, unbanUser, deleteUser, getAllRooms, deleteRoom, getPendingReports, getReport, resolveReport, dismissReport, promoteUser, getAnnouncement, setAnnouncement, clearAnnouncement, getSecurityReports, markSecurityReportHandled } = require('../db');
 
 const router = express.Router();
 
@@ -89,6 +89,18 @@ router.post('/reports/:id/dismiss', requireAdmin, (req, res) => {
   if (report.status !== 'pending') return res.status(400).send('Report already resolved');
   dismissReport(report.id);
   res.redirect('/admin/reports');
+});
+
+// Private security reports (responsible-disclosure inbox). Admin-only.
+router.get('/security-reports', requireAdmin, (req, res) => {
+  const reports = getSecurityReports();
+  res.render('admin-security-reports', { reports });
+});
+
+router.post('/security-reports/:id/handle', requireAdmin, (req, res) => {
+  const ok = markSecurityReportHandled(Number(req.params.id), res.locals.currentUser.id);
+  if (!ok) return res.status(404).send('Report not found or already handled.');
+  res.redirect('/admin/security-reports');
 });
 
 // Announcement CRUD — only one server-wide announcement exists at a time.

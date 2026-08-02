@@ -1,5 +1,15 @@
 # Security Audit — Fixes Applied
 
+## Reporting a vulnerability
+
+Security researchers are welcome. Please report findings **privately**:
+
+- In-app: the **/security** page has a private report form (visible only to instance admins).
+- Machine-readable policy: `/.well-known/security.txt` (RFC 9116).
+- Direct email: set `SECURITY_CONTACT_EMAIL` on the instance to choose the contact address (default `admin@extrovert.local`).
+
+Do not publicly disclose findings before they are fixed, and do not test instances you do not own or are not authorized to test.
+
 Current security posture is documented in [docs/security.md](docs/security.md). This file is the historical audit record.
 
 | # | Vulnerability | Fix |

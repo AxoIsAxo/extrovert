@@ -1,0 +1,64 @@
+<%- include('partials/header') %>
+  <div style="max-width:640px;margin:0 auto">
+    <h2 style="display:flex;align-items:center;gap:8px"><%- include('partials/icon', { name: 'shield', size: 22 }) %> Security &amp; Responsible Disclosure</h2>
+
+    <% if (locals.sent) { %>
+      <div class="flash">Your report was sent privately to the maintainers. Thank you — we will review it and reply as soon as we can.</div>
+    <% } %>
+    <% if (locals.error === 'missing') { %>
+      <div class="flash err">Please fill in both a summary and the details.</div>
+    <% } %>
+    <% if (locals.error === 'storage') { %>
+      <div class="flash err">Your report could not be stored. Please email it instead: <code><%= contactEmail %></code></div>
+    <% } %>
+
+    <div class="card elevated" style="padding:20px">
+      <h3>You are welcome to test this software</h3>
+      <p style="font-size:0.95rem;line-height:1.6">
+        Extrovert is free software, and security research is encouraged. You may perform
+        <strong>any kind of security testing</strong> — penetration testing, fuzzing,
+        source-code review, and other research — on Extrovert and on instances you own
+        or are explicitly authorized to test.
+      </p>
+      <h3>Conditions</h3>
+      <ul style="font-size:0.95rem;line-height:1.7;padding-left:20px">
+        <li>Do <strong>not</strong> use found vulnerabilities to harm Extrovert, its maintainers, or any running instance — no destructive actions, no disruption of service beyond a minimal proof-of-concept, and no access to or modification of other users' data.</li>
+        <li>Report <strong>every</strong> vulnerability you find to the maintainers <strong>privately, immediately</strong> — never publicly, never before it is fixed. No public posts, no public exploit code, no premature disclosure.</li>
+        <li>Only test instances you own or are authorized to test.</li>
+        <li>Stop testing as soon as you have confirmed a vulnerability; a proof-of-concept is enough.</li>
+      </ul>
+      <h3>What we promise</h3>
+      <ul style="font-size:0.95rem;line-height:1.7;padding-left:20px">
+        <li>Every report is kept <strong>private</strong>: it is visible only to the instance's admins and is never published.</li>
+        <li>We will acknowledge receipt, work on a fix, and — where useful — credit you, unless you prefer to stay anonymous.</li>
+      </ul>
+    </div>
+
+    <div class="card elevated" style="padding:20px;margin-top:16px">
+      <h3>Report a vulnerability (private)</h3>
+      <p class="muted" style="font-size:0.85rem;margin-top:-4px">
+        This form goes straight to the instance admins' private security inbox. It is never shown publicly.
+        You can also email <code><%= contactEmail %></code> — the machine-readable policy is at
+        <code>/.well-known/security.txt</code>.
+      </p>
+      <form method="post" action="/security/report">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <label>Summary <span class="muted">(one line, e.g. "Stored XSS in profile HTML")</span></label>
+        <input type="text" name="summary" maxlength="200" required>
+        <label>Details <span class="muted">(steps to reproduce, impact, suggested fix)</span></label>
+        <textarea name="details" rows="8" maxlength="5000" required style="width:100%;box-sizing:border-box"></textarea>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <label>Your name <span class="muted">(optional)</span></label>
+            <input type="text" name="reporter_name" maxlength="100">
+          </div>
+          <div style="flex:1;min-width:200px">
+            <label>Contact <span class="muted">(optional — email, so we can reply)</span></label>
+            <input type="text" name="reporter_contact" maxlength="200">
+          </div>
+        </div>
+        <button class="btn full" style="margin-top:16px"><%- include('partials/icon', { name: 'shield', size: 15 }) %> Send privately</button>
+      </form>
+    </div>
+  </div>
+<%- include('partials/footer') %>
