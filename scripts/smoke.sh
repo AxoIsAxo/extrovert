@@ -11,12 +11,12 @@ csrf() { grep -o 'name="csrf-token" content="[^"]*"' "$1" | head -1 | sed 's/.*c
 reg() {
   curl -s -c "$J.$1" -b "$J.$1" -o /tmp/.reg.html "$BASE/register"
   T=$(csrf /tmp/.reg.html)
-  curl -s -c "$J.$1" -b "$J.$1" -o /dev/null --data-urlencode "_csrf=$T" --data-urlencode "username=$1" --data-urlencode "password=password" --data-urlencode "displayName=$2" "$BASE/register"
+  curl -s -c "$J.$1" -b "$J.$1" -o /dev/null --data-urlencode "_csrf=$T" --data-urlencode "username=$1" --data-urlencode "password=password12345" --data-urlencode "displayName=$2" "$BASE/register"
 }
 login() {
   curl -s -c "$J.$1" -b "$J.$1" -o /tmp/.login.html "$BASE/login"
   T=$(csrf /tmp/.login.html)
-  curl -s -c "$J.$1" -b "$J.$1" -o /dev/null --data-urlencode "_csrf=$T" --data-urlencode "username=$1" --data-urlencode "password=password" "$BASE/login"
+  curl -s -c "$J.$1" -b "$J.$1" -o /dev/null --data-urlencode "_csrf=$T" --data-urlencode "username=$1" --data-urlencode "password=password12345" "$BASE/login"
 }
 tok() { csrf <(curl -s -c "$J.$1" -b "$J.$1" "$BASE/$2"); }
 posttxt(){

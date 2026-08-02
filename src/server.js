@@ -269,6 +269,15 @@ app.use('/api/v1', require('./routes/api-v1'));
 app.use('/.well-known', require('./routes/well-known'));
 
 // Developer docs (Swagger UI + OpenAPI spec).
+// Swagger UI assets are vendored locally (swagger-ui-dist) — no CDN — so they
+// load under the app's own Content-Security-Policy (styleSrc/scriptSrc 'self').
+app.use('/developers/swagger-ui', express.static(path.join(__dirname, '..', 'node_modules', 'swagger-ui-dist'), {
+  index: false,
+  setHeaders: (res) => {
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.set('Cache-Control', 'public, max-age=3600');
+  },
+}));
 app.use('/developers', require('./routes/docs'));
 
 // In-app wiki (markdown docs rendered at /docs).

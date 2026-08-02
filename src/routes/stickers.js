@@ -3,6 +3,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const multer = require('multer');
 const sharp = require('sharp');
 const { addSticker, getMyStickers } = require('../db');
@@ -18,7 +19,7 @@ const storage = multer.diskStorage({
   destination: STICKER_DIR,
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    const name = Date.now() + '-' + Math.random().toString(36).slice(2, 8) + ext;
+    const name = crypto.randomBytes(12).toString('hex') + ext;
     cb(null, name);
   },
 });

@@ -59,6 +59,7 @@ scripts/
   test.js              npm test — feed algorithm + sanitization unit tests
   api-test.js          npm run test:api — API integration tests (node --test)
   owasp-test.js        npm run test:owasp — OWASP Top 10 security suite (node --test)
+  asvs-test.js         npm run test:asvs — OWASP ASVS v4.0 suite, automatable subset (node --test)
   crypto-test.js       npm run test:crypto — Olm protocol regression tests
   megolm-room-test.js  npm run test:megolm — group E2EE session/rotation tests
   megolm-integration-test.js — server-side Megolm endpoint flow
@@ -80,6 +81,7 @@ scripts/
 | test | `npm test` | Feed algorithm + sanitization tests |
 | test:api | `npm run test:api` | API integration suite (`node --test`) |
 | test:owasp | `npm run test:owasp` | OWASP Top 10 security suite (access control, crypto-at-rest, injection, XSS, misconfig, dependency audit, auth, CSRF, logging, SSRF) |
+| test:asvs | `npm run test:asvs` | OWASP ASVS v4.0 suite — automatable Level 1 (+ select L2) items mapped to chapter/ID (V2–V14), with a MANUAL_REVIEW/N-A scorecard for non-automatable items |
 | test:crypto | `npm run test:crypto` | Olm protocol regression |
 | test:megolm | `npm run test:megolm` | Megolm room-session tests |
 | test:megolm:integration | `npm run test:megolm:integration` | Server Megolm flow |
@@ -99,6 +101,7 @@ node scripts/test-offline-call.js   # offline-call flow, isolated DB
 
 - Unit-ish tests run directly against `src/` modules with a temp database (`EXTV_DB_PATH` / `EXTV_SESSION_DB_PATH` point at throwaway files — see `scripts/api-test.js` for the pattern).
 - `scripts/owasp-test.js` boots the full app (session + CSRF for web routes, Bearer tokens for the API) and covers the OWASP Top 10 (2021): broken access control, crypto failures (bcrypt + OAuth tokens hashed at rest), injection/SQLi/XSS, insecure design (rate limiting, referral anti-farming), misconfiguration (helmet headers, no stack leaks), vulnerable components (`npm audit`), auth failures (session regeneration, enumeration), integrity failures (CSRF, open redirects, prototype pollution), logging (audit log), and SSRF (push endpoint validation). It runs `npm audit` for A06 and skips gracefully offline.
+- `scripts/asvs-test.js` maps tests to OWASP ASVS v4.0 chapter/IDs (V2 Authentication, V3 Sessions, V4 Access, V5 Validation, V6 Stored Crypto, V7 Error/Logging, V8 Data Protection, V10 Malicious Code, V11 Business Logic, V12 Files, V13 API, V14 Config). It runs with `TRUST_PROXY=loopback` + `X-Forwarded-Proto: https` so the Secure-cookie requirement (3.1.3) is exercised like production. Items that cannot be black-box verified (V1, TLS/proxy config V9, business-logic review, etc.) are listed in the suite's scorecard as MANUAL_REVIEW with guidance, never counted as passing.
 - The signaling tests spin up a real `WebSocketServer` and drive it with mock HTTP upgrade requests.
 - The Olm/Megolm tests use the real `@matrix-org/olm` package to validate the exact protocol patterns the browser frontend (`public/e2ee.js`, `public/room-e2ee.js`) relies on.
 

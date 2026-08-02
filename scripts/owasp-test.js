@@ -272,14 +272,14 @@ describe('OWASP Top 10', () => {
       const csrf = extractCsrf(await pre.text());
       const reg = await req('/register', {
         method: 'POST', jar,
-        form: { username: 'crypto_user', password: 's3cretPass!', displayName: 'Crypto', _csrf: csrf },
+        form: { username: 'crypto_user', password: 's3cretPass!123', displayName: 'Crypto', _csrf: csrf },
       });
       assert.strictEqual(reg.status, 302, 'registration succeeds');
       const row = db.db.prepare(`SELECT password_hash FROM users WHERE username = 'crypto_user'`).get();
       assert.ok(row, 'crypto_user exists');
-      assert.notStrictEqual(row.password_hash, 's3cretPass!', 'hash != plaintext');
+      assert.notStrictEqual(row.password_hash, 's3cretPass!123', 'hash != plaintext');
       assert.ok(/^\$2[aby]\$/.test(row.password_hash), 'hash is bcrypt ($2a/$2b/$2y)');
-      assert.ok(bcrypt.compareSync('s3cretPass!', row.password_hash), 'hash verifies against the password');
+      assert.ok(bcrypt.compareSync('s3cretPass!123', row.password_hash), 'hash verifies against the password');
     });
 
     it('stores OAuth bearer tokens hashed at rest', async () => {
@@ -382,7 +382,7 @@ describe('OWASP Top 10', () => {
       const csrf = extractCsrf(await pre.text());
       const resp = await req('/register', {
         method: 'POST', jar,
-        form: { username: `<script>alert(1)</script>' OR 1=1--`, password: 'secret123', _csrf: csrf },
+        form: { username: `<script>alert(1)</script>' OR 1=1--`, password: 'secret123456', _csrf: csrf },
       });
       assert.strictEqual(resp.status, 200, 'no redirect');
       const text = await resp.text();
@@ -428,7 +428,7 @@ describe('OWASP Top 10', () => {
       const csrf = extractCsrf(await pre.text());
       const resp = await req('/register', {
         method: 'POST', jar,
-        form: { username: 'ref_farmer', password: 'secret123', ref: 'owasp-ref', _csrf: csrf },
+        form: { username: 'ref_farmer', password: 'secret123456', ref: 'owasp-ref', _csrf: csrf },
       });
       assert.strictEqual(resp.status, 200, 'same-IP referral rejected, no redirect');
       const text = await resp.text();

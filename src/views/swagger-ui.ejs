@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Extrovert API &#x2014; Docs</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css">
+  <link rel="stylesheet" href="/developers/swagger-ui/swagger-ui.css">
   <style>
     :root {
       --primary: #7ec8e3;
@@ -513,21 +513,7 @@
     </div>
   </div>
   <div id="swagger-ui"></div>
-  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
-  <script>
-    SwaggerUIBundle({
-      url: '/developers/openapi.json',
-      dom_id: '#swagger-ui',
-      deepLinking: true,
-      presets: [
-        SwaggerUIBundle.presets.apis,
-        SwaggerUIBundle.SwaggerUIStandalonePreset,
-      ],
-      layout: "BaseLayout",
-      showExtensions: true,
-      showCommonExtensions: true,
-      defaultModelsExpandDepth: -1,
-    });
-  </script>
+  <script src="/developers/swagger-ui/swagger-ui-bundle.js"></script>
+  <script src="/static/swagger-init.js" defer></script>
 </body>
 </html>

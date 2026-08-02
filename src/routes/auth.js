@@ -22,8 +22,8 @@ router.post('/register', async (req, res) => {
   if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
     return res.render('register', { error: 'Username must be 3-20 letters, numbers, or underscores.' });
   }
-  if (password.length < 6 || password.length > 128) {
-    return res.render('register', { error: 'Password must be 6–128 characters.' });
+  if (password.length < 12 || password.length > 128) {
+    return res.render('register', { error: 'Password must be 12–128 characters.' });
   }
   if (getUserByUsername(username)) {
     return res.render('register', { error: 'That username is taken — try another.' });
