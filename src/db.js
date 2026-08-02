@@ -303,6 +303,7 @@ try { db.exec(`
 // Migrations.
 try { db.exec(`ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'default'`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN developer_mode INTEGER NOT NULL DEFAULT 0`); } catch {}
 try { db.exec(`ALTER TABLE messages ADD COLUMN key_for_sender TEXT`); } catch {}
 try { db.exec(`ALTER TABLE messages ADD COLUMN key_for_recipient TEXT`); } catch {}
 try { db.exec(`ALTER TABLE user_public_keys ADD COLUMN encrypted_private_key TEXT`); } catch {}
@@ -1280,6 +1281,15 @@ function setUserTheme(userId, theme) {
   db.prepare(`UPDATE users SET theme = ? WHERE id = ?`).run(theme, userId);
 }
 
+function getUserDeveloperMode(userId) {
+  const row = db.prepare(`SELECT developer_mode FROM users WHERE id = ?`).get(userId);
+  return !!(row && row.developer_mode);
+}
+
+function setUserDeveloperMode(userId, on) {
+  db.prepare(`UPDATE users SET developer_mode = ? WHERE id = ?`).run(on ? 1 : 0, userId);
+}
+
 // ---------- OAuth Apps ----------
 function createOAuthApp({ name, description, website, redirectUris, clientId, clientSecret, scopes, ownerId }) {
   const now = Date.now();
@@ -1552,7 +1562,7 @@ module.exports = {
   // avatar
   setAvatar, getAvatar,
   // theme
-  getUserTheme, setUserTheme,
+  getUserTheme, setUserTheme, getUserDeveloperMode, setUserDeveloperMode,
   // rooms
   createRoom, getRoom, getRoomsForUser, getAvailableRooms, updateRoom, deleteRoom,
   isRoomMember, addRoomMember, removeRoomMember, getRoomMembers, getUserRoomRole, countRoomMembers,

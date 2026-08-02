@@ -6,6 +6,10 @@
 
 Choose **Light** or **Dark** (dark is the default). Applied via `public/theme.css`; stored per account.
 
+## Developer settings
+
+A per-account toggle (off by default) that reveals developer-facing links — including the **Security** page (`/security`) — in the navigation. Ordinary users see a leaner nav; the `/security` page itself remains directly reachable by URL regardless. The setting is stored in the `developer_mode` column.
+
 ## Account deletion
 
 - `GET /settings/delete` shows a confirmation page; `POST /settings/delete` permanently deletes your account and destroys your session.

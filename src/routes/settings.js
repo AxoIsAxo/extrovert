@@ -3,7 +3,7 @@
 const express = require('express');
 const crypto = require('node:crypto');
 const db = require('../db');
-const { getUserTheme, setUserTheme, deleteUser } = db;
+const { getUserTheme, setUserTheme, getUserDeveloperMode, setUserDeveloperMode, deleteUser } = db;
 const { VALID_SCOPES } = require('../api-auth');
 
 const router = express.Router();
@@ -12,8 +12,9 @@ router.get('/', (req, res) => {
   const user = res.locals.currentUser;
   if (!user) return res.redirect('/login');
   const theme = getUserTheme(user.id);
+  const developerMode = getUserDeveloperMode(user.id);
   const { version } = require('../../package.json');
-  res.render('settings', { theme, version });
+  res.render('settings', { theme, version, developerMode });
 });
 
 router.post('/', (req, res) => {
@@ -21,6 +22,7 @@ router.post('/', (req, res) => {
   if (!user) return res.redirect('/login');
   const theme = req.body.theme === 'light' ? 'light' : 'dark';
   setUserTheme(user.id, theme);
+  setUserDeveloperMode(user.id, req.body.developer_mode === '1');
   res.redirect('/settings');
 });
 

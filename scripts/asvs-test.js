@@ -629,6 +629,31 @@ describe('OWASP ASVS v4.0 (automatable subset)', () => {
       const feed = await (await req('/', { jar: aliceSession })).text();
       assert.ok(!feed.includes(unique), 'report content not on the feed');
     });
+
+    it('14.3.4 — the /security nav link is gated behind developer settings', async () => {
+      // Default user: developer mode off → no Security link in the nav.
+      const feedOff = await (await req('/', { jar: aliceSession })).text();
+      assert.ok(!/href="\/security"/.test(feedOff), 'no /security nav link for ordinary users');
+
+      // Enable developer settings via the Settings page.
+      const save = await req('/settings', {
+        method: 'POST', jar: aliceSession, csrf: aliceSession.csrf,
+        form: { theme: 'dark', developer_mode: '1', _csrf: aliceSession.csrf },
+      });
+      assert.strictEqual(save.status, 302, 'settings saved');
+
+      const feedOn = await (await req('/', { jar: aliceSession })).text();
+      assert.ok(/href="\/security"/.test(feedOn), '/security nav link appears with developer settings on');
+
+      // The page itself stays directly reachable either way.
+      assert.strictEqual((await req('/security')).status, 200);
+
+      // Toggle back off.
+      await req('/settings', {
+        method: 'POST', jar: aliceSession, csrf: aliceSession.csrf,
+        form: { theme: 'dark', _csrf: aliceSession.csrf },
+      });
+    });
   });
 
   // ============================================================ brute force ===

@@ -8,6 +8,10 @@
         <option value="dark" <%= theme === 'dark' ? 'selected' : '' %>>Dark · Ink</option>
         <option value="light" <%= theme === 'light' ? 'selected' : '' %>>Light · Lavender</option>
       </select>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:14px;cursor:pointer">
+        <input type="checkbox" name="developer_mode" value="1" <%= developerMode ? 'checked' : '' %>>
+        Developer settings — show security &amp; developer links in the navigation
+      </label>
       <button class="btn full" style="margin-top:18px">Save</button>
     </form>
     <hr>
