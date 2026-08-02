@@ -8,7 +8,7 @@ Security researchers may test the software under the conditions on the in-app **
 
 ## Authentication
 
-- **Passwords:** bcrypt (10 rounds). Registration enforces a **12–128 character** password policy (ASVS 2.1.1; bcrypt truncates at 72 — the cap prevents surprise truncation).
+- **Passwords:** bcrypt (10 rounds). Registration enforces a **12-character minimum and a 72-byte maximum** (ASVS 2.1.1). The byte cap (not a character cap) is deliberate: bcrypt truncates at 72 bytes, so anything longer would silently collide with its own prefix — multi-byte characters like emoji count toward the limit, and full Unicode remains supported.
 - **Sessions:** signed cookies (`express-session`), `httpOnly`, `SameSite=Lax`, `Secure` in production, 30-day lifetime, stored server-side in SQLite (`data/sessions.db`, expired rows purged). `SESSION_SECRET` is mandatory — the server refuses to start without it. Session IDs are regenerated on login and registration (anti session-fixation).
 - **OAuth:** access tokens (24 h) and rotating refresh tokens (90 days) are random 64-hex values handed to the client once and stored **only as SHA-256 hashes** (`sha256$…`) at rest, so a leaked database dump cannot be replayed. Client secrets and authorization codes are stored the same way (client secrets are shown once at registration; codes are single-use and 10-minute-lived). Endpoints check token validity, expiry, required scopes, and ban status on every request.
 

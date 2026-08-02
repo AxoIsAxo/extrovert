@@ -22,8 +22,11 @@ router.post('/register', async (req, res) => {
   if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
     return res.render('register', { error: 'Username must be 3-20 letters, numbers, or underscores.' });
   }
-  if (password.length < 12 || password.length > 128) {
-    return res.render('register', { error: 'Password must be 12–128 characters.' });
+  // Policy: at least 12 characters; at most 72 BYTES (bcrypt truncates at 72
+  // bytes, so longer input would silently collide with its own prefix — a
+  // byte limit prevents that while keeping full Unicode/emoji support).
+  if (password.length < 12 || Buffer.byteLength(password, 'utf8') > 72) {
+    return res.render('register', { error: 'Password must be at least 12 characters and at most 72 bytes (multi-byte characters such as emoji count more).' });
   }
   if (getUserByUsername(username)) {
     return res.render('register', { error: 'That username is taken — try another.' });

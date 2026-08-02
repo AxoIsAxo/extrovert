@@ -186,7 +186,7 @@ describe('OWASP ASVS v4.0 (automatable subset)', () => {
       const csrf = extractCsrf(await pre.text());
       const weak = await req('/register', { method: 'POST', jar, form: { username: 'weakpass', password: 'abc123', _csrf: csrf } });
       assert.strictEqual(weak.status, 200, 'short password rejected');
-      assert.ok((await weak.text()).includes('Password must be 12'), 'policy error mentions 12');
+      assert.ok((await weak.text()).includes('Password must be at least 12'), 'policy error mentions 12');
       assert.ok(!db.getUserByUsername('weakpass'), 'no account created');
       const jar2 = { cookies: {} };
       const pre2 = await req('/register', { jar: jar2 });
@@ -204,6 +204,28 @@ describe('OWASP ASVS v4.0 (automatable subset)', () => {
       assert.strictEqual(resp.status, 200, 'overlong password rejected');
       assert.ok((await resp.text()).includes('Password must be'));
       assert.ok(!db.getUserByUsername('longpw'), 'no account created');
+    });
+
+    it('2.1.6 — multi-byte (emoji) passwords are bounded by bytes, not chars (no bcrypt truncation collision)', async () => {
+      // Each emoji is 4 UTF-8 bytes; bcrypt truncates at 72 bytes.
+      const over = '😀'.repeat(19); // 76 bytes
+      assert.ok(Buffer.byteLength(over, 'utf8') > 72, 'fixture is over the byte limit');
+      const jar = { cookies: {} };
+      const pre = await req('/register', { jar });
+      const csrf = extractCsrf(await pre.text());
+      const bad = await req('/register', { method: 'POST', jar, form: { username: 'emojipw', password: over, _csrf: csrf } });
+      assert.strictEqual(bad.status, 200, 'over-72-byte password rejected');
+      assert.ok((await bad.text()).includes('Password must be'), 'byte-limit error shown');
+      assert.ok(!db.getUserByUsername('emojipw'), 'no account created');
+
+      const atLimit = '😀'.repeat(18); // exactly 72 bytes
+      assert.strictEqual(Buffer.byteLength(atLimit, 'utf8'), 72, 'fixture is exactly at the limit');
+      const jar2 = { cookies: {} };
+      const pre2 = await req('/register', { jar: jar2 });
+      const csrf2 = extractCsrf(await pre2.text());
+      const okResp = await req('/register', { method: 'POST', jar: jar2, form: { username: 'emojipw2', password: atLimit, _csrf: csrf2 } });
+      assert.strictEqual(okResp.status, 302, '72-byte password accepted (full Unicode supported)');
+      assert.ok(db.getUserByUsername('emojipw2'), 'account created');
     });
 
     it('2.1.2 — no default/blank credentials work', async () => {
