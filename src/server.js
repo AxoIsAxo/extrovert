@@ -308,3 +308,6 @@ server.on('upgrade', (req, socket, head) => {
 });
 
 module.exports = app;
+// The module-level listener created at require time (also used by tests, which
+// boot their own ephemeral listener and close this one in teardown).
+module.exports.httpServer = server;

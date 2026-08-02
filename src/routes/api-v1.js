@@ -15,7 +15,7 @@ const { signIdToken, ISSUER } = require('../oidc');
 const { getOnlineUsers, getUserPresence, sendDmEvent, cancelPendingCallByToken } = require('../webrtc-signaling');
 const { onNotification } = require('../notif-broadcaster');
 const dm = require('../dm');
-const { getVapidPublicKey } = require('../push');
+const { getVapidPublicKey, validatePushEndpoint } = require('../push');
 
 const router = express.Router();
 
@@ -927,42 +927,45 @@ router.get('/search', requireApiAuth('read'), (req, res) => {
 
 // ----- Calls / Presence -----
 
-router.get('/calls/presence', requireApiAuth, (req, res) => {
+router.get('/calls/presence', requireApiAuth(), (req, res) => {
   const users = getOnlineUsers(req.apiUser.id);
   responseEnvelope(res, users);
 });
 
-router.get('/calls/presence/:username', requireApiAuth, (req, res) => {
+router.get('/calls/presence/:username', requireApiAuth(), (req, res) => {
   const presence = getUserPresence(req.params.username);
   res.json(presence);
 });
 
 // ======== Push subscriptions (native/mobile + PWA) ========
 
-router.get('/push/vapid-public', requireApiAuth, (req, res) => {
+router.get('/push/vapid-public', requireApiAuth(), (req, res) => {
   const key = getVapidPublicKey();
   if (!key) return res.status(404).json({ error: 'Push not configured' });
   res.json({ data: { publicKey: key } });
 });
 
-router.post('/push/subscribe', requireApiAuth, (req, res) => {
-  const { platform, endpoint, p256dh, auth: pushAuth } = req.body || {};
+router.post('/push/subscribe', requireApiAuth(), async (req, res) => {
+  const { platform: rawPlatform, endpoint, p256dh, auth: pushAuth } = req.body || {};
   if (!endpoint) return res.status(400).json({ error: 'endpoint is required' });
-  if (!platform) return res.status(400).json({ error: 'platform is required' });
+  const platform = String(rawPlatform || 'web');
+  if (!['web', 'fcm', 'apns', 'ws'].includes(platform)) return res.status(400).json({ error: 'unsupported platform' });
+  const check = await validatePushEndpoint(endpoint, platform);
+  if (!check.ok) return res.status(400).json({ error: check.reason });
   db.addPushSubscription({
     userId: req.apiUser.id,
     platform,
-    endpoint,
+    endpoint: String(endpoint).trim(),
     p256dh,
     auth: pushAuth,
   });
   res.json({ data: { ok: true } });
 });
 
-router.post('/push/unsubscribe', requireApiAuth, (req, res) => {
+router.post('/push/unsubscribe', requireApiAuth(), (req, res) => {
   const { endpoint } = req.body || {};
   if (!endpoint) return res.status(400).json({ error: 'endpoint is required' });
-  db.removePushSubscription(req.apiUser.id, endpoint);
+  db.removePushSubscription(req.apiUser.id, String(endpoint).trim());
   res.json({ data: { ok: true } });
 });
 

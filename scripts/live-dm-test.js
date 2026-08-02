@@ -8,7 +8,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const WebSocket = require('ws');
 
 const TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'extrovert-livedm-'));
@@ -67,9 +67,12 @@ async function main() {
   });
   ok(loginRes.status === 302 || loginRes.status === 200, 'bob logs in via web flow');
 
-  // Open a WebSocket with bob's session cookie.
+  // Open a WebSocket with bob's session cookie. Like the real browser client
+  // (public/webrtc.js), the first message is a ping that registers this
+  // connection for live DM delivery.
   const ws = new WebSocket(wsBase + '/ws', { headers: { Cookie: jar.cookie } });
   await new Promise((resolve, reject) => { ws.once('open', resolve); ws.once('error', reject); });
+  ws.send(JSON.stringify({ type: 'ping' }));
 
   const received = new Promise((resolve) => {
     ws.on('message', (raw) => {
@@ -113,6 +116,7 @@ async function main() {
   })();
   const wsAlice = new WebSocket(wsBase + '/ws', { headers: { Cookie: aliceLogin.cookie } });
   await new Promise((resolve, reject) => { wsAlice.once('open', resolve); wsAlice.once('error', reject); });
+  wsAlice.send(JSON.stringify({ type: 'ping' }));
   await new Promise(r => setTimeout(r, 300));
 
   let aliceGotDm = false;

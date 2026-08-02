@@ -25,10 +25,6 @@ function validateScopes(tokenScopes, requiredScopes) {
   return true;
 }
 
-function hashToken(token) {
-  return crypto.createHash('sha256').update(token).digest('hex');
-}
-
 function requireApiAuth(...requiredScopes) {
   return (req, res, next) => {
     const authHeader = req.headers.authorization;
@@ -91,8 +87,9 @@ function clientAppAuth(req, res, next) {
     return res.status(401).json({ error: 'invalid_client', error_description: 'Unknown client_id.' });
   }
   // Public clients (native/mobile apps using PKCE) cannot safely provide a secret.
-  // Only validate client_secret if it was actually sent in the request.
-  if (clientSecret !== undefined && app.client_secret && app.client_secret !== clientSecret) {
+  // Only validate client_secret if it was actually sent in the request. Secrets
+  // are stored as SHA-256 hashes, so compare the hash of the presented value.
+  if (clientSecret !== undefined && app.client_secret && db.hashOAuthToken(clientSecret) !== app.client_secret) {
     return res.status(401).json({ error: 'invalid_client', error_description: 'Client secret does not match.' });
   }
   req.oauthApp = app;

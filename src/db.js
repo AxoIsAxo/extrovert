@@ -384,6 +384,41 @@ db.prepare(`UPDATE users SET referred_by = NULL WHERE referred_by IS NOT NULL AN
 // Ensure avatar paths have /uploads/ prefix for template rendering.
 db.prepare(`UPDATE users SET avatar = '/uploads/' || avatar WHERE avatar IS NOT NULL AND avatar NOT LIKE '/uploads/%'`).run();
 
+// OAuth secrets (bearer tokens, client secrets, authorization codes) are stored
+// as SHA-256 hashes (see hashOAuthToken below). Migrate any rows written before
+// hashing was introduced so existing credentials keep working. Exported so
+// tests can exercise the legacy-row path.
+function migrateOAuthTokenHashes() {
+  try {
+    const legacyRows = db.prepare(`SELECT id, token, refresh_token FROM oauth_tokens`).all();
+    for (const r of legacyRows) {
+      if (r.token && !String(r.token).startsWith('sha256$')) {
+        db.prepare(`UPDATE oauth_tokens SET token = ? WHERE id = ?`).run(hashOAuthToken(r.token), r.id);
+      }
+      if (r.refresh_token && !String(r.refresh_token).startsWith('sha256$')) {
+        db.prepare(`UPDATE oauth_tokens SET refresh_token = ? WHERE id = ?`).run(hashOAuthToken(r.refresh_token), r.id);
+      }
+    }
+  } catch {}
+  try {
+    const apps = db.prepare(`SELECT id, client_secret FROM oauth_apps`).all();
+    for (const a of apps) {
+      if (a.client_secret && !String(a.client_secret).startsWith('sha256$')) {
+        db.prepare(`UPDATE oauth_apps SET client_secret = ? WHERE id = ?`).run(hashOAuthToken(a.client_secret), a.id);
+      }
+    }
+  } catch {}
+  try {
+    const codes = db.prepare(`SELECT id, code FROM oauth_codes`).all();
+    for (const c of codes) {
+      if (c.code && !String(c.code).startsWith('sha256$')) {
+        db.prepare(`UPDATE oauth_codes SET code = ? WHERE id = ?`).run(hashOAuthToken(c.code), c.id);
+      }
+    }
+  } catch {}
+}
+migrateOAuthTokenHashes();
+
 // ---------- users ----------
 function adminExists() {
   return db.prepare(`SELECT 1 FROM users WHERE is_admin = 1`).get() ? true : false;
@@ -1223,7 +1258,7 @@ function createOAuthApp({ name, description, website, redirectUris, clientId, cl
   const res = db.prepare(`
     INSERT INTO oauth_apps (name, description, website, redirect_uris, client_id, client_secret, scopes, owner_id, created_at)
     VALUES (?,?,?,?,?,?,?,?,?)
-  `).run(name, description, website, redirectUris, clientId, clientSecret || null, scopes, ownerId, now);
+  `).run(name, description, website, redirectUris, clientId, clientSecret ? hashOAuthToken(clientSecret) : null, scopes, ownerId, now);
   return res.lastInsertRowid;
 }
 
@@ -1262,11 +1297,11 @@ function createOAuthCode(code, appId, userId, scopes, codeChallenge, codeChallen
   db.prepare(`
     INSERT INTO oauth_codes (code, app_id, user_id, scopes, nonce, code_challenge, code_challenge_method, redirect_uri, expires_at, created_at)
     VALUES (?,?,?,?,?,?,?,?,?,?)
-  `).run(code, appId, userId, scopes, nonce || null, codeChallenge || null, codeChallengeMethod || null, redirectUri, now + 600000, now);
+  `).run(hashOAuthToken(code), appId, userId, scopes, nonce || null, codeChallenge || null, codeChallengeMethod || null, redirectUri, now + 600000, now);
 }
 
 function getOAuthCode(code) {
-  return db.prepare(`SELECT * FROM oauth_codes WHERE code = ?`).get(code);
+  return db.prepare(`SELECT * FROM oauth_codes WHERE code = ?`).get(hashOAuthToken(code));
 }
 
 function markOAuthCodeUsed(id) {
@@ -1274,25 +1309,33 @@ function markOAuthCodeUsed(id) {
 }
 
 // ---------- OAuth2 tokens ----------
+// ---------- OAuth tokens ----------
+// Bearer tokens are high-value secrets; store only a SHA-256 hash so a leaked
+// database dump cannot be replayed. Lookups hash the presented token first.
+const TOKEN_HASH_PREFIX = 'sha256$';
+function hashOAuthToken(token) {
+  return TOKEN_HASH_PREFIX + crypto.createHash('sha256').update(String(token)).digest('hex');
+}
+
 function createOAuthToken(token, refreshToken, appId, userId, scopes, expiresAt) {
   const now = Date.now();
   const refreshExpiresAt = now + 90 * 24 * 60 * 60 * 1000; // 90 days
   db.prepare(`
     INSERT INTO oauth_tokens (token, refresh_token, app_id, user_id, scopes, expires_at, refresh_expires_at, created_at)
     VALUES (?,?,?,?,?,?,?,?)
-  `).run(token, refreshToken || null, appId, userId, scopes, expiresAt || null, refreshExpiresAt, now);
+  `).run(hashOAuthToken(token), refreshToken ? hashOAuthToken(refreshToken) : null, appId, userId, scopes, expiresAt || null, refreshExpiresAt, now);
 }
 
 function getOAuthToken(token) {
-  return db.prepare(`SELECT * FROM oauth_tokens WHERE token = ?`).get(token);
+  return db.prepare(`SELECT * FROM oauth_tokens WHERE token = ?`).get(hashOAuthToken(token));
 }
 
 function getOAuthTokenByRefresh(refreshToken) {
-  return db.prepare(`SELECT * FROM oauth_tokens WHERE refresh_token = ?`).get(refreshToken);
+  return db.prepare(`SELECT * FROM oauth_tokens WHERE refresh_token = ?`).get(hashOAuthToken(refreshToken));
 }
 
 function revokeOAuthToken(token) {
-  db.prepare(`DELETE FROM oauth_tokens WHERE token = ?`).run(token);
+  db.prepare(`DELETE FROM oauth_tokens WHERE token = ?`).run(hashOAuthToken(token));
 }
 
 function revokeOAuthTokensForUser(userId, appId) {
@@ -1305,14 +1348,14 @@ function revokeAllOAuthTokensForUser(userId) {
 
 function rotateRefreshToken(oldRefreshToken, newToken, newRefreshToken, expiresAt) {
   const now = Date.now();
-  const existing = db.prepare(`SELECT * FROM oauth_tokens WHERE refresh_token = ?`).get(oldRefreshToken);
+  const existing = db.prepare(`SELECT * FROM oauth_tokens WHERE refresh_token = ?`).get(hashOAuthToken(oldRefreshToken));
   if (!existing) return null;
-  db.prepare(`DELETE FROM oauth_tokens WHERE refresh_token = ?`).run(oldRefreshToken);
+  db.prepare(`DELETE FROM oauth_tokens WHERE refresh_token = ?`).run(hashOAuthToken(oldRefreshToken));
   const refreshExpiresAt = now + 90 * 24 * 60 * 60 * 1000; // 90 days
   db.prepare(`
     INSERT INTO oauth_tokens (token, refresh_token, app_id, user_id, scopes, expires_at, refresh_expires_at, created_at)
     VALUES (?,?,?,?,?,?,?,?)
-  `).run(newToken, newRefreshToken, existing.app_id, existing.user_id, existing.scopes, expiresAt || null, refreshExpiresAt, now);
+  `).run(hashOAuthToken(newToken), hashOAuthToken(newRefreshToken), existing.app_id, existing.user_id, existing.scopes, expiresAt || null, refreshExpiresAt, now);
   return existing;
 }
 
@@ -1503,7 +1546,7 @@ module.exports = {
   // OAuth tokens
   createOAuthToken, getOAuthToken, getOAuthTokenByRefresh,
   revokeOAuthToken, revokeOAuthTokensForUser, revokeAllOAuthTokensForUser,
-  rotateRefreshToken,
+  rotateRefreshToken, migrateOAuthTokenHashes, hashOAuthToken,
   // media
   createMediaAttachment, getMediaAttachment, getMediaAttachmentsByUser, updateMediaAttachmentDimensions,
   // idempotency

@@ -5,8 +5,8 @@ This page describes how Extrovert protects itself today. The audit history (what
 ## Authentication
 
 - **Passwords:** bcrypt (10 rounds). Registration and login both cap passwords at 128 chars (bcrypt truncates at 72 — the cap prevents surprise truncation).
-- **Sessions:** signed cookies (`express-session`), `httpOnly`, `SameSite=Lax`, `Secure` in production, 30-day lifetime, stored server-side in SQLite (`data/sessions.db`, expired rows purged). `SESSION_SECRET` is mandatory — the server refuses to start without it.
-- **OAuth:** access tokens (24 h) and rotating refresh tokens (90 days) stored as random 64-hex values. Endpoints check token validity, expiry, required scopes, and ban status on every request.
+- **Sessions:** signed cookies (`express-session`), `httpOnly`, `SameSite=Lax`, `Secure` in production, 30-day lifetime, stored server-side in SQLite (`data/sessions.db`, expired rows purged). `SESSION_SECRET` is mandatory — the server refuses to start without it. Session IDs are regenerated on login and registration (anti session-fixation).
+- **OAuth:** access tokens (24 h) and rotating refresh tokens (90 days) are random 64-hex values handed to the client once and stored **only as SHA-256 hashes** (`sha256$…`) at rest, so a leaked database dump cannot be replayed. Client secrets and authorization codes are stored the same way (client secrets are shown once at registration; codes are single-use and 10-minute-lived). Endpoints check token validity, expiry, required scopes, and ban status on every request.
 
 ## CSRF
 
@@ -71,6 +71,7 @@ A registration via a referral link is rejected when the registrant's IP matches 
 ## Notifications & tokens
 
 - Push `cancel_token` values are unguessable UUIDs delivered only via the callee's own push channels; `POST /push/cancel-pending` requires no session but only cancels the matching pending call.
+- Push subscription endpoints are SSRF-guarded at subscribe time: must be `https:` URLs pointing at public hosts (loopback, RFC1918, link-local, IPv4-mapped/IPv6 private/6to4/NAT64/Teredo forms, and hosts that don't resolve to a public address are rejected; device-token platforms `fcm`/`apns`/`ws` are unaffected). At send time the endpoint is re-validated and the connection is pinned to the resolved public address (custom `https.Agent` lookup), closing DNS-rebinding between validation and connection.
 - OAuth revocation always returns `{ok:true}` to prevent token enumeration.
 
 ## Data hygiene

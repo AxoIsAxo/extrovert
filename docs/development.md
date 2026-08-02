@@ -58,6 +58,7 @@ public/
 scripts/
   test.js              npm test — feed algorithm + sanitization unit tests
   api-test.js          npm run test:api — API integration tests (node --test)
+  owasp-test.js        npm run test:owasp — OWASP Top 10 security suite (node --test)
   crypto-test.js       npm run test:crypto — Olm protocol regression tests
   megolm-room-test.js  npm run test:megolm — group E2EE session/rotation tests
   megolm-integration-test.js — server-side Megolm endpoint flow
@@ -78,6 +79,7 @@ scripts/
 | dev | `npm run dev` | `node --watch src/server.js` |
 | test | `npm test` | Feed algorithm + sanitization tests |
 | test:api | `npm run test:api` | API integration suite (`node --test`) |
+| test:owasp | `npm run test:owasp` | OWASP Top 10 security suite (access control, crypto-at-rest, injection, XSS, misconfig, dependency audit, auth, CSRF, logging, SSRF) |
 | test:crypto | `npm run test:crypto` | Olm protocol regression |
 | test:megolm | `npm run test:megolm` | Megolm room-session tests |
 | test:megolm:integration | `npm run test:megolm:integration` | Server Megolm flow |
@@ -96,6 +98,7 @@ node scripts/test-offline-call.js   # offline-call flow, isolated DB
 ## Testing approach
 
 - Unit-ish tests run directly against `src/` modules with a temp database (`EXTV_DB_PATH` / `EXTV_SESSION_DB_PATH` point at throwaway files — see `scripts/api-test.js` for the pattern).
+- `scripts/owasp-test.js` boots the full app (session + CSRF for web routes, Bearer tokens for the API) and covers the OWASP Top 10 (2021): broken access control, crypto failures (bcrypt + OAuth tokens hashed at rest), injection/SQLi/XSS, insecure design (rate limiting, referral anti-farming), misconfiguration (helmet headers, no stack leaks), vulnerable components (`npm audit`), auth failures (session regeneration, enumeration), integrity failures (CSRF, open redirects, prototype pollution), logging (audit log), and SSRF (push endpoint validation). It runs `npm audit` for A06 and skips gracefully offline.
 - The signaling tests spin up a real `WebSocketServer` and drive it with mock HTTP upgrade requests.
 - The Olm/Megolm tests use the real `@matrix-org/olm` package to validate the exact protocol patterns the browser frontend (`public/e2ee.js`, `public/room-e2ee.js`) relies on.
 

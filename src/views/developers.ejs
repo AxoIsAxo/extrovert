@@ -3,6 +3,12 @@
   <h2>Developer Applications</h2>
 
   <% if (locals.error) { %><div class="flash err"><%= error %></div><% } %>
+  <% if (typeof freshSecret !== 'undefined' && freshSecret) { %>
+    <div class="flash" style="border-color:var(--brand);background:var(--surface-2)">
+      <strong>Application registered.</strong> Your client secret (shown once — copy it now):<br>
+      <code style="display:block;padding:10px;margin-top:8px;background:var(--surface-3);border:1px solid var(--border-soft);border-radius:var(--radius);word-break:break-all;font-size:0.8rem"><%= freshSecret %></code>
+    </div>
+  <% } %>
 
   <div class="card" style="margin-bottom:20px">
     <h3>Register a new application</h3>
@@ -47,10 +53,7 @@
           <summary style="cursor:pointer;color:var(--primary)">Credentials</summary>
           <p style="margin:10px 0 4px"><strong>Client ID:</strong></p>
           <code style="display:block;padding:10px;background:var(--surface-3);border:1px solid var(--border-soft);border-radius:var(--radius);word-break:break-all;font-size:0.8rem"><%= app.client_id %></code>
-           <% if (app.client_secret) { %>
-            <p style="margin:10px 0 4px"><strong>Client secret:</strong> <span class="muted">(shown once — copy it now)</span></p>
-            <code style="display:block;padding:10px;background:var(--surface-3);border:1px solid var(--border-soft);border-radius:var(--radius);word-break:break-all;font-size:0.8rem"><%= app.client_secret %></code>
-           <% } %>
+          <p style="margin:10px 0 4px"><strong>Client secret:</strong> <span class="muted">stored hashed — not shown again after registration</span></p>
            <p style="margin:10px 0 4px"><strong>Redirect URIs:</strong></p>
           <code style="display:block;padding:10px;background:var(--surface-3);border:1px solid var(--border-soft);border-radius:var(--radius);font-size:0.8rem"><%= app.redirect_uris %></code>
           <p style="margin:10px 0 4px"><strong>Scopes:</strong> <code><%= app.scopes %></code></p>

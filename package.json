@@ -9,6 +9,7 @@
     "dev": "node --watch src/server.js",
     "test": "node scripts/test.js",
     "test:api": "node --test scripts/api-test.js",
+    "test:owasp": "node --test scripts/owasp-test.js",
     "test:crypto": "node scripts/crypto-test.js",
     "test:megolm": "node scripts/megolm-room-test.js",
     "test:megolm:integration": "node scripts/megolm-integration-test.js",

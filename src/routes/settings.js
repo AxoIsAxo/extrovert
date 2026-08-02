@@ -82,7 +82,13 @@ router.post('/developers', (req, res, next) => {
       ownerId: user.id,
     });
 
-    res.redirect('/settings/developers');
+    // The client secret is only ever shown once, at creation (it is stored
+    // hashed), so render the page with the fresh value instead of redirecting.
+    res.render('developers', {
+      apps: db.getOAuthAppsByOwner(user.id),
+      authorizedApps: db.getAuthorizedAppsForUser(user.id),
+      freshSecret: clientSecret,
+    });
   } catch (err) {
     console.error('Error registering app:', err);
     res.render('developers', {

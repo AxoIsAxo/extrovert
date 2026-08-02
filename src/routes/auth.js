@@ -47,8 +47,16 @@ router.post('/register', async (req, res) => {
 
   const hash = bcrypt.hashSync(password, 10);
   const id = createUser({ username, passwordHash: hash, displayName, referredBy, referrerIp: registrantIp });
-  req.session.userId = id;
-  res.redirect('/');
+  // Regenerate the session so a pre-planted cookie cannot be fixed onto the
+  // freshly created account.
+  req.session.regenerate((err) => {
+    if (err) {
+      console.error('register: session regeneration failed:', err);
+      return res.status(500).send('Internal server error');
+    }
+    req.session.userId = id;
+    res.redirect('/');
+  });
 });
 
 router.get('/login', (req, res) => {
@@ -69,13 +77,19 @@ router.post('/login', (req, res) => {
   if (user.banned) {
     return res.render('login', { error: 'Your account has been suspended.', next: req.query.next || '' });
   }
-  req.session.userId = user.id;
-  const loginIp = req.ip || req.connection.remoteAddress;
-  try { db.db.prepare(`UPDATE users SET referrer_ip = ? WHERE id = ?`).run(loginIp, user.id); } catch {}
-  if (!user.is_admin && !adminExists()) {
-    return res.redirect('/become-admin');
-  }
-  res.safeRedirect(req.body.next, '/');
+  req.session.regenerate((err) => {
+    if (err) {
+      console.error('login: session regeneration failed:', err);
+      return res.status(500).send('Internal server error');
+    }
+    req.session.userId = user.id;
+    const loginIp = req.ip || req.connection.remoteAddress;
+    try { db.db.prepare(`UPDATE users SET referrer_ip = ? WHERE id = ?`).run(loginIp, user.id); } catch {}
+    if (!user.is_admin && !adminExists()) {
+      return res.redirect('/become-admin');
+    }
+    res.safeRedirect(req.body.next, '/');
+  });
 });
 
 router.post('/logout', (req, res) => {

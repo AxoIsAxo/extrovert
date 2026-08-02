@@ -2,7 +2,7 @@
 
 const express = require('express');
 const { requireAuth } = require('../auth');
-const { getVapidPublicKey } = require('../push');
+const { getVapidPublicKey, validatePushEndpoint } = require('../push');
 const db = require('../db');
 const { cancelPendingCallByToken } = require('../webrtc-signaling');
 
@@ -18,14 +18,18 @@ router.get('/vapid-public', requireAuth, (req, res) => {
 
 // Register a push subscription (browser/pwa). Requires session auth + CSRF.
 // Body: { endpoint, p256dh, auth, platform? }
-router.post('/subscribe', requireAuth, (req, res) => {
-  const { endpoint, p256dh, auth, platform } = req.body || {};
+router.post('/subscribe', requireAuth, async (req, res) => {
+  const { endpoint, p256dh, auth, platform: rawPlatform } = req.body || {};
   if (!endpoint) return res.status(400).json({ error: 'endpoint is required' });
+  const platform = String(rawPlatform || 'web');
+  if (!['web', 'fcm', 'apns', 'ws'].includes(platform)) return res.status(400).json({ error: 'unsupported platform' });
+  const check = await validatePushEndpoint(endpoint, platform);
+  if (!check.ok) return res.status(400).json({ error: check.reason });
   const user = res.locals.currentUser;
   db.addPushSubscription({
     userId: user.id,
-    platform: platform || 'web',
-    endpoint,
+    platform,
+    endpoint: String(endpoint).trim(),
     p256dh,
     auth,
   });
@@ -38,7 +42,7 @@ router.post('/unsubscribe', requireAuth, (req, res) => {
   const { endpoint } = req.body || {};
   if (!endpoint) return res.status(400).json({ error: 'endpoint is required' });
   const user = res.locals.currentUser;
-  db.removePushSubscription(user.id, endpoint);
+  db.removePushSubscription(user.id, String(endpoint).trim());
   res.json({ ok: true });
 });
 
