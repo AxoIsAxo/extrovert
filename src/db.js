@@ -1008,42 +1008,84 @@ function claimOlmPrekey(userId) {
 
 // ---------- account deletion ----------
 function deleteUser(userId) {
-  // Orphan any users this user referred.
-  db.prepare(`UPDATE users SET referred_by = NULL WHERE referred_by = ?`).run(userId);
-  // Delete posts-related data: collect all post IDs by this user.
-  const postIds = db.prepare(`SELECT id FROM posts WHERE user_id = ?`).all(userId).map(r => r.id);
-  for (const pid of postIds) {
-    db.prepare(`DELETE FROM likes WHERE post_id = ?`).run(pid);
-    db.prepare(`DELETE FROM comments WHERE post_id = ?`).run(pid);
-    db.prepare(`DELETE FROM shares WHERE post_id = ?`).run(pid);
-    db.prepare(`DELETE FROM follows_from_post WHERE post_id = ?`).run(pid);
-    db.prepare(`DELETE FROM notifications WHERE post_id = ?`).run(pid);
-    db.prepare(`DELETE FROM posts WHERE repost_of_id = ?`).run(pid);
+  // Remove every row referencing the user (FKs are enforced), in dependency
+  // order, inside one transaction so a failure can't leave a half-deleted
+  // account behind. Rooms the user created are deleted with all their content;
+  // nullable references (announcement author, security-report handler) are
+  // orphaned to NULL instead.
+  db.exec('BEGIN');
+  try {
+    // Orphan any users this user referred.
+    db.prepare(`UPDATE users SET referred_by = NULL WHERE referred_by = ?`).run(userId);
+    // Delete posts-related data: collect all post IDs by this user.
+    const postIds = db.prepare(`SELECT id FROM posts WHERE user_id = ?`).all(userId).map(r => r.id);
+    for (const pid of postIds) {
+      db.prepare(`DELETE FROM likes WHERE post_id = ?`).run(pid);
+      db.prepare(`DELETE FROM comments WHERE post_id = ?`).run(pid);
+      db.prepare(`DELETE FROM shares WHERE post_id = ?`).run(pid);
+      db.prepare(`DELETE FROM follows_from_post WHERE post_id = ?`).run(pid);
+      db.prepare(`DELETE FROM notifications WHERE post_id = ?`).run(pid);
+      db.prepare(`DELETE FROM edit_history WHERE entity_type = 'post' AND entity_id = ?`).run(pid);
+      db.prepare(`DELETE FROM posts WHERE repost_of_id = ?`).run(pid);
+    }
+    db.prepare(`DELETE FROM posts WHERE user_id = ?`).run(userId);
+    // User activity.
+    db.prepare(`DELETE FROM likes WHERE user_id = ?`).run(userId);
+    db.prepare(`DELETE FROM comments WHERE user_id = ?`).run(userId);
+    db.prepare(`DELETE FROM shares WHERE user_id = ?`).run(userId);
+    db.prepare(`DELETE FROM follows WHERE follower_id = ? OR followee_id = ?`).run(userId, userId);
+    db.prepare(`DELETE FROM follows_from_post WHERE follower_id = ? OR followee_id = ?`).run(userId, userId);
+    db.prepare(`DELETE FROM notifications WHERE user_id = ? OR actor_id = ?`).run(userId, userId);
+    db.prepare(`DELETE FROM messages WHERE from_id = ? OR to_id = ?`).run(userId, userId);
+    db.prepare(`DELETE FROM profile_customization WHERE user_id = ?`).run(userId);
+    db.prepare(`DELETE FROM user_public_keys WHERE user_id = ?`).run(userId);
+    db.prepare(`DELETE FROM stickers WHERE user_id = ?`).run(userId);
+    db.prepare(`DELETE FROM dm_security WHERE user_id = ? OR other_id = ?`).run(userId, userId);
+    db.prepare(`DELETE FROM olm_identity WHERE user_id = ?`).run(userId);
+    db.prepare(`DELETE FROM olm_prekeys WHERE user_id = ?`).run(userId);
+    db.prepare(`DELETE FROM media_attachments WHERE user_id = ?`).run(userId);
+    db.prepare(`DELETE FROM edit_history WHERE edited_by = ?`).run(userId);
+    db.prepare(`DELETE FROM push_subscriptions WHERE user_id = ?`).run(userId);
+    db.prepare(`DELETE FROM audit_log WHERE actor_id = ?`).run(userId);
+    db.prepare(`UPDATE announcement SET author_id = NULL WHERE author_id = ?`).run(userId);
+    db.prepare(`UPDATE security_reports SET handled_by = NULL WHERE handled_by = ?`).run(userId);
+    // OAuth: tokens and codes reference apps; delete children before the apps.
+    db.prepare(`DELETE FROM oauth_codes WHERE user_id = ?`).run(userId);
+    db.prepare(`DELETE FROM oauth_tokens WHERE user_id = ?`).run(userId);
+    db.prepare(`DELETE FROM oauth_apps WHERE owner_id = ?`).run(userId);
+    // Rooms this user created: delete the room and everything in it.
+    const roomIds = db.prepare(`SELECT id FROM rooms WHERE creator_id = ?`).all(userId).map(r => r.id);
+    for (const rid of roomIds) {
+      const chanIds = db.prepare(`SELECT id FROM room_channels WHERE room_id = ?`).all(rid).map(r => r.id);
+      for (const cid of chanIds) db.prepare(`DELETE FROM room_messages WHERE channel_id = ?`).run(cid);
+      db.prepare(`DELETE FROM room_channels WHERE room_id = ?`).run(rid);
+      db.prepare(`DELETE FROM room_members WHERE room_id = ?`).run(rid);
+      db.prepare(`DELETE FROM room_roles WHERE room_id = ?`).run(rid);
+      const gsIds = db.prepare(`SELECT id FROM room_group_sessions WHERE room_id = ?`).all(rid).map(r => r.id);
+      for (const gid of gsIds) {
+        db.prepare(`DELETE FROM room_group_session_keys WHERE session_id = ?`).run(gid);
+        db.prepare(`DELETE FROM room_group_sessions WHERE id = ?`).run(gid);
+      }
+      db.prepare(`DELETE FROM reports WHERE room_id = ?`).run(rid);
+      db.prepare(`DELETE FROM join_requests WHERE room_id = ?`).run(rid);
+      db.prepare(`DELETE FROM rooms WHERE id = ?`).run(rid);
+    }
+    // Membership / messages in other users' rooms.
+    db.prepare(`DELETE FROM room_members WHERE user_id = ?`).run(userId);
+    db.prepare(`DELETE FROM room_messages WHERE user_id = ?`).run(userId);
+    db.prepare(`DELETE FROM join_requests WHERE user_id = ?`).run(userId);
+    db.prepare(`DELETE FROM room_group_sessions WHERE sender_id = ?`).run(userId);
+    db.prepare(`DELETE FROM room_group_session_keys WHERE recipient_id = ?`).run(userId);
+    // Reports involving this user (columns are NOT NULL — delete; the account is
+    // gone so the moderation case is moot).
+    db.prepare(`DELETE FROM reports WHERE reporter_id = ? OR reported_user_id = ?`).run(userId, userId);
+    // Finally the user row.
+    db.prepare(`DELETE FROM users WHERE id = ?`).run(userId);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
   }
-  db.prepare(`DELETE FROM posts WHERE user_id = ?`).run(userId);
-  // User activity.
-  db.prepare(`DELETE FROM likes WHERE user_id = ?`).run(userId);
-  db.prepare(`DELETE FROM comments WHERE user_id = ?`).run(userId);
-  db.prepare(`DELETE FROM shares WHERE user_id = ?`).run(userId);
-  db.prepare(`DELETE FROM follows WHERE follower_id = ? OR followee_id = ?`).run(userId, userId);
-  db.prepare(`DELETE FROM follows_from_post WHERE follower_id = ? OR followee_id = ?`).run(userId, userId);
-  db.prepare(`DELETE FROM notifications WHERE user_id = ? OR actor_id = ?`).run(userId, userId);
-  db.prepare(`DELETE FROM messages WHERE from_id = ? OR to_id = ?`).run(userId, userId);
-  db.prepare(`DELETE FROM profile_customization WHERE user_id = ?`).run(userId);
-  db.prepare(`DELETE FROM user_public_keys WHERE user_id = ?`).run(userId);
-  db.prepare(`DELETE FROM olm_identity WHERE user_id = ?`).run(userId);
-  db.prepare(`DELETE FROM olm_prekeys WHERE user_id = ?`).run(userId);
-  // Rooms cleanup.
-  db.prepare(`DELETE FROM room_messages WHERE user_id = ?`).run(userId);
-  db.prepare(`DELETE FROM room_members WHERE user_id = ?`).run(userId);
-  db.prepare(`DELETE FROM join_requests WHERE user_id = ?`).run(userId);
-  db.prepare(`DELETE FROM room_group_sessions WHERE sender_id = ?`).run(userId);
-  db.prepare(`DELETE FROM room_group_session_keys WHERE recipient_id = ?`).run(userId);
-  db.prepare(`UPDATE rooms SET creator_id = NULL WHERE creator_id = ?`).run(userId);
-  // Reports cleanup.
-  db.prepare(`UPDATE reports SET reporter_id = NULL WHERE reporter_id = ?`).run(userId);
-  db.prepare(`UPDATE reports SET reported_user_id = NULL WHERE reported_user_id = ?`).run(userId);
-  db.prepare(`DELETE FROM users WHERE id = ?`).run(userId);
 }
 
 // ---------- admin ----------
