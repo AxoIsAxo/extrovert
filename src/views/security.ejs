@@ -43,18 +43,18 @@
       </p>
       <form method="post" action="/security/report">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <label>Summary <span class="muted">(one line, e.g. "Stored XSS in profile HTML")</span></label>
-        <input type="text" name="summary" maxlength="200" required>
-        <label>Details <span class="muted">(steps to reproduce, impact, suggested fix)</span></label>
-        <textarea name="details" rows="8" maxlength="5000" required style="width:100%;box-sizing:border-box"></textarea>
+        <label for="sec-summary">Summary <span class="muted">(one line, e.g. "Stored XSS in profile HTML")</span></label>
+        <input type="text" name="summary" id="sec-summary" maxlength="200" required>
+        <label for="sec-details">Details <span class="muted">(steps to reproduce, impact, suggested fix)</span></label>
+        <textarea name="details" id="sec-details" rows="8" maxlength="5000" required style="width:100%;box-sizing:border-box"></textarea>
         <div style="display:flex;gap:12px;flex-wrap:wrap">
           <div style="flex:1;min-width:200px">
-            <label>Your name <span class="muted">(optional)</span></label>
-            <input type="text" name="reporter_name" maxlength="100">
+            <label for="sec-name">Your name <span class="muted">(optional)</span></label>
+            <input type="text" name="reporter_name" id="sec-name" maxlength="100">
           </div>
           <div style="flex:1;min-width:200px">
-            <label>Contact <span class="muted">(optional — email, so we can reply)</span></label>
-            <input type="text" name="reporter_contact" maxlength="200">
+            <label for="sec-contact">Contact <span class="muted">(optional — email, so we can reply)</span></label>
+            <input type="text" name="reporter_contact" id="sec-contact" maxlength="200">
           </div>
         </div>
         <button class="btn full" style="margin-top:16px"><%- include('partials/icon', { name: 'shield', size: 15 }) %> Send privately</button>

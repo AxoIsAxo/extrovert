@@ -3,10 +3,10 @@
     <h2 style="margin-top:0">Create a room</h2>
     <form method="post" action="/rooms/create">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-      <label>Room name</label>
-      <input type="text" name="name" maxlength="60" required>
-      <label>Description <span class="muted">(optional)</span></label>
-      <input type="text" name="description" maxlength="200">
+      <label for="room-name">Room name</label>
+      <input type="text" name="name" id="room-name" maxlength="60" required>
+      <label for="room-description">Description <span class="muted">(optional)</span></label>
+      <input type="text" name="description" id="room-description" maxlength="200">
       <label>Room type</label>
       <div style="margin:8px 0;display:flex;gap:16px">
         <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:400;font-size:var(--fs-sm)">

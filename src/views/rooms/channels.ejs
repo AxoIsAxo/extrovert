@@ -2,7 +2,7 @@
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center">
       <h2 style="margin:0">Channels — <%= room.name %></h2>
-      <a class="btn" href="/rooms/<%= room.id %>">Back</a>
+      <a class="btn ghost" href="/rooms/<%= room.id %>">Back</a>
     </div>
   </div>
 
@@ -43,7 +43,7 @@
               <% if (ch.view_role_ids) { %><small class="muted"> restricted view</small><% } %>
               <% if (ch.write_role_ids) { %><small class="muted"> restricted write</small><% } %>
             </div>
-            <form method="post" action="/rooms/<%= room.id %>/channels/<%= ch.id %>/delete" style="margin:0"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost danger">Delete</button></form>
+            <form method="post" action="/rooms/<%= room.id %>/channels/<%= ch.id %>/delete" style="margin:0" data-confirm="Delete this channel and all its messages?"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost danger">Delete</button></form>
           </div>
         <% }) %>
       </div>

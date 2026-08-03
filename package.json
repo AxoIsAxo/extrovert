@@ -17,6 +17,7 @@
     "test:live-dm": "node scripts/live-dm-test.js",
     "test:secure-dm": "node scripts/secure-dm-test.js",
     "test:multidevice": "node scripts/multidevice-decrypt-test.js",
+    "test:render": "node scripts/render-smoke.js",
     "test:self-session": "node scripts/self-session-test.js",
     "test:session-reload": "node scripts/session-reload-test.js"
   },

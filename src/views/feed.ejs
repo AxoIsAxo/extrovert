@@ -39,12 +39,17 @@
     <% } else { %>
       <%- include('partials/post-list', { items: items }) %>
       <div class="pager">
-        <% if (page > 1) { %>
-          <a class="btn ghost" href="/?page=<%= page - 1 %>"><%- include('partials/icon', { name: 'arrowLeft', size: 15 }) %> Newer</a>
-        <% } else { %><span></span><% } %>
-        <% if (hasMore) { %>
-          <a class="btn ghost" href="/?page=<%= page + 1 %>">Older <%- include('partials/icon', { name: 'arrowRight', size: 15 }) %></a>
-        <% } %>
+        <span class="pager-side">
+          <% if (page > 1) { %>
+            <a class="btn ghost" href="/?page=<%= page - 1 %>"><%- include('partials/icon', { name: 'arrowLeft', size: 15 }) %> Newer</a>
+          <% } %>
+        </span>
+        <span class="page-indicator">Page <%= page %></span>
+        <span class="pager-side">
+          <% if (hasMore) { %>
+            <a class="btn ghost" href="/?page=<%= page + 1 %>">Older <%- include('partials/icon', { name: 'arrowRight', size: 15 }) %></a>
+          <% } %>
+        </span>
       </div>
     <% } %>
   </div>

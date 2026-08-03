@@ -2,7 +2,7 @@
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center">
       <h2 style="margin:0">Roles — <%= room.name %></h2>
-      <a class="btn" href="/rooms/<%= room.id %>">Back</a>
+      <a class="btn ghost" href="/rooms/<%= room.id %>">Back</a>
     </div>
   </div>
 
@@ -45,7 +45,7 @@
           </div>
           <% if (!r.is_founder) { %>
             <div style="display:flex;gap:4px">
-              <form method="post" action="/rooms/<%= room.id %>/roles/<%= r.id %>/delete" style="margin:0"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost danger">Delete</button></form>
+              <form method="post" action="/rooms/<%= room.id %>/roles/<%= r.id %>/delete" style="margin:0" data-confirm="Delete this role? Members holding it lose those permissions."><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost danger">Delete</button></form>
             </div>
           <% } %>
         </div>

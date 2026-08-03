@@ -9,6 +9,7 @@
   <% if (list.length === 0) { %>
     <div class="card empty-state">
       <div class="empty-art"><%- include('partials/rings', { size: 48, animate: true }) %></div>
+      <h4><%= title %></h4>
       <p><%= emptyMsg %></p>
     </div>
   <% } else { %>

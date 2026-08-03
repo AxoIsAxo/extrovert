@@ -29,7 +29,7 @@
               <small class="muted"><%= r.description || 'No description' %></small>
             </div>
             <div style="display:flex;align-items:center;gap:10px">
-              <small class="muted"><%= r.member_count %></small>
+              <small class="muted"><%= r.member_count %> member<%= r.member_count === 1 ? '' : 's' %></small>
               <form method="post" action="/rooms/<%= r.id %>/join">
                 <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                 <button class="btn small">Join</button>

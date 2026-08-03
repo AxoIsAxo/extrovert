@@ -3,8 +3,8 @@
     <h2>Settings</h2>
     <form method="post">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-      <label>Theme</label>
-      <select name="theme">
+      <label for="settings-theme">Theme</label>
+      <select name="theme" id="settings-theme">
         <option value="dark" <%= theme === 'dark' ? 'selected' : '' %>>Dark · Ink</option>
         <option value="light" <%= theme === 'light' ? 'selected' : '' %>>Light · Lavender</option>
       </select>

@@ -246,6 +246,11 @@ h4 { font-size: var(--fs-lg); font-family: var(--font-body); font-weight: 700; l
 .nav a:hover, .nav button:hover {
   background: var(--surface-2); color: var(--text); text-decoration: none;
 }
+.nav a.active, .nav button.active {
+  background: var(--primary-soft); color: var(--primary-strong);
+  text-decoration: none;
+}
+.nav a.active:hover, .nav button.active:hover { color: var(--primary-strong); }
 .nav .nav-icon { display: inline-flex; }
 
 /* ── Announcement pill + popover (top bar) ─────────────────────────── */
@@ -546,6 +551,8 @@ label { display: block; font-size: var(--fs-sm); color: var(--text-secondary); m
 }
 
 .pager { display: flex; justify-content: space-between; margin-top: 22px; gap: 10px; }
+.pager .page-indicator { align-self: center; color: var(--text-muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.pager .pager-side { display: inline-flex; gap: 10px; }
 
 /* ── User rows ─────────────────────────────────────────────────────── */
 

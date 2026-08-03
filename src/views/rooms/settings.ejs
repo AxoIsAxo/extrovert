@@ -3,14 +3,14 @@
     <h2 style="margin-top:0">Room settings — <%= room.name %></h2>
     <form method="post" action="/rooms/<%= room.id %>/settings">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-      <label>Room name</label>
-      <input type="text" name="name" value="<%= room.name %>" maxlength="60" required>
-      <label>Description</label>
-      <input type="text" name="description" value="<%= room.description %>" maxlength="200">
-      <label>Banner HTML <span class="muted">(no &lt;script&gt;, no JS — stripped automatically)</span></label>
-      <textarea name="html" rows="8" spellcheck="false" style="font-family:ui-monospace,monospace;font-size:13px"><%= room.html %></textarea>
-      <label>Room CSS <span class="muted">(styles the entire room page)</span></label>
-      <textarea name="css" rows="8" spellcheck="false" style="font-family:ui-monospace,monospace;font-size:13px"><%= room.css %></textarea>
+      <label for="room-name">Room name</label>
+      <input type="text" name="name" id="room-name" value="<%= room.name %>" maxlength="60" required>
+      <label for="room-description">Description</label>
+      <input type="text" name="description" id="room-description" value="<%= room.description %>" maxlength="200">
+      <label for="room-html">Banner HTML <span class="muted">(no &lt;script&gt;, no JS — stripped automatically)</span></label>
+      <textarea name="html" id="room-html" rows="8" spellcheck="false" style="font-family:ui-monospace,monospace;font-size:13px"><%= room.html %></textarea>
+      <label for="room-css">Room CSS <span class="muted">(styles the entire room page)</span></label>
+      <textarea name="css" id="room-css" rows="8" spellcheck="false" style="font-family:ui-monospace,monospace;font-size:13px"><%= room.css %></textarea>
       <label style="margin-top:14px">Privacy</label>
       <div style="display:flex;gap:16px;margin-bottom:8px">
         <label style="font-weight:400;font-size:var(--fs-sm)"><input type="radio" name="is_public" value="1" <%= room.is_public ? 'checked' : '' %>> Public</label>

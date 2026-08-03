@@ -249,6 +249,40 @@ app.use((req, res, next) => {
   next();
 });
 
+// Route-specific page titles, so every page's <title> and the nav match
+// (Nielsen: visibility of status + consistency). Returns null when the default
+// "Extrovert" title should be used.
+const PAGE_TITLE_PATTERNS = [
+  [/^\/$/, 'Your feed'],
+  [/^\/chats/, 'Chats'],
+  [/^\/inbox/, 'Notifications'],
+  [/^\/compose/, 'New post'],
+  [/^\/discover/, 'Discover people'],
+  [/^\/settings/, 'Settings'],
+  [/^\/rooms/, 'Rooms'],
+  [/^\/admin/, 'Admin'],
+  [/^\/docs/, 'Docs'],
+  [/^\/developers/, 'Developer docs'],
+  [/^\/stickers/, 'Stickers'],
+  [/^\/u\//, 'Profile'],
+  [/^\/login/, 'Log in'],
+  [/^\/register/, 'Join Extrovert'],
+  [/^\/security/, 'Security'],
+];
+function pageTitleFor(pathname) {
+  for (const [re, title] of PAGE_TITLE_PATTERNS) {
+    if (re.test(pathname)) return title;
+  }
+  return null;
+}
+
+// Per-request wayfinding context for the nav (active link) and <title>.
+app.use((req, res, next) => {
+  res.locals.currentPath = req.path;
+  res.locals.pageTitle = pageTitleFor(req.path);
+  next();
+});
+
 // Routes.
 app.use('/', require('./routes/auth'));
 app.use('/', require('./routes/pages'));      // /, /compose, /discover

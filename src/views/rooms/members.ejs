@@ -2,7 +2,7 @@
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center">
       <h2 style="margin:0">Members — <%= room.name %></h2>
-      <a class="btn" href="/rooms/<%= room.id %>">Back</a>
+      <a class="btn ghost" href="/rooms/<%= room.id %>">Back</a>
     </div>
   </div>
 
@@ -59,7 +59,7 @@
             <button class="btn small">Set</button>
           </form>
           <% if (!mRole || !mRole.is_founder) { %>
-            <form method="post" action="/rooms/<%= room.id %>/members/<%= m.user_id %>/kick" style="margin:0"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost danger small">Kick</button></form>
+            <form method="post" action="/rooms/<%= room.id %>/members/<%= m.user_id %>/kick" style="margin:0" data-confirm="Kick this member from the room?"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn ghost danger small">Kick</button></form>
           <% } %>
         </div>
       </div>
@@ -69,7 +69,7 @@
   <div class="card">
     <h3>Transfer Founder</h3>
     <p class="muted">Only the current founder can transfer. This action is irreversible.</p>
-    <form method="post" action="/rooms/<%= room.id %>/transfer">
+    <form method="post" action="/rooms/<%= room.id %>/transfer" data-confirm="Transfer the founder role to this member? This cannot be undone.">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <label>New founder</label>
       <select name="user_id" required>
