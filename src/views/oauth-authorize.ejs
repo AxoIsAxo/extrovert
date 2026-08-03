@@ -8,8 +8,8 @@
 </head>
 <body style="display:flex;align-items:center;justify-content:center;min-height:100vh">
   <div class="card" style="max-width:480px;width:100%;padding:32px">
-    <h1 style="margin-bottom:4px"><%- app.name %></h1>
-    <% if (app.website) { %><p style="margin:0 0 16px;font-size:0.85rem"><a href="<%= app.website %>" target="_blank" rel="noopener"><%= app.website %></a></p><% } %>
+    <h1 style="margin-bottom:4px"><%= app.name %></h1>
+    <% if (app.website && /^https?:\/\//i.test(app.website)) { %><p style="margin:0 0 16px;font-size:0.85rem"><a href="<%= app.website %>" target="_blank" rel="noopener noreferrer"><%= app.website %></a></p><% } %>
     <p style="margin-bottom:16px">This application is requesting access to your Extrovert account:</p>
 
     <p style="margin-bottom:24px">

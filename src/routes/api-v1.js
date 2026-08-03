@@ -117,6 +117,9 @@ router.post('/oauth/apps', (req, res) => {
   if (!name || !redirect_uris) {
     return errorResponse(res, 400, 'Bad Request', 'name and redirect_uris are required.');
   }
+  if (String(name).length > 100) {
+    return errorResponse(res, 400, 'Bad Request', 'name must be 100 characters or fewer.');
+  }
 
   if (!req.session.userId) {
     return errorResponse(res, 401, 'Unauthorized', 'You must be logged in to register an app.');
@@ -126,15 +129,35 @@ router.post('/oauth/apps', (req, res) => {
     ? scopes.split(' ').filter(s => VALID_SCOPES.has(s)).join(' ')
     : 'read';
 
+  // redirect_uris must be absolute http(s) URLs without embedded credentials —
+  // anything else (javascript:, data:, file:) could later turn the consent
+  // redirect into an open redirect or scheme injection.
+  const uris = Array.isArray(redirect_uris) ? redirect_uris.map(String) : [String(redirect_uris)];
+  const cleanUris = [];
+  for (const u of uris) {
+    let parsed;
+    try { parsed = new URL(u); } catch { return errorResponse(res, 400, 'Bad Request', 'redirect_uris must be absolute http(s) URLs.'); }
+    if ((parsed.protocol !== 'https:' && parsed.protocol !== 'http:') || parsed.username || parsed.password) {
+      return errorResponse(res, 400, 'Bad Request', 'redirect_uris must be absolute http(s) URLs without credentials.');
+    }
+    cleanUris.push(u);
+  }
+  if (website) {
+    let w;
+    try { w = new URL(website); } catch { return errorResponse(res, 400, 'Bad Request', 'website must be an http(s) URL.'); }
+    if (w.protocol !== 'https:' && w.protocol !== 'http:') {
+      return errorResponse(res, 400, 'Bad Request', 'website must be an http(s) URL.');
+    }
+  }
+
   const clientId = crypto.randomBytes(24).toString('hex');
   const clientSecret = crypto.randomBytes(32).toString('hex');
-  const uris = Array.isArray(redirect_uris) ? redirect_uris.join(',') : redirect_uris;
 
   const id = db.createOAuthApp({
     name,
     description: description || '',
     website: website || '',
-    redirectUris: uris,
+    redirectUris: cleanUris.join(','),
     clientId,
     clientSecret,
     scopes: validScopes,
@@ -149,7 +172,7 @@ router.post('/oauth/apps', (req, res) => {
       name,
       client_id: clientId,
       client_secret: clientSecret,
-      redirect_uris: uris.split(','),
+      redirect_uris: cleanUris,
       scopes: validScopes,
       website: website || '',
     },
@@ -191,12 +214,28 @@ router.get('/oauth/authorize', (req, res) => {
   }
 
   const allowedUris = app.redirect_uris.split(',');
-  if (!allowedUris.includes(redirect_uri)) {
+  if (!redirect_uri || !allowedUris.includes(redirect_uri)) {
     return errorResponse(res, 400, 'Bad Request', 'redirect_uri does not match registered URIs.');
   }
+  let parsedRedirect;
+  try { parsedRedirect = new URL(redirect_uri); } catch {
+    return errorResponse(res, 400, 'Bad Request', 'redirect_uri is not a valid absolute URL.');
+  }
+  if (parsedRedirect.protocol !== 'https:' && parsedRedirect.protocol !== 'http:') {
+    return errorResponse(res, 400, 'Bad Request', 'redirect_uri must be an http(s) URL.');
+  }
+  if (code_challenge && code_challenge_method && code_challenge_method !== 'S256') {
+    return errorResponse(res, 400, 'Bad Request', 'Only the S256 code_challenge_method is supported.');
+  }
 
+  // Requested scopes are capped by the scopes the client registered (least
+  // privilege): an app registered for 'read' can never ask for 'write'.
   const requestedScopes = scope || app.scopes;
-  const validScopes = requestedScopes.split(' ').filter(s => VALID_SCOPES.has(s)).join(' ');
+  const appScopes = new Set(app.scopes.split(' '));
+  const validScopes = requestedScopes.split(' ').filter(s => VALID_SCOPES.has(s) && appScopes.has(s)).join(' ');
+  if (!validScopes) {
+    return errorResponse(res, 400, 'Bad Request', 'None of the requested scopes are granted to this client.');
+  }
 
   res.render('oauth-authorize', {
     app,
@@ -210,13 +249,27 @@ router.get('/oauth/authorize', (req, res) => {
   });
 });
 
-// OAuth authorize consent POST
+// OAuth authorize consent POST. Session-cookie state-changing endpoint, so the
+// CSRF token IS enforced here (the global /api/* CSRF skip does not apply).
 router.post('/oauth/authorize', (req, res) => {
   if (!req.session.userId) {
     return errorResponse(res, 401, 'Unauthorized', 'Not logged in.');
   }
+  if (!req.session.csrfToken || req.body._csrf !== req.session.csrfToken) {
+    return errorResponse(res, 403, 'Bad Request', 'CSRF token missing or invalid. Re-open the authorization request.');
+  }
 
   const { client_id, redirect_uri, scope, state, code_challenge, code_challenge_method, nonce, approve } = req.body;
+
+  const app = db.getOAuthAppByClientId(client_id);
+  if (!app) return errorResponse(res, 401, 'Invalid Client', 'Unknown client_id.');
+
+  // Never trust the body's redirect_uri — it must exactly match a registered
+  // URI. (The consent page re-sends the GET-validated value, but re-check here
+  // so a tampered form cannot redirect the code to an attacker's site.)
+  if (!redirect_uri || !app.redirect_uris.split(',').includes(redirect_uri)) {
+    return errorResponse(res, 400, 'Bad Request', 'redirect_uri does not match registered URIs.');
+  }
 
   if (approve !== 'yes') {
     const redirectUrl = new URL(redirect_uri);
@@ -225,11 +278,18 @@ router.post('/oauth/authorize', (req, res) => {
     return res.redirect(redirectUrl.toString());
   }
 
-  const app = db.getOAuthAppByClientId(client_id);
-  if (!app) return errorResponse(res, 401, 'Invalid Client', 'Unknown client_id.');
+  // Cap requested scopes by what the client registered (least privilege).
+  const requestedScopes = scope || app.scopes;
+  const appScopes = new Set(app.scopes.split(' '));
+  const validScopes = requestedScopes.split(' ').filter(s => VALID_SCOPES.has(s) && appScopes.has(s)).join(' ');
+  if (!validScopes) {
+    return errorResponse(res, 400, 'Bad Request', 'None of the requested scopes are granted to this client.');
+  }
+  if (code_challenge && code_challenge_method && code_challenge_method !== 'S256') {
+    return errorResponse(res, 400, 'Bad Request', 'Only the S256 code_challenge_method is supported.');
+  }
 
   const code = crypto.randomBytes(32).toString('hex');
-  const validScopes = (scope || app.scopes).split(' ').filter(s => VALID_SCOPES.has(s)).join(' ');
 
   db.createOAuthCode(code, app.id, req.session.userId, validScopes, code_challenge || null, code_challenge_method || null, redirect_uri, nonce || null);
 
@@ -262,23 +322,31 @@ router.post('/oauth/token', clientAppAuth, (req, res) => {
       return errorResponse(res, 400, 'Bad Request', 'redirect_uri mismatch.');
     }
 
+    // S256 only — 'plain' leaks the verifier into logs/URLs and must not be
+    // supported. Redeeming a code requires either a valid client_secret (a
+    // wrong one was already rejected by clientAppAuth) or PKCE — a leaked
+    // authorization code alone must never be redeemable.
+    if (authCode.code_challenge_method && authCode.code_challenge_method !== 'S256') {
+      return errorResponse(res, 400, 'Bad Request', 'Only the S256 code_challenge_method is supported.');
+    }
+    const authenticatedBySecret = !!(req.body.client_secret && app.client_secret);
+    if (!authenticatedBySecret && !authCode.code_challenge) {
+      return errorResponse(res, 400, 'Bad Request', 'A valid client_secret or PKCE (code_challenge / code_verifier) is required to redeem this code.');
+    }
     if (authCode.code_challenge) {
       if (!code_verifier) {
         return errorResponse(res, 400, 'Bad Request', 'code_verifier is required (PKCE).');
       }
-      const method = authCode.code_challenge_method || 'S256';
-      let challenge;
-      if (method === 'S256') {
-        challenge = crypto.createHash('sha256').update(code_verifier).digest('base64url');
-      } else {
-        challenge = code_verifier;
-      }
+      const challenge = crypto.createHash('sha256').update(code_verifier).digest('base64url');
       if (challenge !== authCode.code_challenge) {
         return errorResponse(res, 400, 'Bad Request', 'code_verifier does not match code_challenge.');
       }
     }
 
-    db.markOAuthCodeUsed(authCode.id);
+    // Atomically mark the code used; a second concurrent exchange loses.
+    if (!db.markOAuthCodeUsed(authCode.id)) {
+      return errorResponse(res, 400, 'Bad Request', 'Invalid, expired, or already used authorization code.');
+    }
 
     const accessToken = generateToken();
     const refreshToken = generateToken();
@@ -322,6 +390,11 @@ router.post('/oauth/token', clientAppAuth, (req, res) => {
     const existing = db.getOAuthTokenByRefresh(refresh_token);
     if (!existing) {
       return errorResponse(res, 400, 'Bad Request', 'Invalid or already revoked refresh token.');
+    }
+    if (existing.app_id !== app.id) {
+      // Refresh tokens are bound to the client they were issued to; another
+      // registered client must not be able to mint tokens with them.
+      return errorResponse(res, 400, 'Bad Request', 'Refresh token was issued to a different client.');
     }
     if (existing.refresh_expires_at && Date.now() > existing.refresh_expires_at) {
       return errorResponse(res, 400, 'Bad Request', 'Refresh token has expired.');

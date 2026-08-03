@@ -50,7 +50,7 @@ router.get('/openid-configuration', (req, res) => {
       'sub', 'iss', 'aud', 'exp', 'iat', 'auth_time',
       'nonce', 'preferred_username', 'name', 'picture',
     ],
-    code_challenge_methods_supported: ['S256', 'plain'],
+    code_challenge_methods_supported: ['S256'],
   });
 });
 

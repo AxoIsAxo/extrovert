@@ -1,0 +1,235 @@
+'use strict';
+// OAuth 2.0 / OIDC flow regression test.
+// Exercises the full authorize -> token -> refresh -> revoke flow plus the
+// security properties: CSRF on consent, redirect_uri re-validation on POST,
+// PKCE-or-secret required to redeem codes, S256-only, refresh tokens bound to
+// their client, atomic code single-use, scope capping, and the stored-XSS-safe
+// consent page. Run: npm run test:oauth
+'use strict';
+
+const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const bcrypt = require('bcryptjs');
+
+const TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'extrovert-oauth-'));
+process.env.EXTV_DB_PATH = path.join(TEST_DIR, 'e.db');
+process.env.EXTV_SESSION_DB_PATH = path.join(TEST_DIR, 's.db');
+process.env.SESSION_SECRET = 'oauth-test-secret';
+process.env.SECRET = 'oauth-test-secret';
+process.env.PORT = String(35000 + Math.floor(Math.random() * 1000));
+
+const app = require('../src/server');
+const db = require('../src/db');
+
+let failures = 0;
+function ok(cond, msg) { console.log((cond ? '  [OK]   ' : '  [FAIL] ') + msg); if (!cond) failures++; }
+
+async function main() {
+  const base = 'http://localhost:' + process.env.PORT;
+
+  const aliceId = db.createUser({ username: 'alice', passwordHash: bcrypt.hashSync('pw1', 10), displayName: 'Alice' });
+
+  async function makeWebSession(username, password) {
+    const jar = {};
+    async function withCookie(url, opts = {}) {
+      const headers = { ...(opts.headers || {}) };
+      if (jar.cookie) headers['Cookie'] = jar.cookie;
+      const r = await fetch(base + url, { ...opts, headers, redirect: 'manual' });
+      const sc = r.headers.get('set-cookie');
+      if (sc) jar.cookie = sc.split(';')[0];
+      return r;
+    }
+    const page = await withCookie('/login');
+    const csrf = ((await page.text()).match(/name="_csrf" value="([^"]+)"/) || [])[1] || '';
+    await withCookie('/login', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: `username=${username}&password=${password}&_csrf=${encodeURIComponent(csrf)}` });
+    const after = await withCookie('/chats');
+    const fresh = ((await after.text()).match(/name="csrf-token" content="([^"]+)"/) || [])[1] || csrf;
+    return {
+      csrf: fresh,
+      cookie: jar.cookie,
+      req: withCookie,
+      get: (url) => withCookie(url).then(r => r.text()),
+    };
+  }
+  const alice = await makeWebSession('alice', 'pw1');
+
+  async function registerApp(body) {
+    return alice.req('/api/v1/oauth/apps', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(async r => ({ status: r.status, data: await r.json() }));
+  }
+
+  console.log('\nTEST 1: registration validates redirect_uris / website (http(s) only)');
+  let r = await registerApp({ name: 'Bad app', redirect_uris: 'javascript:alert(1)' });
+  ok(r.status === 400, 'javascript: redirect_uri rejected');
+  r = await registerApp({ name: 'Bad app', redirect_uris: 'data:text/html,<script>alert(1)</script>' });
+  ok(r.status === 400, 'data: redirect_uri rejected');
+  r = await registerApp({ name: 'Bad app', redirect_uris: 'https://ok.example/cb', website: 'javascript:alert(1)' });
+  ok(r.status === 400, 'javascript: website rejected');
+  r = await registerApp({ name: 'Bad app', redirect_uris: 'https://user:pass@ok.example/cb' });
+  ok(r.status === 400, 'redirect_uri with embedded credentials rejected');
+  r = await registerApp({ name: 'Good app', redirect_uris: 'https://good.example/cb', scopes: 'read' });
+  ok(r.status === 201 && r.data.data.client_id, 'valid app registered');
+  const confClientId = r.data.data.client_id;
+  const confSecret = r.data.data.client_secret;
+
+  console.log('\nTEST 2: authorize GET validates redirect_uri + caps scopes');
+  let html = await alice.get(`/api/v1/oauth/authorize?client_id=${confClientId}&response_type=code&redirect_uri=${encodeURIComponent('https://evil.example/steal')}`);
+  ok(!html.includes('evil.example'), 'GET rejects unregistered redirect_uri');
+  html = await alice.get(`/api/v1/oauth/authorize?client_id=${confClientId}&response_type=code&redirect_uri=${encodeURIComponent('https://good.example/cb')}&scope=read%20write&state=xyz`);
+  ok(html.includes('Authorize') && html.includes('good.example'), 'GET renders consent for registered redirect_uri');
+
+  console.log('\nTEST 3: consent POST enforces CSRF + re-validates redirect_uri');
+  const csrfFromPage = ((await alice.get('/api/v1/oauth/authorize?client_id=' + confClientId + '&response_type=code&redirect_uri=' + encodeURIComponent('https://good.example/cb'))).match(/name="_csrf" value="([^"]+)"/) || [])[1] || alice.csrf;
+  let post = await alice.req('/api/v1/oauth/authorize', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ _csrf: 'WRONG', client_id: confClientId, redirect_uri: 'https://good.example/cb', scope: 'read', approve: 'yes' }),
+  });
+  ok(post.status === 403, 'consent POST without valid CSRF rejected');
+  post = await alice.req('/api/v1/oauth/authorize', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ _csrf: csrfFromPage, client_id: confClientId, redirect_uri: 'https://evil.example/steal', scope: 'read', approve: 'yes' }),
+  });
+  ok(post.status === 400, 'consent POST with tampered redirect_uri rejected');
+
+  console.log('\nTEST 4: full code flow — PKCE (S256) public-style client');
+  const verifier = crypto.randomBytes(32).toString('base64url');
+  const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+  post = await alice.req('/api/v1/oauth/authorize', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ _csrf: csrfFromPage, client_id: confClientId, redirect_uri: 'https://good.example/cb', scope: 'read', state: 's1', code_challenge: challenge, code_challenge_method: 'S256', approve: 'yes' }),
+  });
+  ok(post.status === 302, 'consent approved -> redirect');
+  const loc = post.headers.get('location') || '';
+  ok(loc.startsWith('https://good.example/cb') && /code=/.test(loc) && /state=s1/.test(loc), 'redirect carries code + state');
+  const code = new URL(loc).searchParams.get('code');
+
+  // Public-style: no secret, PKCE verifier.
+  let tok = await fetch(base + '/api/v1/oauth/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ grant_type: 'authorization_code', client_id: confClientId, code, redirect_uri: 'https://good.example/cb', code_verifier: verifier }),
+  });
+  let tokJson = await tok.json();
+  ok(tok.status === 200 && tokJson.access_token && tokJson.refresh_token, 'code redeemed with PKCE (no secret)');
+  ok(tokJson.token_type === 'Bearer' && tokJson.expires_in === 86400, 'token response shape correct');
+
+  // Code reuse is blocked (atomic single-use).
+  tok = await fetch(base + '/api/v1/oauth/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ grant_type: 'authorization_code', client_id: confClientId, code, redirect_uri: 'https://good.example/cb', code_verifier: verifier }),
+  });
+  ok(tok.status === 400, 'reused authorization code rejected');
+
+  console.log('\nTEST 5: code without secret AND without PKCE is rejected');
+  post = await alice.req('/api/v1/oauth/authorize', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ _csrf: csrfFromPage, client_id: confClientId, redirect_uri: 'https://good.example/cb', scope: 'read', approve: 'yes' }),
+  });
+  const code2 = new URL(post.headers.get('location')).searchParams.get('code');
+  tok = await fetch(base + '/api/v1/oauth/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ grant_type: 'authorization_code', client_id: confClientId, code: code2, redirect_uri: 'https://good.example/cb' }),
+  });
+  ok(tok.status === 400, 'secret-less + PKCE-less code exchange rejected');
+
+  console.log('\nTEST 6: confidential client can redeem with secret (no PKCE)');
+  post = await alice.req('/api/v1/oauth/authorize', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ _csrf: csrfFromPage, client_id: confClientId, redirect_uri: 'https://good.example/cb', scope: 'read', approve: 'yes' }),
+  });
+  const code3 = new URL(post.headers.get('location')).searchParams.get('code');
+  tok = await fetch(base + '/api/v1/oauth/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ grant_type: 'authorization_code', client_id: confClientId, client_secret: confSecret, code: code3, redirect_uri: 'https://good.example/cb' }),
+  });
+  ok(tok.status === 200 && (await tok.json()).access_token, 'confidential client redeems with secret');
+
+  console.log('\nTEST 7: refresh tokens are bound to their client');
+  const bobId = db.createUser({ username: 'bob', passwordHash: bcrypt.hashSync('pw', 10), displayName: 'Bob' });
+  db.createOAuthApp({ name: 'bobapp', description: '', website: '', redirectUris: 'https://bob.example/cb', clientId: 'bob-client', clientSecret: 'bob-secret', scopes: 'read', ownerId: bobId });
+  // Refresh token issued to alice's app must not be usable by bob's client.
+  const victimRefresh = tokJson.refresh_token;
+  const wrong = await fetch(base + '/api/v1/oauth/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ grant_type: 'refresh_token', client_id: 'bob-client', client_secret: 'bob-secret', refresh_token: victimRefresh }),
+  });
+  ok(wrong.status === 400, "another client's refresh token rejected");
+  // Own client refreshes fine (rotation invalidates the old token).
+  const own = await fetch(base + '/api/v1/oauth/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ grant_type: 'refresh_token', client_id: confClientId, client_secret: confSecret, refresh_token: victimRefresh }),
+  });
+  const ownJson = await own.json();
+  ok(own.status === 200 && ownJson.access_token, 'own client refresh works');
+  const replay = await fetch(base + '/api/v1/oauth/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ grant_type: 'refresh_token', client_id: confClientId, client_secret: confSecret, refresh_token: victimRefresh }),
+  });
+  ok(replay.status === 400, 'rotated (reused) refresh token rejected');
+
+  console.log('\nTEST 8: scope capping (requested ⊆ registered)');
+  const readOnlyApp = await registerApp({ name: 'Read only', redirect_uris: 'https://ro.example/cb', scopes: 'read' });
+  const roClientId = readOnlyApp.data.data.client_id;
+  const roSecret = readOnlyApp.data.data.client_secret;
+  html = await alice.get(`/api/v1/oauth/authorize?client_id=${roClientId}&response_type=code&redirect_uri=${encodeURIComponent('https://ro.example/cb')}&scope=${encodeURIComponent('read write')}`);
+  ok(!/write/.test(html.replace('read write', '')), 'consent page does not show unregistered scope');
+  post = await alice.req('/api/v1/oauth/authorize', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ _csrf: csrfFromPage, client_id: roClientId, redirect_uri: 'https://ro.example/cb', scope: 'read write', approve: 'yes' }),
+  });
+  const roCode = new URL(post.headers.get('location')).searchParams.get('code');
+  tok = await fetch(base + '/api/v1/oauth/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ grant_type: 'authorization_code', client_id: roClientId, client_secret: roSecret, code: roCode, redirect_uri: 'https://ro.example/cb' }),
+  });
+  const roJson = await tok.json();
+  ok(tok.status === 200 && roJson.scope === 'read', 'only registered scope granted (no escalation)');
+
+  console.log('\nTEST 9: OIDC — id_token + userinfo');
+  const oidcApp = await registerApp({ name: 'OIDC app', redirect_uris: 'https://oidc.example/cb', scopes: 'read openid profile' });
+  const oidcClient = oidcApp.data.data.client_id;
+  const oidcSecret = oidcApp.data.data.client_secret;
+  const oVerifier = crypto.randomBytes(32).toString('base64url');
+  const oChallenge = crypto.createHash('sha256').update(oVerifier).digest('base64url');
+  post = await alice.req('/api/v1/oauth/authorize', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ _csrf: csrfFromPage, client_id: oidcClient, redirect_uri: 'https://oidc.example/cb', scope: 'openid profile read', nonce: 'n-123', code_challenge: oChallenge, code_challenge_method: 'S256', approve: 'yes' }),
+  });
+  const oidcCode = new URL(post.headers.get('location')).searchParams.get('code');
+  tok = await fetch(base + '/api/v1/oauth/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ grant_type: 'authorization_code', client_id: oidcClient, code: oidcCode, redirect_uri: 'https://oidc.example/cb', code_verifier: oVerifier }),
+  });
+  const oidcJson = await tok.json();
+  ok(tok.status === 200 && !!oidcJson.id_token, 'id_token issued when openid scope requested');
+  const [, payloadB64] = oidcJson.id_token.split('.');
+  const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString());
+  ok(payload.iss && payload.sub && payload.aud === oidcClient && payload.nonce === 'n-123', 'id_token has iss/sub/aud/nonce');
+  ok(payload.exp - payload.iat === 3600, 'id_token lifetime 1h');
+  const ui = await fetch(base + '/api/v1/oauth/userinfo', { headers: { Authorization: 'Bearer ' + oidcJson.access_token } }).then(r => r.json());
+  ok(ui.sub === String(aliceId) && ui.name === 'Alice' && ui.preferred_username === 'alice', 'userinfo returns sub + profile claims');
+
+  console.log('\nTEST 10: token revocation');
+  const rev = await fetch(base + '/api/v1/oauth/revoke', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: oidcJson.access_token }),
+  });
+  ok(rev.status === 200, 'revoke returns 200');
+  const afterRevoke = await fetch(base + '/api/v1/oauth/userinfo', { headers: { Authorization: 'Bearer ' + oidcJson.access_token } });
+  ok(afterRevoke.status === 401, 'revoked token no longer works');
+
+  console.log('\nTEST 11: consent page escapes app names (no stored XSS)');
+  const evil = await registerApp({ name: '<img src=x onerror=alert(1)>', redirect_uris: 'https://evil2.example/cb' });
+  const evilClient = evil.data.data.client_id;
+  html = await alice.get(`/api/v1/oauth/authorize?client_id=${evilClient}&response_type=code&redirect_uri=${encodeURIComponent('https://evil2.example/cb')}`);
+  ok(html.includes('&lt;img') && !html.includes('<img src=x onerror'), 'consent page escapes app name');
+
+  console.log(failures ? '\nSOME TESTS FAILED' : '\nALL TESTS PASSED');
+  process.exit(failures ? 1 : 0);
+}
+
+main().catch(err => { console.error(err); process.exit(1); });

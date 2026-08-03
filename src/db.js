@@ -1447,7 +1447,8 @@ function getOAuthCode(code) {
 }
 
 function markOAuthCodeUsed(id) {
-  db.prepare(`UPDATE oauth_codes SET used = 1 WHERE id = ?`).run(id);
+  // Atomic: only the first exchange wins (WHERE used = 0).
+  return db.prepare(`UPDATE oauth_codes SET used = 1 WHERE id = ? AND used = 0`).run(id).changes > 0;
 }
 
 // ---------- OAuth2 tokens ----------
