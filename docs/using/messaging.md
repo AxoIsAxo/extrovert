@@ -91,4 +91,4 @@ Older messages created under the RSA scheme remain readable by clients that supp
 
 - The web client implements the Olm flows in `public/e2ee.js`; the Olm library is bundled as `public/lib/olm.js` + `olm.wasm` (no external CDN).
 - The self-session design: the client persists its self-inbound session at creation baseline so history ratchets are stable across reloads (guarded by `scripts/self-session-test.js` and `scripts/session-reload-test.js`).
-- Protocol regression tests: `scripts/crypto-test.js` (Olm), `scripts/megolm-room-test.js` (group), `scripts/live-dm-test.js` (WS delivery), `scripts/secure-dm-test.js` (Additional Security mode).
+- Protocol regression tests: `scripts/crypto-test.js` (Olm), `scripts/megolm-room-test.js` (group), `scripts/live-dm-test.js` (WS delivery), `scripts/secure-dm-test.js` (Additional Security mode), `scripts/multidevice-decrypt-test.js` (multi-device / key-rotation DM decryption).

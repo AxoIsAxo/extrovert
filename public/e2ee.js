@@ -409,18 +409,39 @@
   function getOrCreateOutboundSession(otherId, otherIdStr, otherUsername) {
     if (sessions[otherIdStr]) return Promise.resolve(sessions[otherIdStr]);
     return loadSession(otherIdStr).then(function (s) { return s || null; }).then(function (existing) {
-      if (existing) return existing;
-      return fetchBundle(otherUsername).then(function (bundle) {
-        if (!bundle.identity_key || (!bundle.one_time_key && !bundle.fallback_key)) {
-          throw new Error('Recipient has no encryption keys yet.');
-        }
-        var theirOtk = bundle.one_time_key ? bundle.one_time_key.public_key : bundle.fallback_key;
-        var s = new Olm.Session();
-        s.create_outbound(account, bundle.identity_key, theirOtk);
-        return saveSessionBaseline(otherIdStr, s).then(function () {
-          return saveSession(otherIdStr, s);
-        }).then(function () { return s; });
+      if (!existing) return createOutboundSession(otherId, otherIdStr, otherUsername);
+      // The recipient may have rotated their keys (e.g. reset) since this
+      // session was created; a stale session can never be decrypted by them.
+      // Re-check their current identity (cheap GET — no prekey is claimed) and
+      // recreate the session if it changed.
+      return idbGet(STORE_OLM, 'sessionIdent:' + otherIdStr).then(function (ident) {
+        if (!ident) return existing; // session predates the guard: leave as-is
+        return e2eeFetch('/chats/' + encodeURIComponent(otherUsername) + '/safety')
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (!d || !d.their_curve25519 || d.their_curve25519 === ident) return existing;
+            console.warn('DM session stale (recipient identity changed); recreating outbound session for', otherUsername);
+            return createOutboundSession(otherId, otherIdStr, otherUsername);
+          }).catch(function () { return existing; }); // network hiccup: keep going
       });
+    });
+  }
+
+  function createOutboundSession(otherId, otherIdStr, otherUsername) {
+    return fetchBundle(otherUsername).then(function (bundle) {
+      if (!bundle.identity_key || (!bundle.one_time_key && !bundle.fallback_key)) {
+        throw new Error('Recipient has no encryption keys yet.');
+      }
+      var theirOtk = bundle.one_time_key ? bundle.one_time_key.public_key : bundle.fallback_key;
+      var s = new Olm.Session();
+      s.create_outbound(account, bundle.identity_key, theirOtk);
+      return saveSessionBaseline(otherIdStr, s).then(function () {
+        return saveSession(otherIdStr, s);
+      }).then(function () {
+        // Remember which recipient identity this session was built against, so a
+        // later identity change is detectable (see getOrCreateOutboundSession).
+        return idbSet(STORE_OLM, 'sessionIdent:' + otherIdStr, bundle.identity_key);
+      }).then(function () { return s; });
     });
   }
 
@@ -472,20 +493,26 @@
         return selfInbound.decrypt(env.t, env.b);
       });
     }
-    // Incoming messages always decrypt through the baseline (creation-state)
-    // session, so history and live messages are readable regardless of how far
-    // the live session's ratchet has advanced. The baseline chain re-derives the
-    // full history in order on every reload.
+    // Incoming messages. A PreKey message (t=0) ALWAYS starts a NEW session
+    // chain — the first message from this sender, a second device, or a key
+    // rotation — and must be used to derive the inbound session itself. Feeding
+    // it to an existing baseline instead fails with BAD_MESSAGE_MAC (and shows
+    // "[unable to decrypt]"). The sender's identity is embedded in the PreKey
+    // message, so no external identity key is needed.
+    // Non-PreKey messages (t>0) continue the current chain and decrypt through
+    // the baseline (creation-state) session, so history stays readable however
+    // far the live ratchet has advanced.
     var e = JSON.parse(msg.body);
     return loadSessionBaseline(otherIdStr).then(function (base) {
+      if (e.t === 0) {
+        var ns = new Olm.Session();
+        ns.create_inbound(account, e.b);
+        return saveSessionBaseline(otherIdStr, ns).then(function () {
+          return saveSession(otherIdStr, ns);
+        }).then(function () { return ns.decrypt(e.t, e.b); });
+      }
       if (base) return base.decrypt(e.t, e.b);
-      if (e.t !== 0) throw new Error('No session for sender and message is not a PreKey.');
-      if (!theirCurve25519) throw new Error('Missing sender identity key.');
-      var ns = new Olm.Session();
-      ns.create_inbound_from(account, theirCurve25519, e.b);
-      return saveSessionBaseline(otherIdStr, ns).then(function () {
-        return saveSession(otherIdStr, ns);
-      }).then(function () { return ns.decrypt(e.t, e.b); });
+      throw new Error('No session for sender and message is not a PreKey.');
     });
   }
 
