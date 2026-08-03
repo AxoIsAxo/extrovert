@@ -28,7 +28,7 @@ The signature motif is three concentric rings: **you** (inner), your **friends**
 | **Profiles** | Fully customizable profile pages — every user can write their own **HTML and CSS** (no JavaScript) |
 | **Social** | Follow, like, comment, share, repost, "follow because of a post" |
 | **Discovery** | [Discover](docs/using/discovery.md) page: search users, friend-of-friend suggestions, network-bound post search |
-| **Messaging** | End-to-end-encrypted direct messages between mutual followers (Signal-style Olm) |
+| **Messaging** | End-to-end-encrypted direct messages between mutual followers (Signal-style Olm); optional **Additional Security** mode deletes messages from the server once both users have received them (device-only copies) |
 | **Rooms** | Group spaces with channels (text + voice), role-based permissions, E2EE group chat (Megolm), voice calls |
 | **Calls** | Peer-to-peer WebRTC calls with presence, offline-call rings, and push wake-ups |
 | **Notifications** | Inbox, unread badges, realtime SSE stream, web push |
@@ -54,7 +54,7 @@ You must set a `SESSION_SECRET` environment variable before the server will star
 - `npm run test:api` — REST API integration suite
 - `npm run test:owasp` — OWASP Top 10 (2021) security suite
 - `npm run test:asvs` — OWASP ASVS v4.0 suite (automatable subset, with a MANUAL_REVIEW/N-A scorecard)
-- plus crypto, Megolm, live-DM, and session suites — see [Development & testing](docs/development.md)
+- plus crypto, Megolm, live-DM, secure-DM, and session suites — see [Development & testing](docs/development.md)
 
 ## Documentation index
 

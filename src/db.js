@@ -339,6 +339,21 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS join_requests (id INTEGER PRIMARY KEY 
 // Olm (Signal-style) end-to-end encryption: message protocol + sender-self ciphertext.
 try { db.exec(`ALTER TABLE messages ADD COLUMN proto TEXT NOT NULL DEFAULT 'rsa'`); } catch {}
 try { db.exec(`ALTER TABLE messages ADD COLUMN sender_ciphertext TEXT`); } catch {}
+// Additional Security mode for DMs: per-user opt-in per conversation. Server-side
+// deletion activates only once BOTH users have enabled it (mutual opt-in).
+try { db.exec(`CREATE TABLE IF NOT EXISTS dm_security (
+  user_id    INTEGER NOT NULL REFERENCES users(id),
+  other_id   INTEGER NOT NULL REFERENCES users(id),
+  enabled    INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, other_id)
+)`); } catch {}
+// Messages sent while the mode is active are flagged `secure` and deleted from
+// the server once the sender AND the recipient have both acknowledged receipt
+// (received_by_sender / received_by_recipient timestamps).
+try { db.exec(`ALTER TABLE messages ADD COLUMN secure INTEGER NOT NULL DEFAULT 0`); } catch {}
+try { db.exec(`ALTER TABLE messages ADD COLUMN received_by_sender INTEGER`); } catch {}
+try { db.exec(`ALTER TABLE messages ADD COLUMN received_by_recipient INTEGER`); } catch {}
 // Per-user Olm identity (public bundle material only; private halves live client-side).
 try { db.exec(`
   CREATE TABLE IF NOT EXISTS olm_identity (
@@ -825,11 +840,58 @@ function areMutualFollowers(aId, bId) {
 }
 
 // ---------- messages ----------
-function sendMessage(fromId, toId, body, keyForSender, keyForRecipient, proto, senderCiphertext) {
+function sendMessage(fromId, toId, body, keyForSender, keyForRecipient, proto, senderCiphertext, secure = false) {
   const res = db.prepare(
-    `INSERT INTO messages (from_id, to_id, body, created_at, key_for_sender, key_for_recipient, proto, sender_ciphertext) VALUES (?,?,?,?,?,?,?,?)`
-  ).run(fromId, toId, body, Date.now(), keyForSender || null, keyForRecipient || null, proto || 'rsa', senderCiphertext || null);
+    `INSERT INTO messages (from_id, to_id, body, created_at, key_for_sender, key_for_recipient, proto, sender_ciphertext, secure) VALUES (?,?,?,?,?,?,?,?,?)`
+  ).run(fromId, toId, body, Date.now(), keyForSender || null, keyForRecipient || null, proto || 'rsa', senderCiphertext || null, secure ? 1 : 0);
   return res.lastInsertRowid;
+}
+
+// ---------- Additional Security (server-side deletion after both received) ----------
+// Per-user opt-in per conversation. The mode is ACTIVE for a conversation only
+// when both users have enabled it (mutual opt-in), so a user whose client cannot
+// store messages locally is never silently cut off from history.
+function setDmSecurity(userId, otherId, enabled) {
+  db.prepare(`
+    INSERT INTO dm_security (user_id, other_id, enabled, updated_at)
+    VALUES (?,?,?,?)
+    ON CONFLICT(user_id, other_id) DO UPDATE SET enabled = excluded.enabled, updated_at = excluded.updated_at
+  `).run(userId, otherId, enabled ? 1 : 0, Date.now());
+}
+
+function getDmSecurity(userId, otherId) {
+  const mine = db.prepare(`SELECT enabled FROM dm_security WHERE user_id = ? AND other_id = ?`).get(userId, otherId);
+  const theirs = db.prepare(`SELECT enabled FROM dm_security WHERE user_id = ? AND other_id = ?`).get(otherId, userId);
+  const m = !!mine && mine.enabled === 1;
+  const t = !!theirs && theirs.enabled === 1;
+  return { mine: m, theirs: t, active: m && t };
+}
+
+// Mark secure messages as received by the calling user (sender or recipient side
+// depending on message direction), then delete any secure message that BOTH sides
+// have now received. Only messages flagged secure=1 within this conversation pair
+// are ever touched, so acks can never delete anything else.
+function ackMessagesReceived(userId, otherId, ids) {
+  // Cap per request: a huge id list would amplify into oversized IN clauses.
+  const clean = [...new Set((ids || []).map(Number).filter(n => Number.isInteger(n) && n > 0))].slice(0, 200);
+  if (!clean.length) return { acked: 0, deleted: 0 };
+  const now = Date.now();
+  const placeholders = clean.map(() => '?').join(',');
+  db.prepare(`
+    UPDATE messages SET received_by_sender = COALESCE(received_by_sender, ?)
+    WHERE secure = 1 AND from_id = ? AND to_id = ? AND id IN (${placeholders})
+  `).run(now, userId, otherId, ...clean);
+  db.prepare(`
+    UPDATE messages SET received_by_recipient = COALESCE(received_by_recipient, ?)
+    WHERE secure = 1 AND to_id = ? AND from_id = ? AND id IN (${placeholders})
+  `).run(now, userId, otherId, ...clean);
+  const del = db.prepare(`
+    DELETE FROM messages
+    WHERE secure = 1 AND id IN (${placeholders})
+      AND ((from_id = ? AND to_id = ?) OR (from_id = ? AND to_id = ?))
+      AND received_by_sender IS NOT NULL AND received_by_recipient IS NOT NULL
+  `).run(...clean, userId, otherId, otherId, userId);
+  return { acked: clean.length, deleted: del.changes };
 }
 
 function getConversations(userId) {
@@ -1549,6 +1611,8 @@ module.exports = {
   areMutualFollowers,
   // messages
   sendMessage, getConversations, getMessages, countUnreadMessages, markConversationRead,
+  // additional security (server-side deletion after both received)
+  setDmSecurity, getDmSecurity, ackMessagesReceived,
   // E2EE
   setPublicKey, getPublicKey, getEncryptedPrivateKey,
   // Olm (Signal-style) E2EE

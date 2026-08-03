@@ -29,8 +29,20 @@ function getMessages(userId, otherId, limit, cursor) {
   `).all(userId, otherId, otherId, userId, limit);
 }
 
-function sendMessage(fromId, toId, body, keyForSender, keyForRecipient, proto, senderCiphertext) {
-  return db.sendMessage(fromId, toId, body, keyForSender, keyForRecipient, proto, senderCiphertext);
+function sendMessage(fromId, toId, body, keyForSender, keyForRecipient, proto, senderCiphertext, secure) {
+  return db.sendMessage(fromId, toId, body, keyForSender, keyForRecipient, proto, senderCiphertext, secure);
+}
+
+function setDmSecurity(userId, otherId, enabled) {
+  return db.setDmSecurity(userId, otherId, enabled);
+}
+
+function getDmSecurity(userId, otherId) {
+  return db.getDmSecurity(userId, otherId);
+}
+
+function ackMessagesReceived(userId, otherId, ids) {
+  return db.ackMessagesReceived(userId, otherId, ids);
 }
 
 function getPublicKey(userId) {
@@ -60,4 +72,5 @@ module.exports = {
   getConversations, getMessages, sendMessage,
   getPublicKey, setPublicKey, getEncryptedPrivateKey,
   editMessage, deleteMessage,
+  setDmSecurity, getDmSecurity, ackMessagesReceived,
 };

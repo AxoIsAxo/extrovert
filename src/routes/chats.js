@@ -7,6 +7,7 @@ const {
   sendMessage, getConversations, getMessages, markConversationRead,
   createNotification, setPublicKey, getPublicKey, getEncryptedPrivateKey,
   editMessage, getEditHistory,
+  setDmSecurity, getDmSecurity, ackMessagesReceived,
   setOlmIdentity, getOlmIdentity, addOlmPrekeys, countAvailablePrekeys, claimOlmPrekey, setOlmBackup,
 } = require('../db');
 
@@ -32,6 +33,7 @@ router.get('/', (req, res) => {
     c.online = p.online;
     const id = getOlmIdentity(c.id);
     c.sender_curve = id ? id.identity_key : null;
+    c.security_active = getDmSecurity(user.id, c.id).active;
   });
   res.render('chats', { conversations });
 });
@@ -143,8 +145,9 @@ router.get('/:username', (req, res) => {
   const messages = getMessages(user.id, other.id);
   const recipientPubKey = getPublicKey(other.id);
   const recipientCurve = getOlmIdentity(other.id);
+  const security = getDmSecurity(user.id, other.id);
   markConversationRead(user.id, other.id);
-  res.render('chat', { other, messages, recipientPubKey, recipientCurve, wrapClass: 'chat-wrap' });
+  res.render('chat', { other, messages, recipientPubKey, recipientCurve, security, wrapClass: 'chat-wrap' });
 });
 
 // Send a message.
@@ -167,9 +170,10 @@ router.post('/:username/send', (req, res) => {
     }
   }
   if (body) {
-    const msgId = sendMessage(user.id, other.id, body, keyForSender, keyForRecipient, proto, senderCiphertext);
+    const secure = getDmSecurity(user.id, other.id).active ? 1 : 0;
+    const msgId = sendMessage(user.id, other.id, body, keyForSender, keyForRecipient, proto, senderCiphertext, secure);
     createNotification({ userId: other.id, type: 'message', actorId: user.id });
-    const msg = db.prepare(`SELECT id, from_id, body, created_at, key_for_sender, key_for_recipient, proto, sender_ciphertext FROM messages WHERE id = ?`).get(msgId);
+    const msg = db.prepare(`SELECT id, from_id, body, created_at, key_for_sender, key_for_recipient, proto, sender_ciphertext, secure FROM messages WHERE id = ?`).get(msgId);
     // Live-deliver the ciphertext to the recipient's open tab(s).
     const senderId = getOlmIdentity(user.id);
     sendDmEvent(other.username, {
@@ -183,6 +187,37 @@ router.post('/:username/send', (req, res) => {
     }
   }
   res.redirect('/chats/' + other.username);
+});
+
+// Toggle "Additional Security" for this conversation (per-user opt-in; the mode
+// only becomes active once BOTH users have enabled it).
+router.post('/:username/security', express.json(), (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.status(401).json({ error: 'not logged in' });
+  const other = getUserByUsername(req.params.username);
+  if (!other || !areMutualFollowers(user.id, other.id)) {
+    return res.status(403).json({ error: 'cannot message' });
+  }
+  const enabled = !!req.body.enabled;
+  setDmSecurity(user.id, other.id, enabled);
+  res.json({ ok: true, enabled, security: getDmSecurity(user.id, other.id) });
+});
+
+// Acknowledge receipt of secure messages. Once the sender AND the recipient have
+// both acknowledged, the server deletes the message — it then exists only on the
+// participants' devices.
+router.post('/:username/received', express.json(), (req, res) => {
+  const user = res.locals.currentUser;
+  if (!user) return res.status(401).json({ error: 'not logged in' });
+  const other = getUserByUsername(req.params.username);
+  if (!other || !areMutualFollowers(user.id, other.id)) {
+    return res.status(403).json({ error: 'cannot message' });
+  }
+  const ids = Array.isArray(req.body.message_ids)
+    ? req.body.message_ids
+    : (Array.isArray(req.body.ids) ? req.body.ids : []);
+  const result = ackMessagesReceived(user.id, other.id, ids);
+  res.json({ ok: true, ...result });
 });
 
 // Edit a message.
@@ -201,7 +236,7 @@ router.post('/:username/edit/:mid', (req, res) => {
   const ok = editMessage(Number(req.params.mid), user.id, body, keyForSender, keyForRecipient, proto, senderCiphertext);
   if (!ok) return req.xhr ? res.json({ error: 'not found or not yours' }) : res.status(404).send('Message not found or not yours.');
   if (req.xhr) {
-    const msg = db.prepare(`SELECT id, from_id, body, created_at, edited_at, key_for_sender, key_for_recipient, proto, sender_ciphertext FROM messages WHERE id = ?`).get(Number(req.params.mid));
+    const msg = db.prepare(`SELECT id, from_id, body, created_at, edited_at, key_for_sender, key_for_recipient, proto, sender_ciphertext, secure FROM messages WHERE id = ?`).get(Number(req.params.mid));
     return res.json({ message: msg });
   }
   res.redirect('/chats/' + req.params.username);

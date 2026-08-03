@@ -922,7 +922,7 @@ Network-visibility rules: accounts and posts outside your visible set return \`4
     },
     '/api/v1/conversations': {
       get: {
-        summary: 'List direct-message conversations (mutual followers only)',
+        summary: 'List direct-message conversations (mutual followers only); each item includes security_active (Additional Security mode on for both sides)',
         tags: ['Direct Messages'],
         security: [{ oauth2: ['read:direct'] }],
         responses: { '200': { description: 'List of conversations with last message info' } },
@@ -1009,7 +1009,7 @@ Network-visibility rules: accounts and posts outside your visible set return \`4
     },
     '/api/v1/conversations/{username}/messages': {
       post: {
-        summary: 'Send a message (Olm-encrypted unless the body is a sticker path)',
+        summary: 'Send a message (Olm-encrypted unless the body is a sticker path). If Additional Security is active for the conversation the message is flagged secure and deleted from the server once both sides have received it.',
         tags: ['Direct Messages'],
         security: [{ oauth2: ['write:direct'] }],
         parameters: [{ name: 'username', in: 'path', required: true, schema: { type: 'string' } }],
@@ -1028,10 +1028,44 @@ Network-visibility rules: accounts and posts outside your visible set return \`4
           }}},
         },
         responses: {
-          '201': { description: 'Created message' },
+          '201': { description: 'Created message (includes secure: true when Additional Security is active)' },
           '400': { description: 'End-to-end encryption required' },
           '403': { description: 'You can only message mutual followers' },
         },
+      },
+    },
+    '/api/v1/conversations/{username}/security': {
+      post: {
+        summary: 'Toggle your Additional Security preference for this conversation (mutual opt-in; active only once both users enabled it)',
+        tags: ['Direct Messages'],
+        security: [{ oauth2: ['write:direct'] }],
+        parameters: [{ name: 'username', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: {
+            type: 'object',
+            required: ['enabled'],
+            properties: { enabled: { type: 'boolean', description: 'Whether you want the mode on for this conversation' } },
+          }}},
+        },
+        responses: { '200': { description: '{ enabled, mine, theirs, active }' } },
+      },
+    },
+    '/api/v1/conversations/{username}/received': {
+      post: {
+        summary: 'Acknowledge receipt of secure messages. Once both participants have acknowledged, the server deletes the message (it then exists only on the users\' devices).',
+        tags: ['Direct Messages'],
+        security: [{ oauth2: ['write:direct'] }],
+        parameters: [{ name: 'username', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: {
+            type: 'object',
+            required: ['message_ids'],
+            properties: { message_ids: { type: 'array', items: { type: 'integer' } } },
+          }}},
+        },
+        responses: { '200': { description: '{ acked, deleted }' } },
       },
     },
     '/api/v1/conversations/{username}/bundle': {

@@ -1171,6 +1171,7 @@ router.get('/conversations', requireApiAuth('read:direct'), (req, res) => {
       last_key_for_recipient: c.last_key_for_recipient,
       last_sender_ciphertext: c.last_sender_ciphertext,
       sender_curve: id ? id.identity_key : null,
+      security_active: dm.getDmSecurity(req.apiUser.id, c.id).active,
     };
   }));
 });
@@ -1253,6 +1254,7 @@ router.get('/conversations/:username', requireApiAuth('read:direct'), (req, res)
     key_for_recipient: m.key_for_recipient,
     proto: m.proto,
     sender_ciphertext: m.sender_ciphertext,
+    secure: m.secure === 1,
   }));
 
   // Cursor points to the oldest message in this batch (first item after reverse)
@@ -1288,10 +1290,10 @@ router.post('/conversations/:username/messages', requireApiAuth('write:direct'),
     }
   }
 
-  const msgId = dm.sendMessage(req.apiUser.id, other.id, body, keyForSender, keyForRecipient, proto, senderCiphertext);
+  const msgId = dm.sendMessage(req.apiUser.id, other.id, body, keyForSender, keyForRecipient, proto, senderCiphertext, dm.getDmSecurity(req.apiUser.id, other.id).active);
   db.createNotification({ userId: other.id, type: 'message', actorId: req.apiUser.id });
 
-  const msg = db.db.prepare(`SELECT id, from_id, to_id, body, created_at, key_for_sender, key_for_recipient, proto, sender_ciphertext FROM messages WHERE id = ?`).get(msgId);
+  const msg = db.db.prepare(`SELECT id, from_id, to_id, body, created_at, key_for_sender, key_for_recipient, proto, sender_ciphertext, secure FROM messages WHERE id = ?`).get(msgId);
   const senderId = db.getOlmIdentity(req.apiUser.id);
   const apiUserRow = db.db.prepare(`SELECT username, display_name FROM users WHERE id = ?`).get(req.apiUser.id);
   sendDmEvent(other.username, {
@@ -1312,8 +1314,39 @@ router.post('/conversations/:username/messages', requireApiAuth('write:direct'),
       key_for_recipient: msg.key_for_recipient,
       proto: msg.proto,
       sender_ciphertext: msg.sender_ciphertext,
+      secure: msg.secure === 1,
     },
   });
+});
+
+// Toggle "Additional Security" for this conversation (per-user opt-in; only
+// active once both users have enabled it).
+router.post('/conversations/:username/security', requireApiAuth('write:direct'), express.json(), (req, res) => {
+  const other = db.getUserByUsername(req.params.username);
+  if (!other) return errorResponse(res, 404, 'Not Found', 'User not found.');
+  if (!db.areMutualFollowers(req.apiUser.id, other.id)) {
+    return errorResponse(res, 403, 'Forbidden', 'You can only message mutual followers.');
+  }
+  const enabled = !!req.body.enabled;
+  dm.setDmSecurity(req.apiUser.id, other.id, enabled);
+  const security = dm.getDmSecurity(req.apiUser.id, other.id);
+  db.auditLog('dm_security', req.apiUser.id, 'Set Additional Security to ' + (enabled ? 'on' : 'off') + ' with ' + other.username);
+  responseEnvelope(res, { enabled, mine: security.mine, theirs: security.theirs, active: security.active });
+});
+
+// Acknowledge receipt of secure messages; the server deletes any message that
+// BOTH participants have now received.
+router.post('/conversations/:username/received', requireApiAuth('write:direct'), express.json(), (req, res) => {
+  const other = db.getUserByUsername(req.params.username);
+  if (!other) return errorResponse(res, 404, 'Not Found', 'User not found.');
+  if (!db.areMutualFollowers(req.apiUser.id, other.id)) {
+    return errorResponse(res, 403, 'Forbidden', 'You can only message mutual followers.');
+  }
+  const ids = Array.isArray(req.body.message_ids)
+    ? req.body.message_ids
+    : (Array.isArray(req.body.ids) ? req.body.ids : []);
+  const result = dm.ackMessagesReceived(req.apiUser.id, other.id, ids);
+  responseEnvelope(res, result);
 });
 
 // Fetch a recipient's Olm bundle (identity + one claimed one-time prekey, else fallback).

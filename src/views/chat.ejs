@@ -11,7 +11,15 @@
         </span>
       <% } %>
     </div>
-    <div style="display:flex;gap:8px">
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn ghost" id="dm-security-toggle" type="button"
+              data-username="<%= other.username %>"
+              data-enabled="<%= security.mine ? '1' : '0' %>"
+              data-active="<%= security.active ? '1' : '0' %>"
+              title="Additional Security: messages are deleted from the server once both of you have received them">
+        <%- include('partials/icon', { name: 'lock', size: 14 }) %>
+        <span id="dm-security-label"><% if (security.active) { %>Secure DM: On<% } else if (security.mine) { %>Secure DM: waiting for <%= other.display_name %><% } else { %>Secure DM: Off<% } %></span>
+      </button>
       <button class="btn ghost call-btn" data-username="<%= other.username %>" data-display="<%= other.display_name %>"><%- include('partials/icon', { name: 'phone', size: 15 }) %> Call</button>
       <a class="btn ghost" href="/u/<%= other.username %>"><%- include('partials/icon', { name: 'user', size: 15 }) %> Profile</a>
     </div>
@@ -28,7 +36,9 @@
              data-key-recipient="<%= m.key_for_recipient || '' %>"
              data-proto="<%= m.proto || 'rsa' %>"
              data-sender-ciphertext="<%= m.sender_ciphertext || '' %>"
-             data-msg-id="<%= m.id %>">
+             data-msg-id="<%= m.id %>"
+             data-ts="<%= m.created_at %>"
+             data-secure="<%= m.secure ? '1' : '0' %>">
            <div class="chat-bubble"><% if (m.body && m.body.startsWith('/uploads/stickers/')) { %><img src="<%= m.body %>" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker"><% } else { %><%= m.body %><% } %></div>
            <div class="muted" style="font-size:0.7rem;padding:0 4px">
              <%= locals.relTime(m.created_at) %>
@@ -52,6 +62,8 @@
         data-recipient-username="<%= other.username %>"
         data-recipient-curve="<%= (typeof recipientCurve === 'object' && recipientCurve ? recipientCurve.identity_key : '') %>"
         data-recipient-ready="<%= (typeof recipientCurve === 'object' && recipientCurve ? '1' : '0') %>"
+        data-current-user="<%= currentUser.id %>"
+        data-security-active="<%= security.active ? '1' : '0' %>"
         style="position:relative">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
     <input type="text" name="body" id="sticker-input-chat" placeholder="Type a message…" maxlength="2000" required autofocus<%= (typeof recipientCurve === 'object' && recipientCurve) ? '' : ' disabled' %>>
@@ -60,6 +72,9 @@
     <div id="sticker-popup-chat" style="display:none;position:absolute;bottom:100%;right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);z-index:100;box-shadow:var(--shadow)"></div>
   </form>
   <div id="chat-send-error" class="muted" style="display:none;text-align:center;font-size:0.85rem;color:var(--danger);padding:6px 0"></div>
+  <div id="dm-security-notice" class="card" style="display:<%= security.active ? 'block' : 'none' %>;text-align:center;padding:0.9rem 1rem;margin-top:10px">
+    <p class="muted" style="margin:0;font-size:0.85rem"><%- include('partials/icon', { name: 'lock', size: 13 }) %> <strong>Additional Security is on.</strong> Messages are removed from the server as soon as both of you have received them — they live only on your devices.</p>
+  </div>
 
   <div id="e2ee-recipient-notice" class="card" style="display:<%= (typeof recipientCurve === 'object' && recipientCurve) ? 'none' : 'block' %>;text-align:center;padding:2rem">
     <p><%- include('partials/icon', { name: 'lock', size: 24 }) %></p>

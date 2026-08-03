@@ -47,6 +47,17 @@ Your private halves (account, identity, session states) always live client-side.
 | Delete | API: `DELETE /api/v1/messages/:id`; the record (including ciphertext) is removed |
 | Read state | Unread counts per conversation; opening a thread marks it read |
 | Live delivery | New messages are pushed in realtime over the WebSocket `new_dm` event to **every open tab** of the recipient (ciphertext only) |
+| Additional Security | Per-conversation opt-in (both users) that deletes messages from the server once both have received them — see below |
+
+## Additional Security mode
+
+A per-conversation mode for users who want **no server-side copy at all** once a message is delivered:
+
+- **Mutual opt-in.** Each user toggles it on their side (`POST /chats/<username>/security` web, or `POST /api/v1/conversations/<username>/security` API). The mode only takes effect once **both** users have enabled it — a user whose client can't store messages locally is never silently cut off from history.
+- **New messages only.** Messages sent while the mode is active are stored with `secure = 1`; existing history is untouched.
+- **Deleted once both received.** Each client keeps a **device-local copy** (encrypted with the device key) and acknowledges receipt (`POST /chats/<username>/received`, or `POST /api/v1/conversations/<username>/received` with `message_ids`). When the sender *and* the recipient have both acknowledged, the server deletes the row — ciphertext, sender copy, everything. Until the recipient has received a message (e.g. they're offline), it stays on the server so delivery can't be lost.
+- **Recovery.** The chat thread re-renders from the device-local store (IndexedDB), so history survives server deletion on the same device. Clearing browser data, or signing in from a brand-new device, means old secure messages are not recoverable — that's the point of the mode.
+- The conversation list shows a lock badge, and the thread header shows the mode state (`Secure DM: On` / `waiting for @peer` / `Off`).
 
 ## Live notifications
 
@@ -80,4 +91,4 @@ Older messages created under the RSA scheme remain readable by clients that supp
 
 - The web client implements the Olm flows in `public/e2ee.js`; the Olm library is bundled as `public/lib/olm.js` + `olm.wasm` (no external CDN).
 - The self-session design: the client persists its self-inbound session at creation baseline so history ratchets are stable across reloads (guarded by `scripts/self-session-test.js` and `scripts/session-reload-test.js`).
-- Protocol regression tests: `scripts/crypto-test.js` (Olm), `scripts/megolm-room-test.js` (group), `scripts/live-dm-test.js` (WS delivery).
+- Protocol regression tests: `scripts/crypto-test.js` (Olm), `scripts/megolm-room-test.js` (group), `scripts/live-dm-test.js` (WS delivery), `scripts/secure-dm-test.js` (Additional Security mode).

@@ -19,6 +19,7 @@
   var DB_NAME = 'extrovert-e2ee';
   var STORE_CRYPTO = 'cryptokeys';
   var STORE_OLM = 'olm';
+  var STORE_SECURE = 'securemsgs';
   var KEY_DEVICE = 'deviceKey';
   var PICKLE_KEY = 'extrovert-olm-pickle-v1';
 
@@ -84,11 +85,13 @@
   }
 
   function openDB() {
-    var req = indexedDB.open(DB_NAME, 1);
+    var req = indexedDB.open(DB_NAME, 2);
     return new Promise(function (resolve, reject) {
       req.onupgradeneeded = function () {
-        req.result.createObjectStore(STORE_CRYPTO);
-        req.result.createObjectStore(STORE_OLM);
+        var db = req.result;
+        if (!db.objectStoreNames.contains(STORE_CRYPTO)) db.createObjectStore(STORE_CRYPTO);
+        if (!db.objectStoreNames.contains(STORE_OLM)) db.createObjectStore(STORE_OLM);
+        if (!db.objectStoreNames.contains(STORE_SECURE)) db.createObjectStore(STORE_SECURE);
       };
       req.onsuccess = function () { resolve(req.result); };
       req.onerror = function () { reject(req.error); };
@@ -286,6 +289,66 @@
     var inboundPickle = selfInboundBaseline || (selfInbound ? selfInbound.pickle(PICKLE_KEY) : null);
     if (inboundPickle) ops.push(encryptWithKd(inboundPickle).then(function (e) { return idbSet(STORE_OLM, 'selfInbound', e); }));
     return Promise.all(ops);
+  }
+
+  // ---- Additional Security: device-local message store ----
+  // When a conversation has "Additional Security" enabled, secure messages are
+  // deleted from the server once BOTH users have received them. Each device
+  // keeps its own copy here (encrypted with the non-extractable device key Kd),
+  // so history survives server-side deletion.
+  function secureConvKey(otherIdStr) { return 'conv:' + otherIdStr; }
+
+  function secureLoadMessages(otherIdStr) {
+    return idbGet(STORE_SECURE, secureConvKey(otherIdStr)).then(function (enc) {
+      if (!enc) return [];
+      return decryptWithKd(enc).then(function (json) {
+        var msgs;
+        try { msgs = JSON.parse(json); } catch (e) { msgs = []; }
+        return Array.isArray(msgs) ? msgs : [];
+      });
+    });
+  }
+
+  function secureSaveMessages(otherIdStr, msgs) {
+    return encryptWithKd(JSON.stringify(msgs)).then(function (enc) {
+      return idbSet(STORE_SECURE, secureConvKey(otherIdStr), enc);
+    });
+  }
+
+  // Serialize read-modify-write per conversation: parallel persist calls must not
+  // clobber each other's merged state (each would otherwise read the same
+  // pre-write snapshot and only the last write would survive).
+  var secureWriteQueues = {};
+  function securePersistMessage(otherIdStr, record) {
+    var prev = secureWriteQueues[otherIdStr] || Promise.resolve();
+    var next = prev.then(function () {
+      return secureLoadMessages(otherIdStr).then(function (msgs) {
+        var found = -1;
+        for (var i = 0; i < msgs.length; i++) {
+          if (String(msgs[i].id) === String(record.id)) { found = i; break; }
+        }
+        if (found === -1) msgs.push(record); else msgs[found] = record;
+        msgs.sort(function (a, b) {
+          return (a.created_at - b.created_at) || (Number(a.id) - Number(b.id));
+        });
+        return secureSaveMessages(otherIdStr, msgs);
+      });
+    });
+    // Keep the chain alive even if one persist fails (callers still see the
+    // rejection and skip the ack — persist-before-ack is preserved).
+    secureWriteQueues[otherIdStr] = next.catch(function () {});
+    return next;
+  }
+
+  // Tell the server we received these secure messages. It deletes them once the
+  // other side has acknowledged too. Best-effort: failures are non-fatal.
+  function ackSecureMessages(otherUsername, ids) {
+    ids = (ids || []).filter(Boolean);
+    if (!ids.length || !otherUsername) return Promise.resolve();
+    return csrfFetch('/chats/' + encodeURIComponent(otherUsername) + '/received', {
+      method: 'POST',
+      body: JSON.stringify({ message_ids: ids }),
+    }).catch(function () {});
   }
 
   function createOlmAccount() {
@@ -825,8 +888,11 @@
   }
 
   // ---- Decrypt messages already rendered in the DOM ----
-  function decryptExistingMessages(otherIdStr, recipientCurve) {
+  function decryptExistingMessages(otherIdStr, recipientCurve, otherUsername) {
     var pending = [];
+    var securePending = []; // local device copies for Additional Security conversations
+    var secureAckIds = [];
+    var myId = currentUserId();
     document.querySelectorAll('.chat-msg').forEach(function (el) {
       var bubble = el.querySelector('.chat-bubble');
       if (!bubble || !bubble.childNodes.length) return;
@@ -836,11 +902,37 @@
       var proto = el.getAttribute('data-proto') || 'rsa';
       var senderCt = el.getAttribute('data-sender-ciphertext') || '';
       var isOwn = el.classList.contains('own');
+      // Gate on the message's OWN secure flag, not the current toggle state: a
+      // secure=1 message must be stored/acked even if the peer later disabled
+      // the mode, otherwise it would linger flagged on the server forever.
+      var msgSecure = el.getAttribute('data-secure') === '1';
+      var msgId = el.getAttribute('data-msg-id');
+      var createdAt = Number(el.getAttribute('data-ts')) || Date.now();
+
+      var recordFor = function (plain) {
+        return {
+          id: msgId,
+          from_id: isOwn ? myId : otherIdStr,
+          created_at: createdAt,
+          edited_at: null,
+          proto: proto,
+          plaintext: plain,
+          own: isOwn,
+        };
+      };
+      var markSecure = function (rec) { securePending.push(rec); secureAckIds.push(rec.id); };
+
+      // Stickers: the body IS the plaintext (no ciphertext, no key).
+      if (body.indexOf('/uploads/stickers/') === 0) {
+        if (msgSecure) markSecure(recordFor(body));
+        return;
+      }
 
       if (proto === 'olm') {
         var msg = { body: body, sender_ciphertext: senderCt };
         pending.push(decryptOlm(msg, isOwn, otherIdStr, recipientCurve).then(function (plain) {
           bubble.textContent = plain;
+          if (msgSecure) markSecure(recordFor(plain));
         }).catch(function (err) {
           console.error('DM decrypt failed', isOwn ? 'own' : 'incoming', 'msg', el.getAttribute('data-msg-id'), err && err.message);
           blobFail(bubble);
@@ -852,10 +944,17 @@
         pending.push(decryptLegacyRSA(body, keyForDecrypt).then(function (plain) {
           bubble.innerHTML = '';
           bubble.appendChild(document.createTextNode(plain));
+          if (msgSecure) markSecure(recordFor(plain));
         }).catch(function () {}));
       }
     });
-    return Promise.all(pending);
+    return Promise.all(pending).then(function () {
+      if (!securePending.length) return;
+      var writes = securePending.map(function (rec) { return securePersistMessage(otherIdStr, rec); });
+      return Promise.all(writes).then(function () {
+        return ackSecureMessages(otherUsername, secureAckIds);
+      });
+    });
   }
 
   function blobFail(bubble) {
@@ -915,6 +1014,124 @@
     return d.innerHTML;
   }
 
+  // ---- Additional Security: chat page wiring ----
+  function currentUserId() {
+    var form = document.querySelector('.chat-form');
+    return form ? form.getAttribute('data-current-user') || '' : '';
+  }
+  function currentOtherUsername() {
+    var form = document.querySelector('.chat-form');
+    return form ? form.getAttribute('data-recipient-username') || '' : '';
+  }
+
+  // Build a chat bubble DOM node from a device-local message record.
+  function makeLocalMsgDiv(m, myId) {
+    var div = document.createElement('div');
+    div.className = 'chat-msg' + (String(m.from_id) === String(myId) ? ' own' : '');
+    div.setAttribute('data-msg-id', String(m.id));
+    div.setAttribute('data-ts', String(m.created_at));
+    var bubble = document.createElement('div');
+    bubble.className = 'chat-bubble';
+    var text = m.plaintext || '';
+    if (text.indexOf('/uploads/stickers/') === 0) {
+      bubble.innerHTML = '<img src="' + esc(text) + '" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker">';
+    } else {
+      bubble.textContent = text;
+    }
+    div.appendChild(bubble);
+    var time = document.createElement('div');
+    time.className = 'muted';
+    time.style.cssText = 'font-size:0.7rem;padding:0 4px';
+    time.textContent = window.relTime ? window.relTime(m.created_at) : new Date(m.created_at).toLocaleString();
+    div.appendChild(time);
+    return div;
+  }
+
+  // Render messages that were already deleted from the server (both sides
+  // received them) from the device-local store, merged in chronological order
+  // with whatever is still pending on the server.
+  function renderLocalSecureMessages(otherIdStr) {
+    var container = document.querySelector('.chat-messages');
+    if (!container) return Promise.resolve();
+    var myId = currentUserId();
+    return secureLoadMessages(otherIdStr).then(function (msgs) {
+      if (!msgs || !msgs.length) return;
+      var existing = {};
+      container.querySelectorAll('.chat-msg').forEach(function (el) {
+        var id = el.getAttribute('data-msg-id');
+        if (id) existing[id] = true;
+      });
+      var missing = msgs.filter(function (m) { return !existing[String(m.id)]; });
+      if (!missing.length) return;
+      // Static snapshot of the server-rendered nodes (insertBefore keeps the
+      // NodeList stale, so compute insertion points up front).
+      var originals = [];
+      container.querySelectorAll('.chat-msg').forEach(function (el) {
+        originals.push({
+          el: el,
+          ts: Number(el.getAttribute('data-ts')) || 0,
+          id: Number(el.getAttribute('data-msg-id')) || 0,
+        });
+      });
+      var before = []; // originals index -> messages to insert before it
+      var append = [];
+      missing.forEach(function (m) {
+        var idx = -1;
+        for (var i = 0; i < originals.length; i++) {
+          if (m.created_at < originals[i].ts || (m.created_at === originals[i].ts && Number(m.id) < originals[i].id)) {
+            idx = i; break;
+          }
+        }
+        if (idx === -1) append.push(m); else (before[idx] = before[idx] || []).push(m);
+      });
+      // Insert newest-first per slot so DOM order stays chronological.
+      before.forEach(function (group, idx) {
+        group.sort(function (a, b) { return (b.created_at - a.created_at) || (Number(b.id) - Number(a.id)); });
+        group.forEach(function (m) {
+          container.insertBefore(makeLocalMsgDiv(m, myId), originals[idx].el);
+        });
+      });
+      append.sort(function (a, b) { return (a.created_at - b.created_at) || (Number(a.id) - Number(b.id)); });
+      append.forEach(function (m) { container.appendChild(makeLocalMsgDiv(m, myId)); });
+      scrollChatBottom();
+    });
+  }
+
+  function securityLabel(security) {
+    var label = document.getElementById('dm-security-label');
+    if (label) {
+      if (security.active) label.textContent = 'Secure DM: On';
+      else if (security.mine) label.textContent = 'Secure DM: waiting for @' + currentOtherUsername();
+      else label.textContent = 'Secure DM: Off';
+    }
+    var btn = document.getElementById('dm-security-toggle');
+    if (btn) {
+      btn.setAttribute('data-enabled', security.mine ? '1' : '0');
+      btn.setAttribute('data-active', security.active ? '1' : '0');
+    }
+    var notice = document.getElementById('dm-security-notice');
+    if (notice) notice.style.display = security.active ? 'block' : 'none';
+    var form = document.querySelector('.chat-form');
+    if (form) form.setAttribute('data-security-active', security.active ? '1' : '0');
+  }
+
+  function initSecurityToggle() {
+    var btn = document.getElementById('dm-security-toggle');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      var mine = btn.getAttribute('data-enabled') === '1';
+      csrfFetch('/chats/' + encodeURIComponent(btn.getAttribute('data-username')) + '/security', {
+        method: 'POST',
+        body: JSON.stringify({ enabled: mine ? 0 : 1 }),
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        btn.disabled = false;
+        if (d && d.ok && d.security) securityLabel(d.security);
+      }).catch(function () { btn.disabled = false; });
+    });
+  }
+
   // ---- Chat page wiring ----
   function showRecipientNotice() {
     var notice = document.getElementById('e2ee-recipient-notice');
@@ -954,15 +1171,37 @@
     container.appendChild(div);
 
     var proto = m.proto || 'rsa';
+    var isSticker = m.body && m.body.indexOf('/uploads/stickers/') === 0;
     var decryptP;
-    if (proto === 'olm') {
+    if (isSticker) {
+      decryptP = Promise.resolve(m.body); // sticker body IS the plaintext
+    } else if (proto === 'olm') {
       decryptP = decryptOlm({ body: m.body, sender_ciphertext: m.sender_ciphertext }, false, otherIdStr, senderCurve);
     } else {
       var keyForDecrypt = m.key_for_recipient;
       decryptP = keyForDecrypt ? decryptLegacyRSA(m.body, keyForDecrypt) : Promise.reject(new Error('no key'));
     }
     decryptP.then(function (plain) {
-      bubble.textContent = plain;
+      if (isSticker) {
+        bubble.innerHTML = '<img src="' + esc(plain) + '" class="sticker-inline" style="max-width:120px;max-height:120px;vertical-align:middle" alt="sticker">';
+      } else {
+        bubble.textContent = plain;
+      }
+      // Additional Security: keep a device copy and acknowledge receipt so the
+      // server can delete the message once the sender has acked too.
+      if (Number(m.secure) === 1) {
+        securePersistMessage(otherIdStr, {
+          id: m.id,
+          from_id: m.from_id,
+          created_at: m.created_at,
+          edited_at: m.edited_at || null,
+          proto: isSticker ? 'plain' : (m.proto || 'olm'),
+          plaintext: plain,
+          own: false,
+        }).then(function () {
+          return ackSecureMessages(currentOtherUsername(), [m.id]);
+        });
+      }
     }).catch(function () {
       bubble.textContent = '[unable to decrypt]';
     });
@@ -1021,7 +1260,23 @@
           headers: { 'X-CSRF-Token': csrfToken(), 'X-Requested-With': 'XMLHttpRequest' },
           body: formData,
         }).then(function (r) { return r.json(); }).then(function (data) {
-          if (data.message) addChatMsg(document.querySelector('.chat-messages'), data.message);
+          if (data.message) {
+            addChatMsg(document.querySelector('.chat-messages'), data.message);
+            // Additional Security: persist our own device copy + ack receipt.
+            if (Number(data.message.secure) === 1) {
+              securePersistMessage(otherIdStr, {
+                id: data.message.id,
+                from_id: currentUserId(),
+                created_at: data.message.created_at,
+                edited_at: data.message.edited_at || null,
+                proto: 'plain',
+                plaintext: data.message.body,
+                own: true,
+              }).then(function () {
+                return ackSecureMessages(otherUsername, [data.message.id]);
+              });
+            }
+          }
           input.value = '';
           input.disabled = false;
         }).catch(function () { input.disabled = false; });
@@ -1040,7 +1295,24 @@
           body: usp,
         }).then(function (r) { return r.json(); }).then(function (data) {
           if (data.error) { input.disabled = false; return; }
-          if (data.message) addOwnMsg(plaintext, data.message);
+          if (data.message) {
+            addOwnMsg(plaintext, data.message);
+            // Additional Security: persist our own device copy + ack receipt so
+            // the server can delete the message once the recipient acked too.
+            if (Number(data.message.secure) === 1) {
+              securePersistMessage(otherIdStr, {
+                id: data.message.id,
+                from_id: currentUserId(),
+                created_at: data.message.created_at,
+                edited_at: data.message.edited_at || null,
+                proto: 'olm',
+                plaintext: plaintext,
+                own: true,
+              }).then(function () {
+                return ackSecureMessages(otherUsername, [data.message.id]);
+              });
+            }
+          }
           input.value = '';
           input.disabled = false;
           maybeReplenishPrekeys();
@@ -1320,8 +1592,12 @@
   });
 
   function finishChatInit(recipientId, recipientCurve, otherIdStr, otherUsername) {
-    decryptExistingMessages(otherIdStr, recipientCurve).then(scrollChatBottom);
+    decryptExistingMessages(otherIdStr, recipientCurve, otherUsername).then(function () {
+      scrollChatBottom();
+      return renderLocalSecureMessages(otherIdStr);
+    });
     renderSafetyNumber(otherUsername);
+    initSecurityToggle();
     initChatHandlers(recipientId, otherIdStr, otherUsername, recipientCurve);
   }
 
@@ -1339,6 +1615,10 @@
     decryptDm: decryptOlm,
     decryptLegacyDm: decryptLegacyRSA,
     replenishPrekeys: maybeReplenishPrekeys,
+    // ---- Additional Security: device-local copies + receipt acks ----
+    persistSecureMessage: securePersistMessage,
+    loadSecureMessages: secureLoadMessages,
+    ackSecureMessages: ackSecureMessages,
     fetchRecipientBundle: fetchBundle,
     myEd25519: function () { return myIdKeys ? myIdKeys.ed25519 : null; },
     ready: function () { return !!account; },
