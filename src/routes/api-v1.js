@@ -732,7 +732,7 @@ router.get('/statuses/:id/context', requireApiAuth('read'), (req, res) => {
         body: c.body,
         created_at: c.created_at,
         edited_at: c.edited_at || null,
-        account: serializeAccount({ id: c.user_id, username: c.username, display_name: c.display_name, avatar: c.avatar, bio: '', created_at: c.user_created_at }, req.apiUser.id),
+        account: serializeAccount({ id: c.user_id, username: c.username, display_name: c.display_name, avatar: c.avatar, bio: c.user_bio || '', created_at: c.user_created_at }, req.apiUser.id),
       })),
     },
   });
@@ -757,7 +757,7 @@ router.post('/statuses/:id/comment', requireApiAuth('write'), (req, res) => {
     body: c.body,
     created_at: c.created_at,
     edited_at: c.edited_at || null,
-    account: serializeAccount({ id: c.user_id, username: c.username, display_name: c.display_name, avatar: c.avatar, bio: '', created_at: c.user_created_at }, req.apiUser.id),
+    account: serializeAccount({ id: c.user_id, username: c.username, display_name: c.display_name, avatar: c.avatar, bio: c.user_bio || '', created_at: c.user_created_at }, req.apiUser.id),
   });
 });
 
@@ -863,7 +863,7 @@ router.get('/notifications', requireApiAuth('notifications'), (req, res) => {
     type: n.type,
     created_at: n.created_at,
     read: !!n.read,
-    account: serializeAccount({ id: n.actor_id, username: n.actor_username, display_name: n.actor_name, avatar: n.actor_avatar, bio: '', created_at: n.actor_created_at }, req.apiUser.id),
+    account: serializeAccount({ id: n.actor_id, username: n.actor_username, display_name: n.actor_name, avatar: n.actor_avatar, bio: n.actor_bio || '', created_at: n.actor_created_at }, req.apiUser.id),
     post_id: n.post_id ? String(n.post_id) : null,
   })), {
     pagination: {
@@ -980,7 +980,7 @@ router.get('/search', requireApiAuth('read'), (req, res) => {
   if (type === 'statuses') {
     const posts = db.searchPosts(query, req.apiUser.id, maxResults);
     return responseEnvelope(res, posts.map(p => {
-      const author = { id: p.user_id, username: p.username, display_name: p.display_name, avatar: p.avatar, bio: '', created_at: 0 };
+      const author = { id: p.user_id, username: p.username, display_name: p.display_name, avatar: p.avatar, bio: p.user_bio || '', created_at: p.user_created_at };
       return serializePost(p, author, req.apiUser.id);
     }));
   }
@@ -992,7 +992,7 @@ router.get('/search', requireApiAuth('read'), (req, res) => {
   responseEnvelope(res, {
     accounts: users.map(u => serializeAccount(u, req.apiUser.id)),
     statuses: posts.map(p => {
-      const author = { id: p.user_id, username: p.username, display_name: p.display_name, avatar: p.avatar, bio: '', created_at: 0 };
+      const author = { id: p.user_id, username: p.username, display_name: p.display_name, avatar: p.avatar, bio: p.user_bio || '', created_at: p.user_created_at };
       return serializePost(p, author, req.apiUser.id);
     }),
   });

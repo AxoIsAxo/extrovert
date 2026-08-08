@@ -637,7 +637,7 @@ function addComment(userId, postId, body) {
 
 function commentsForPost(postId) {
   return db.prepare(
-    `SELECT c.*, u.username, u.display_name, u.avatar, u.created_at AS user_created_at FROM comments c
+    `SELECT c.*, u.username, u.display_name, u.avatar, u.bio AS user_bio, u.created_at AS user_created_at FROM comments c
      JOIN users u ON u.id = c.user_id
      WHERE c.post_id = ? ORDER BY c.created_at ASC`
   ).all(postId);
@@ -752,7 +752,7 @@ function getNotifications(userId, limit = 50, cursor) {
   let sql, params;
   if (cursor) {
     sql = `
-      SELECT n.*, u.username AS actor_username, u.display_name AS actor_name, u.avatar AS actor_avatar, u.created_at AS actor_created_at
+      SELECT n.*, u.username AS actor_username, u.display_name AS actor_name, u.avatar AS actor_avatar, u.bio AS actor_bio, u.created_at AS actor_created_at
       FROM notifications n
       JOIN users u ON u.id = n.actor_id
       WHERE n.user_id = ? AND n.id < ?
@@ -762,7 +762,7 @@ function getNotifications(userId, limit = 50, cursor) {
     params = [userId, cursor, limit];
   } else {
     sql = `
-      SELECT n.*, u.username AS actor_username, u.display_name AS actor_name, u.avatar AS actor_avatar, u.created_at AS actor_created_at
+      SELECT n.*, u.username AS actor_username, u.display_name AS actor_name, u.avatar AS actor_avatar, u.bio AS actor_bio, u.created_at AS actor_created_at
       FROM notifications n
       JOIN users u ON u.id = n.actor_id
       WHERE n.user_id = ?
@@ -1548,7 +1548,7 @@ function searchUsers(query, opts = {}) {
   const like = `%${query}%`;
   const maxNameLen = Math.floor(query.length / 0.15);
   return db.prepare(`
-    SELECT id, username, display_name, avatar, bio
+    SELECT id, username, display_name, avatar, bio, created_at
     FROM users
     WHERE (
       (username LIKE ? AND LENGTH(username) <= ?)
@@ -1581,7 +1581,8 @@ function searchPosts(query, viewerId, limit = 20) {
   const visPlaceholders = allVisible.map(() => '?').join(',');
   return db.prepare(`
     SELECT p.id, p.type, p.body, p.media_path, p.created_at, p.user_id,
-           u.username, u.display_name, u.avatar
+           u.username, u.display_name, u.avatar, u.bio AS user_bio,
+           u.created_at AS user_created_at
     FROM posts p
     JOIN users u ON u.id = p.user_id
     WHERE p.user_id IN (${visPlaceholders})
