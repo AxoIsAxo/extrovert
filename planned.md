@@ -10,6 +10,7 @@
 - **F1. Multi-Account (with account selection at OAuth)**
 - **F2. Two-Factor Authentication (2FA)**
 - **F3. Passkeys (WebAuthn)**
+- **F4. Federation (ActivityPub)**
 
 Each item has a `[PRIORITY]` tag: P0 (blocker / data-loss), P1 (incorrect), P2 (missing UX), P3 (nice-to-have).
 
@@ -261,7 +262,146 @@ attestation verification for enterprise trust. This is a config flag, not a code
 
 ---
 
-## Security review checklist (applies to all three features)
+## F4. Federation (ActivityPub)
+
+**Goal:** Make Extrovert interoperable with the fediverse (Mastodon, Pleroma, Lemmy, etc.) — local
+users can follow remote users and vice versa, public posts federate outward, and remote activity
+flows in through a standard ActivityPub inbox. **No federation code exists today** — `well-known.js`
+only serves OIDC discovery, and `grep` for `activitypub|webfinger|inbox|outbox` finds only the
+unrelated notifications inbox. This is a greenfield build.
+
+### F4.1 Dependencies  [P1]
+
+**Where:** `package.json`.
+
+- Recommend **`@fedify/fedify`** (TypeScript ActivityPub server toolkit: actor, inbox/outbox,
+  HTTP signatures, webfinger, nodeinfo) — by far the most maintained option for Node.
+- Alternative: implement the protocol core manually with the existing `crypto` + `express` stack
+  (HTTP signatures per draft-cavage, ActivityStreams 2.0 JSON-LD, `POST`/`GET` inbox routing) —
+  more control, significantly more work and attack surface.
+- JSON-LD handling needs a dependency either way (`jsonld` package or fedify's built-in).
+
+### F4.2 Protocol surface: actor + discovery  [P1]
+
+**Where:** `src/routes/well-known.js` (extend, don't replace — keep OIDC discovery), new
+`src/routes/federation.js`, new `src/activitypub.js` module (mirrors the `src/dm.js` extraction
+pattern from C1).
+
+**Change:**
+- `GET /.well-known/webfinger?resource=acct:user@domain` → JRD with `self` link to the actor URL.
+  Derive `domain` from the request host (same rule as OIDC `ISSUER`, `oidc.js:9`).
+- `GET /users/:username` → ActivityStreams **Actor** document (JSON-LD `Person`), served with
+  `application/activity+json` (content negotiation: HTML for browsers, AS2 JSON for federated
+  peers — the route already exists as a profile page at `src/routes/profile.js`; add the JSON
+  branch there or in the new federation router).
+- Actor fields: `id` (canonical `https://domain/users/:username`), `inbox`, `outbox`,
+  `followers`/`following` collections, `publicKey` (RSA public key — reuse the OIDC keypair
+  machinery from `oidc.js` or a per-actor key, see F4.5), `preferredUsername`, `name`,
+  `icon` (avatar), `summary` (bio).
+- `GET /.well-known/nodeinfo` + `GET /nodeinfo/2.1` so instances can be discovered by other
+  servers' software pages.
+
+### F4.3 Sending: outbound federation  [P1]
+
+**Where:** new `src/activitypub.js`, hooks into existing post/comment/follow flows.
+
+**Change:**
+- On post creation (`db.js` `createPost`), enqueue delivery of an AS2 `Create`/`Note` activity to
+  the `sharedInbox` (or per-actor `inbox`) of every remote follower.
+- On follow/unfollow (`db.follow`), deliver `Follow`/`Undo` to the remote actor's inbox.
+- Likes/shares/comments also map to `Like`/`Announce`/`Create` activities.
+- **HTTP Signatures** (draft-cavage) on every outbound request: sign with the actor's key, include
+  `(request-target)`, `host`, `date`, `digest`. Retry with exponential backoff (table
+  `delivery_queue` with `next_attempt_at`, `attempts`, `last_error`); drop after N failures.
+- Outbound visibility rule: **only public posts federate.** Extrovert's friends-of-friends model
+  (see `feed.js`) never leaves the instance — see F4.6.
+
+### F4.4 Receiving: inbound federation  [P1]
+
+**Where:** `POST /users/:username/inbox` (+ `sharedInbox`), new `src/routes/federation.js`.
+
+**Change:**
+- Verify the HTTP signature against the claimed actor's `publicKey` (fetch the actor document,
+  cache it with a TTL, guard against SSRF — only `https` URLs, reject localhost/private ranges).
+- Reject if the `body` is not valid ActivityStreams JSON-LD, exceeds a size cap (e.g. 1 MB), or
+  the `actor` doesn't match the signature key owner.
+- Handle activity types: `Follow` (create a remote-follower relationship → notify local user),
+  `Accept`/`Reject` (remote accepted/rejected our follow), `Create`/`Note` (store remote post,
+  mapped to the local `posts` table with `federated=1` and `remote_actor` link — migration in
+  F4.5), `Like`, `Announce` (reblog), `Delete`, `Undo` (unfollow/unlike), `Update` (profile edit),
+  `Move` (optional).
+- Sanitize every `content` field with the existing `sanitize-html` pipeline (`src/sanitize.js`)
+  before storing; strip remote CSS/scripts.
+- Idempotency: dedupe by activity `id` (reuse the pattern from `idempotency_keys`, `db.js:1528`).
+
+### F4.5 Data model: remote actors and posts  [P1]
+
+**Where:** `src/db.js` (migrations in the existing `try { ALTER TABLE ... } catch {}` idiom,
+`db.js:304+`).
+
+**Change (additive):**
+- `users`: add `federated INTEGER NOT NULL DEFAULT 0`, `actor_url TEXT UNIQUE`, `inbox_url TEXT`,
+  `public_key TEXT` (per-actor RSA public key, base64 PEM). Remote actors live in the same
+  `users` table so every existing join/serializer keeps working — mirror of the local identity.
+- `posts`: add `remote_id TEXT UNIQUE` (the remote activity's `id`), `federated INTEGER NOT NULL
+  DEFAULT 0`, `remote_actor_id INTEGER REFERENCES users(id)`.
+- New tables: `delivery_queue` (F4.3), `followers_remote` (or reuse `follows` with a
+  `remote INTEGER` flag), `actor_cache` (F4.4).
+- New `db.js` accessors next to `getUserByUsername` (`db.js:467`): `getOrCreateRemoteActor`,
+  `getRemoteActorByUrl`, `insertRemotePost`, `enqueueDelivery`, `getDueDeliveries`.
+
+### F4.6 Visibility and access control  [P1]
+
+**Where:** `src/feed.js` (visibility computation), `src/routes/api-v1.js` (serializers).
+
+**Change:**
+- **Public posts only** are eligible for federation. Posts aimed at friends/friends-of-friends
+  (the `feed.js` visibility model) are never delivered and remote copies are never created.
+- Inbound remote posts are stored as public-by-default; the existing `canView` checks
+  (`scripts/test.js` covers them) continue to gate them for local rendering — remote public posts
+  are visible to everyone on the instance.
+- **Defederation:** new `blocked_domains` table + admin UI (`src/routes/admin.js`); a blocked
+  domain's activities are rejected at the inbox, its actors' posts are hidden, and outbound
+  delivery to it stops. Optional allowlist mode (`FEDERATION_ALLOWLIST` env) for private
+  instances.
+- Rate-limit the inbox with the existing `express-rate-limit` (per-IP + per-actor), reuse the
+  hardening from plan.md A7/A8.
+
+### F4.7 Discovery and UX  [P2]
+
+**Where:** search (`src/routes/api-v1.js` `/search`), profile pages, notifications.
+
+**Change:**
+- Search: local search stays as-is; add remote lookups via webfinger
+  (`GET /api/v1/search?q=user@remote.domain` resolves acct:). Resolved remote users get a
+  follow button that issues an ActivityPub `Follow`.
+- Profile page (`src/routes/profile.js`) shows federated handles (`@user@domain`) and a "federated"
+  badge; posts from remote users render with their remote avatar/bio (already flowing through the
+  E5-fixed serializers).
+- Notifications: remote `Follow`, `Like`, `Announce`, and `Create` on your posts arrive via the
+  existing `createNotification` path (`db.js:741`, wired to SSE at `db.js:748`).
+
+### F4.8 E2E DMs stay local  [User decision]
+
+**Where:** `src/dm.js` (E2E direct messages).
+
+Extrovert DMs are end-to-end encrypted (Olm, `src/dm.js`) and bound to this instance's key
+infrastructure. Federating encrypted DMs is a large, separate project. **Recommendation:** v1 of
+federation is **public content only** — DMs never federate; remote users can't DM local users and
+vice versa. Document this in SECURITY.md rather than half-supporting it.
+
+### F4.9 Testing  [P2]
+
+- Unit: HTTP signature sign/verify round-trip, webfinger JRD shape, actor JSON-LD shape,
+  inbox dedupe, sanitization of remote HTML.
+- Integration: spin up two instances in-process (mirroring `scripts/api-test.js`'s temp-DB
+  pattern) and drive a follow → accept → post → announce round trip.
+- Fuzz/abuse: oversized bodies, malformed JSON-LD, mismatched signature/actor, SSRF attempts on
+  inbox actor fetches.
+
+---
+
+## Security review checklist (applies to all four features)
 
 - **Side channels:** 2FA/passkey failures return identical generic errors; no user enumeration via
   "this account has 2FA" messages (F2.4).
