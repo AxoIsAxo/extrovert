@@ -13,18 +13,18 @@ A social network where you can **only discover content from friends and friends-
 The signature motif is three concentric rings: **you** (inner), your **friends** (middle), and your **friends-of-friends** (outer).
 
 ```
-┌───────────────────────────────────────────┐
-│   o o o o o o o o o o   friends-of-friends │  visible content
-│   o  ┌─────────────────┐  o               │
-│   o  │ o o o o o o o   │  o   friends     │  visible content
-│   o  │ o  ┌─────────┐  │  o               │
-│   o  │ o  │   you   │  │  o               │  your own content
-│   o  │ o  └─────────┘  │  o               │
-│   o  │ o o o o o o o   │  o               │
-│   o  └─────────────────┘  o               │
-│   o o o o o o o o o o   │                  │
-└──────────────────────────┘                  │
-    everyone else: invisible                 │
+┌────────────────────────────────────────────┐
+│  o o o o o o o o o o o o o o o o o o o o   │   friends-of-friends (visible content)
+│  o   ┌────────────────────────────┐     o  │
+│  o   │ o o o o o o o o o o o o o  │     o  │   friends (visible content)
+│  o   │ o o o ┌────────────┐  o o  │     o  │
+│  o   │ o o o │    you     │  o o  │     o  │   you (your own content)
+│  o   │ o o o └────────────┘  o o  │     o  │
+│  o   │ o o o o o o o o o o o o o  │     o  │
+│  o   └────────────────────────────┘     o  │
+│  o o o o o o o o o o o o o o o o o o o o   │
+└────────────────────────────────────────────┘
+  everyone else: invisible
 ```
 
 ## Feature overview
