@@ -85,6 +85,8 @@ describe('Extrovert REST API', () => {
 
   after(() => {
     server.close();
+    server.closeAllConnections(); // undici keep-alive sockets would otherwise keep the event loop alive
+    try { app.httpServer.close(); } catch {}
     try { fs.rmSync(TEST_DIR, { recursive: true, force: true }); } catch {}
   });
 

@@ -2,6 +2,14 @@
 
 A social network where you can **only discover content from friends and friends-of-friends**. You cannot see anything from people you aren't connected to — there is no public timeline, no firehose, no algorithm mining the whole internet. Just your network.
 
+<p align="center">
+  <a href="LICENSE"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg"></a>
+  <a href="https://github.com/AxoIsAxo/extrovert/actions/workflows/ci.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/AxoIsAxo/extrovert/ci.yml?branch=master"></a>
+  <a href="#development--testing"><img alt="164 tests" src="https://img.shields.io/badge/tests-164-brightgreen.svg"></a>
+  <a href="https://hub.docker.com/r/axoisaxo/extrovert"><img alt="Docker image size" src="https://img.shields.io/docker/image-size/axoisaxo/extrovert"></a>
+  <a href="https://github.com/AxoIsAxo/extrovert/issues"><img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg"></a>
+</p>
+
 The signature motif is three concentric rings: **you** (inner), your **friends** (middle), and your **friends-of-friends** (outer).
 
 ```
@@ -50,10 +58,14 @@ You must set a `SESSION_SECRET` environment variable before the server will star
 
 ## Development & testing
 
-- `npm test` — feed algorithm + sanitization unit tests
-- `npm run test:api` — REST API integration suite
-- `npm run test:owasp` — OWASP Top 10 (2021) security suite
-- `npm run test:asvs` — OWASP ASVS v4.0 suite (automatable subset, with a MANUAL_REVIEW/N-A scorecard)
+Every push and pull request runs all of the following on GitHub Actions — see
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml). The Docker image build is
+part of CI too.
+
+- `npm test` — feed algorithm + sanitization unit tests (24 assertions)
+- `npm run test:api` — REST API integration suite (36 tests)
+- `npm run test:owasp` — OWASP Top 10 (2021) security suite (47 tests)
+- `npm run test:asvs` — OWASP ASVS v4.0 suite (57 tests; automatable subset, with a MANUAL_REVIEW/N-A scorecard)
 - plus crypto, Megolm, live-DM, secure-DM, and session suites — see [Development & testing](docs/development.md)
 
 ## Documentation index

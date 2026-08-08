@@ -5,9 +5,10 @@
 // scenario where a new member joins and history must NOT be readable.
 // Run: node scripts/megolm-room-test.js
 const fs = require('fs');
+const path = require('path');
 const Olm = require('@matrix-org/olm');
 
-const WASM = fs.readFileSync('/Users/lea/extrovert/node_modules/@matrix-org/olm/olm.wasm');
+const WASM = fs.readFileSync(require.resolve('@matrix-org/olm/olm.wasm'));
 
 function b64(buf) { return Buffer.from(buf).toString('base64'); }
 
