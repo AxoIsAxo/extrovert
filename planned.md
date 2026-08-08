@@ -11,6 +11,7 @@
 - **F2. Two-Factor Authentication (2FA)**
 - **F3. Passkeys (WebAuthn)**
 - **F4. Federation (ActivityPub)**
+- **F5. Bots (Discord/Telegram-style bot accounts)**
 
 Each item has a `[PRIORITY]` tag: P0 (blocker / data-loss), P1 (incorrect), P2 (missing UX), P3 (nice-to-have).
 
@@ -401,7 +402,82 @@ vice versa. Document this in SECURITY.md rather than half-supporting it.
 
 ---
 
-## Security review checklist (applies to all four features)
+## F5. Bots (Discord/Telegram-style bot accounts)
+
+**Goal:** First-class bot accounts — non-human members that run server-side, typically written in
+Rust but explicitly **usable from any programming language** — with a stable, language-agnostic API
+and event delivery, mirroring how Discord/Telegram bots operate. Everything below reuses the
+existing Bearer-token API, so a bot author needs nothing beyond an HTTP client.
+
+### F5.1 Bot accounts  [P1]
+
+**Where:** `src/db.js:17` (users table), migration idiom `db.js:304+`, `src/routes/admin.js`.
+
+**Change (additive, existing `try { ALTER TABLE } catch {}` style):**
+- Add `users.is_bot INTEGER NOT NULL DEFAULT 0`.
+- Bot creation via admin UI (`src/routes/admin.js`) or an admin-only `POST /api/v1/bots` endpoint:
+  inserts a `users` row with `is_bot=1` and **no password** — bots never do interactive login.
+- Bots are exempt from the human flows: password login (`src/routes/auth.js:70`), the 2FA second
+  step (F2), and the OAuth consent page (`api-v1.js:200`). They authenticate purely with long-lived
+  bot tokens.
+
+### F5.2 Bot tokens  [P1]
+
+**Where:** `src/routes/api-auth.js` (Bearer auth pipeline), `db.js` (`oauth_tokens` /
+`createOAuthToken`), `src/routes/admin.js`.
+
+**Change:**
+- Issue long-lived bot tokens (dedicated `bot_tokens` table or reuse `oauth_tokens` with a `bot`
+  scope); token creation + revocation endpoints, with an admin revoke UI and every issuance logged
+  via `db.auditLog`.
+- Authentication is plain `Authorization: Bearer <token>` through the existing `requireApiAuth`
+  chain — works from any HTTP stack (Rust `reqwest`, Go, Python, curl). No SDK required.
+
+### F5.3 Event delivery  [P1]
+
+**Where:** `src/routes/api-v1.js:886-908` (existing SSE `/notifications/stream`),
+`src/notif-broadcaster.js`, `db.js:748` (EventEmitter emit on `createNotification`).
+
+**Change:**
+- **SSE (recommended for long-running Rust bots):** reuse the existing stream + in-process
+  EventEmitter unchanged — a bot holds a connection and receives mention/reply/follow events.
+- **Webhooks (for stateless bots):** `POST /api/v1/bots/webhook` registers a URL + secret; the
+  server POSTs JSON events signed with an `X-Webhook-Signature: HMAC-SHA256` header (verify before
+  processing). Retry with exponential backoff, reusing the delivery-queue pattern from F4.3.
+- Webhook secret rotation via settings/admin; one webhook endpoint per bot.
+
+### F5.4 API surface for bots  [P2]
+
+**Where:** `src/routes/api-v1.js`, `src/api-spec.js` (OpenAPI, cf. plan.md E7).
+
+**Change:**
+- Bots drive the **existing** REST API (post, reply, like, share, follow, read timelines) — already
+  Bearer-authenticated and per-token rate-limited (plan.md A7, `src/server.js:132-145`).
+- `src/api-spec.js` is the bot-author contract: Rust bots codegen clients from it
+  (`openapi-generator` / `typify`), which makes the E7 spec-drift fix more important once external
+  authors depend on it.
+- Small bot-friendly additions: `GET /api/v1/bot/me` (own identity), `GET /api/v1/timelines/mentions`
+  (mentions-only feed — cheap, high value), optional `is_bot` flag in `serializeAccount`
+  (`api-v1.js:74`).
+
+### F5.5 Guardrails  [P1]
+
+- **Rate limits:** per-token budgets already exist (A7); make bot limits configurable (lower burst,
+  sustained throughput) via env.
+- **Anti-abuse:** bots can't register through normal signup (`src/routes/auth.js:17`) — admin-only
+  creation; `is_bot` badge surfaced on profiles; audit trail on token issuance/revocation.
+- **DMs:** direct messages are E2E-encrypted and local (`src/dm.js`, F4.8). v1 keeps bot DMs out of
+  scope (or adds a separate plaintext bot-DM scope — **user decision**).
+
+### F5.6 Reference clients  [P3]
+
+- Ship a minimal Rust example bot (`examples/bot-rust/`, `reqwest` + `serde` + eventsource) and a
+  second one in another language (e.g. Python) to prove the "any language" claim and document the
+  happy path: token → stream/webhook → post/reply.
+
+---
+
+## Security review checklist (applies to all five features)
 
 - **Side channels:** 2FA/passkey failures return identical generic errors; no user enumeration via
   "this account has 2FA" messages (F2.4).
